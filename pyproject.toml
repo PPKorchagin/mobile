@@ -1,0 +1,17 @@
+[project]
+name = "mobile"
+version = "0.1.0"
+description = "Mobile OSS pipelines"
+readme = "README.md"
+authors = [
+    { name = "PPKorchagin", email = "korchagin.pavlik@mail.ru" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+mobile = "mobile.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
