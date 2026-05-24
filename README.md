@@ -31,7 +31,7 @@ uv run mobile nb-perf-metrics
 
 | Команда | Описание |
 |---------|----------|
-| `run-all` | STG → `build-src-bs` → `build-src-person` → `build-src-excl` → `nb-perf-metrics` |
+| `run-all` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-src-bs` → `build-src-person` → `build-src-excl` → `nb-perf-metrics` |
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |

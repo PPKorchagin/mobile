@@ -9,7 +9,7 @@ uv run mobile build-src-excl
 uv run mobile build-src-excl --excl-pct-of-ab 0.5
 ```
 
-Параметры — константы и флаг CLI в [`cli_defaults.py`](../../src/mobile/cli_defaults.py). Даты CLI **не используются**. Entry point: `mobile = "mobile.cli:main"` в [`pyproject.toml`](../../pyproject.toml).
+Флаг **`--excl-pct-of-ab`** объявлен в [`cli.py`](../../src/mobile/cli.py); дефолт `DEFAULT_SRC_EXCL_PCT_OF_AB` и сборка `BuildSrcExclParams` — в [`cli_defaults.py`](../../src/mobile/cli_defaults.py). Даты CLI **не используются**. Entry point: `mobile = "mobile.cli:main"` в [`pyproject.toml`](../../pyproject.toml).
 
 **Предварительно:** `mobile build-src-person` (нужен каталог person с `_SUCCESS`).
 
@@ -41,7 +41,7 @@ uv run mobile build-src-excl --excl-pct-of-ab 0.5
 
 | Параметр | CLI | По умолчанию | Смысл |
 |----------|-----|--------------|-------|
-| `pct_of_ab` | `--excl-pct-of-ab` | `DEFAULT_SRC_EXCL_PCT_OF_AB` (**0.7**) | % строк **АБ** в исключениях |
+| `pct_of_ab` | `--excl-pct-of-ab` ([`cli.py`](../../src/mobile/cli.py)) | `DEFAULT_SRC_EXCL_PCT_OF_AB` (**0.7**) в [`cli_defaults.py`](../../src/mobile/cli_defaults.py) | % строк **АБ** в исключениях |
 | `seed` | константа | `DEFAULT_BS_SEED` (`20250407`) | Детерминированная выборка |
 
 `sample_size = min(eligible_triples, max(1, round(ab_row_count × pct / 100)))`, где `eligible_triples` — уникальные строки с непустыми imsi, imei, isdn (`isdn` → msisdn).

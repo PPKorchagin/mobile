@@ -9,7 +9,7 @@
   "notes": [
     "actually_to=2261-12-31 23:59:59 для активных в синтетике (ACTUALLY_TO_OPEN; макс. Parquet timestamp[ns]; в Q&A — 9999-12-31).",
     "abonent_status: синтетика 0/1 по active_now; в поставщике семантика может отличаться — сверять с OCC/PER.",
-    "full snapshot: month-end в [start,end] + 7 случайных дней (DEFAULT_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS); DQ person — период DEFAULT_STG_* в cli.py, build — DEFAULT_SRC_*."
+    "full snapshot: month-end в [start,end] + 7 случайных дней (DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS в cli_defaults.py); период генерации — DEFAULT_SRC_START_DATE / DEFAULT_SRC_END_DATE."
   ],
   "TODO": [],
   "fields": [
