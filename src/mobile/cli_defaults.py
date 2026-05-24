@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import date
 from functools import lru_cache
 
@@ -30,6 +31,13 @@ DEFAULT_BS_SEED = 20250407
 DEFAULT_SRC_START_DATE = date(2024, 12, 25)
 DEFAULT_SRC_END_DATE = date(2025, 2, 5)
 
+DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR = 50_000
+DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS = 7
+
+
+def default_max_workers(*, reserve_cores: int = 2, cap: int = 8) -> int:
+    return max(1, min(cap, (os.cpu_count() or 2) - reserve_cores))
+
 
 @lru_cache(maxsize=1)
 def default_bs_params():
@@ -42,6 +50,32 @@ def default_bs_params():
         operators=["билайн", "мегафон", "мтс", "теле2"],
         seed=DEFAULT_BS_SEED,
         profile_path=DEFAULT_BS_PROFILE_PATH,
+    )
+
+
+def default_person_params(target_per_operator: int | None = None):
+    from mobile.pipelines.src.person import BuildSrcPersonParams
+
+    return BuildSrcPersonParams(
+        start_date=DEFAULT_SRC_START_DATE,
+        end_date=DEFAULT_SRC_END_DATE,
+        operators=["билайн", "мегафон", "мтс", "теле2"],
+        target_active_subscribers_per_operator=(
+            int(target_per_operator)
+            if target_per_operator is not None
+            else DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR
+        ),
+        daily_active_ratio_min=0.55,
+        daily_active_ratio_max=0.95,
+        closed_contract_ratio=0.18,
+        inactive_ratio=0.12,
+        corporate_ratio=0.14,
+        inter_operator_transition_ratio=0.10,
+        movement_ratio=0.22,
+        foreign_subscriber_ratio=0.10,
+        extra_random_full_snapshot_days=DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS,
+        seed=DEFAULT_BS_SEED,
+        max_workers=default_max_workers(),
     )
 
 

@@ -28,6 +28,7 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-stg-time-zones",
         "build-stg-tac",
         "build-src-bs",
+        "build-src-person",
     }
 )
 
