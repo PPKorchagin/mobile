@@ -1,0 +1,15 @@
+{
+  "table": "src_imei",
+  "description": "Список IMEI для исключения из обработки",
+  "readiness": {
+    "s3_layout": "data/src/excl/src_imei.parquet",
+    "parquet_compression": "snappy"
+  },
+  "fields": [
+    {
+      "name": "value",
+      "type": "string",
+      "comment": "IMEI для исключения"
+    }
+  ]
+}

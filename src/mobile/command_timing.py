@@ -29,6 +29,7 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-stg-tac",
         "build-src-bs",
         "build-src-person",
+        "build-src-excl",
     }
 )
 

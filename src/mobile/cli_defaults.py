@@ -33,6 +33,7 @@ DEFAULT_SRC_END_DATE = date(2025, 2, 5)
 
 DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR = 50_000
 DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS = 7
+DEFAULT_SRC_EXCL_PCT_OF_AB = 0.7
 
 
 def default_max_workers(*, reserve_cores: int = 2, cap: int = 8) -> int:
@@ -76,6 +77,15 @@ def default_person_params(target_per_operator: int | None = None):
         extra_random_full_snapshot_days=DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS,
         seed=DEFAULT_BS_SEED,
         max_workers=default_max_workers(),
+    )
+
+
+def default_excl_params(*, pct_of_ab: float | None = None):
+    from mobile.pipelines.src.excl import BuildSrcExclParams
+
+    return BuildSrcExclParams(
+        pct_of_ab=float(pct_of_ab if pct_of_ab is not None else DEFAULT_SRC_EXCL_PCT_OF_AB),
+        seed=DEFAULT_BS_SEED,
     )
 
 

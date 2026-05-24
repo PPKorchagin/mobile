@@ -7,14 +7,17 @@ import logging
 import sys
 from collections.abc import Callable
 
-from mobile.cli_defaults import default_bs_params, default_person_params
+from mobile.cli_defaults import default_bs_params, default_excl_params, default_person_params
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
-from mobile.pipelines.src import bs, person
+from mobile.pipelines.src import bs, excl, person
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_SRC_BS_CONFIG_PATH,
+    DEFAULT_SRC_IMEI_CONFIG_PATH,
+    DEFAULT_SRC_IMSI_CONFIG_PATH,
+    DEFAULT_SRC_MSISDN_CONFIG_PATH,
     DEFAULT_SRC_PERSON_CONFIG_PATH,
     DEFAULT_STG_OKTMO_CONFIG_PATH,
     DEFAULT_STG_TAC_CONFIG_PATH,
@@ -59,12 +62,28 @@ def _run_build(command: str) -> None:
     logger.info("%s completed successfully", command)
 
 
-def _run_command(command: str, *, target_per_operator: int | None = None) -> None:
+def _run_command(
+    command: str,
+    *,
+    target_per_operator: int | None = None,
+    excl_pct_of_ab: float | None = None,
+) -> None:
     if command == "build-src-person":
         logger.info("Starting %s (config=%s)", command, DEFAULT_SRC_PERSON_CONFIG_PATH)
         person.run_from_config(
             DEFAULT_SRC_PERSON_CONFIG_PATH,
             default_person_params(target_per_operator),
+        )
+        logger.info("%s completed successfully", command)
+        return
+    if command == "build-src-excl":
+        logger.info("Starting %s", command)
+        excl.run_from_config(
+            DEFAULT_SRC_PERSON_CONFIG_PATH,
+            DEFAULT_SRC_IMSI_CONFIG_PATH,
+            DEFAULT_SRC_IMEI_CONFIG_PATH,
+            DEFAULT_SRC_MSISDN_CONFIG_PATH,
+            default_excl_params(pct_of_ab=excl_pct_of_ab),
         )
         logger.info("%s completed successfully", command)
         return
@@ -82,16 +101,25 @@ def _run_command(command: str, *, target_per_operator: int | None = None) -> Non
 BUILD_STEPS: tuple[str, ...] = (
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
+    "build-src-excl",
 )
 RUN_ALL_STEPS: tuple[str, ...] = BUILD_STEPS + ("nb-perf-metrics",)
 
 
-def run_all(*, target_per_operator: int | None = None) -> None:
+def run_all(
+    *,
+    target_per_operator: int | None = None,
+    excl_pct_of_ab: float | None = None,
+) -> None:
     logger.info("Starting run-all: %s", ", ".join(RUN_ALL_STEPS))
     for command in RUN_ALL_STEPS:
         run_timed_command(
             command,
-            lambda cmd=command: _run_command(cmd, target_per_operator=target_per_operator),
+            lambda cmd=command: _run_command(
+                cmd,
+                target_per_operator=target_per_operator,
+                excl_pct_of_ab=excl_pct_of_ab,
+            ),
         )
     logger.info("run-all completed successfully")
 
@@ -113,6 +141,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="build-src-person / run-all: абонентов на оператора в полный день (по умолчанию 50000)",
     )
+    parser.add_argument(
+        "--excl-pct-of-ab",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help="build-src-excl / run-all: %% строк АБ в списках исключений (по умолчанию 0.7)",
+    )
     return parser
 
 
@@ -125,12 +160,19 @@ def main() -> None:
         if args.command == "run-all":
             run_timed_command(
                 "run-all",
-                lambda: run_all(target_per_operator=args.target_per_operator),
+                lambda: run_all(
+                    target_per_operator=args.target_per_operator,
+                    excl_pct_of_ab=args.excl_pct_of_ab,
+                ),
             )
         else:
             run_timed_command(
                 args.command,
-                lambda: _run_command(args.command, target_per_operator=args.target_per_operator),
+                lambda: _run_command(
+                    args.command,
+                    target_per_operator=args.target_per_operator,
+                    excl_pct_of_ab=args.excl_pct_of_ab,
+                ),
             )
 
 
