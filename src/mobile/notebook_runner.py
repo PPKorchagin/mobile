@@ -11,6 +11,7 @@ from pathlib import Path
 import nbformat
 from jupyter_client.kernelspec import KernelSpecManager, NoSuchKernel
 from nbclient import NotebookClient
+from nbformat.validator import normalize
 
 from mobile.project_paths import (
     DEFAULT_NOTEBOOK_KERNEL_NAME,
@@ -31,6 +32,7 @@ def run_notebook(
     logger.info("Executing notebook: %s", source_notebook)
     with source_notebook.open("r", encoding="utf-8") as file:
         nb = nbformat.read(file, as_version=4)
+    normalize(nb)
 
     resources_dir = DEFAULT_NOTEBOOK_RESOURCES_PATH
     if resources_dir.exists() and not resources_dir.is_dir():

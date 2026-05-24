@@ -1,0 +1,194 @@
+{
+  "meta": {
+    "source": "opencellid_rf_2024",
+    "created_at": "2026-04-22T13:20:55.884771+00:00",
+    "notes": "Profile generated in analyze.ipynb for build-src-bs"
+  },
+  "population": {
+    "row_count": 2140916,
+    "valid_geo_row_count": 2140916,
+    "valid_geo_ratio": 1.0
+  },
+  "operator_distribution_pct": {
+    "МегаФон": 30.6695,
+    "МТС": 28.2939,
+    "Билайн": 19.9754,
+    "Т2/Tele2": 14.4271,
+    "Yota": 2.5653,
+    "Другие/неопределено": 2.162,
+    "МОТИВ": 1.1436,
+    "Ростелеком": 0.7633
+  },
+  "mnc_distribution_pct": {
+    "2": 30.6695,
+    "1": 28.2939,
+    "99": 19.9754,
+    "20": 14.4271,
+    "11": 2.5653,
+    "35": 1.1436,
+    "19": 0.7776,
+    "39": 0.7633,
+    "3": 0.4187,
+    "5": 0.2845,
+    "32": 0.2153,
+    "12": 0.1423,
+    "60": 0.1113,
+    "7": 0.0774,
+    "27": 0.0502,
+    "17": 0.0398,
+    "10": 0.0149,
+    "34": 0.0108,
+    "33": 0.0056,
+    "365": 0.0048,
+    "25": 0.0035,
+    "16": 0.0023,
+    "98": 0.0016,
+    "1005": 0.0004,
+    "125": 0.0003,
+    "58": 0.0002,
+    "28": 0.0001,
+    "215": 0.0001,
+    "23": 0.0001,
+    "38": 0.0,
+    "9": 0.0,
+    "93": 0.0
+  },
+  "radio_distribution_pct": {
+    "UMTS": 55.0084,
+    "GSM": 25.6315,
+    "LTE": 19.3593,
+    "NR": 0.0005,
+    "CDMA": 0.0004
+  },
+  "generation_distribution_pct": {
+    "3G": 55.0087,
+    "2G": 25.6315,
+    "4G": 19.3593,
+    "5G": 0.0005
+  },
+  "operator_generation_mix_pct": {
+    "Yota": {
+      "2G": 1.3492,
+      "3G": 3.2393,
+      "4G": 95.4115,
+      "5G": 0.0
+    },
+    "Билайн": {
+      "2G": 28.2236,
+      "3G": 55.0798,
+      "4G": 16.6966,
+      "5G": 0.0
+    },
+    "Другие/неопределено": {
+      "2G": 34.1464,
+      "3G": 58.4734,
+      "4G": 7.3802,
+      "5G": 0.0
+    },
+    "МОТИВ": {
+      "2G": 46.1444,
+      "3G": 44.8538,
+      "4G": 9.0018,
+      "5G": 0.0
+    },
+    "МТС": {
+      "2G": 24.4836,
+      "3G": 57.382,
+      "4G": 18.1344,
+      "5G": 0.0
+    },
+    "МегаФон": {
+      "2G": 26.2785,
+      "3G": 54.4165,
+      "4G": 19.305,
+      "5G": 0.0
+    },
+    "Ростелеком": {
+      "2G": 48.8832,
+      "3G": 51.1107,
+      "4G": 0.0061,
+      "5G": 0.0
+    },
+    "Т2/Tele2": {
+      "2G": 23.1034,
+      "3G": 61.2121,
+      "4G": 15.6813,
+      "5G": 0.0032
+    }
+  },
+  "range": {
+    "p01": 1000.0,
+    "p50": 1000.0,
+    "p95": 3845.0,
+    "p99": 11255.0
+  },
+  "samples": {
+    "p01": 1.0,
+    "p50": 2.0,
+    "p95": 57.0,
+    "p99": 182.0
+  },
+  "id_ranges": {
+    "area_min": 0,
+    "area_max": 65535,
+    "cell_min": 0,
+    "cell_max": 2147483647,
+    "lac_p95": 55255.0,
+    "cell_p95": 199154177.0
+  },
+  "time_hints": {
+    "updated_p10": "2015-03-10 11:54:11",
+    "updated_p50": "2016-10-22 07:33:14.500000",
+    "updated_p90": "2021-08-27 14:12:16",
+    "created_p10": "2014-06-12 08:55:50.500000",
+    "created_p50": "2016-03-25 06:07:38",
+    "created_p90": "2020-08-06 06:56:39",
+    "strategy": "hybrid"
+  },
+  "geo_hints": {
+    "lat_min": 41.171512,
+    "lat_max": 73.507461547852,
+    "lon_min": -179.14512634277,
+    "lon_max": 177.74128
+  },
+  "quality_hints": {
+    "duplicate_key_ratio": 0.0,
+    "critical_null_ratio_avg": 0.0
+  },
+  "pipeline_metric_coverage": {
+    "required_present": [
+      "operator_distribution_pct",
+      "generation_distribution_pct",
+      "operator_generation_mix_pct",
+      "id_ranges",
+      "samples"
+    ],
+    "required_missing": [],
+    "recommended_present": [
+      "operator_generation_mix_pct",
+      "range",
+      "samples",
+      "id_ranges",
+      "time_hints",
+      "geo_hints",
+      "quality_hints"
+    ],
+    "recommended_missing": [],
+    "required_coverage": 1.0,
+    "recommended_coverage": 1.0,
+    "pipeline_currently_consumes": [
+      "operator_distribution_pct",
+      "generation_distribution_pct",
+      "operator_generation_mix_pct",
+      "id_ranges",
+      "samples"
+    ],
+    "pipeline_gap_keys": [
+      "range",
+      "time_hints",
+      "geo_hints",
+      "quality_hints"
+    ],
+    "max_similarity_ready": false
+  }
+}

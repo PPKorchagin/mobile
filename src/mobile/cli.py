@@ -7,14 +7,18 @@ import logging
 import sys
 from collections.abc import Callable
 
+from mobile.cli_defaults import default_bs_params
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
+from mobile.pipelines.src import bs
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.project_paths import (
+    DEFAULT_SRC_BS_CONFIG_PATH,
     DEFAULT_STG_OKTMO_CONFIG_PATH,
     DEFAULT_STG_TAC_CONFIG_PATH,
     DEFAULT_STG_TIME_ZONES_CONFIG_PATH,
+    resolve_oktmo_layout,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +35,14 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
     "build-stg-tac": (
         lambda: tac.run_from_config(DEFAULT_STG_TAC_CONFIG_PATH),
         str(DEFAULT_STG_TAC_CONFIG_PATH),
+    ),
+    "build-src-bs": (
+        lambda: bs.run_from_config(
+            DEFAULT_SRC_BS_CONFIG_PATH,
+            resolve_oktmo_layout(),
+            default_bs_params(),
+        ),
+        str(DEFAULT_SRC_BS_CONFIG_PATH),
     ),
 }
 
