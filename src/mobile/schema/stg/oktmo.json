@@ -1,0 +1,28 @@
+{
+    "table": "stg_oktmo",
+    "description": "Справочник ОКТМО территорий",
+    "readiness": {
+        "parquet_compression": "snappy",
+        "s3_layout": "data/stg/oktmo.parquet"
+    },
+    "fields": [
+        { "name": "WKT", "type": "string", "comment": "Геометрия объекта WGS84 (EPSG:4326)" },
+        { "name": "level", "type": "int32", "comment": "Уровень ОКТМО (1=субъект, 2=муниципалитет...)" },
+        { "name": "parent_code", "type": "string", "comment": "Код родительского объекта" },
+        { "name": "code", "type": "string", "comment": "Код ОКТМО" },
+        { "name": "name", "type": "string", "comment": "Наименование" }
+    ],
+    "csv_path": "src/mobile/raw_data/oktmo_v001.csv",
+    "source_csv": {
+        "sep": ";",
+        "encoding": "utf-8",
+        "chunk_size": 200000
+    },
+    "source_mapping_columns": {
+        "level": "level",
+        "parent_code": "parent_code",
+        "code": "code",
+        "name": "name",
+        "WKT": "WKT"
+    }
+}

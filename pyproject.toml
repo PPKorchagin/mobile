@@ -7,7 +7,14 @@ authors = [
     { name = "PPKorchagin", email = "korchagin.pavlik@mail.ru" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pandas>=3.0.2",
+    "pyarrow>=23.0.1",
+    "matplotlib>=3.10.0",
+    "ipykernel>=7.2.0",
+    "nbclient>=0.10.4",
+    "nbformat>=5.10.4",
+]
 
 [project.scripts]
 mobile = "mobile.cli:main"

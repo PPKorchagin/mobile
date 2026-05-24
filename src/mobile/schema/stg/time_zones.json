@@ -1,0 +1,26 @@
+{
+  "table": "stg_time_zones",
+  "description": "Справочник тайм-зон по регионам",
+  "readiness": {
+    "parquet_compression": "snappy",
+    "s3_layout": "data/stg/time_zones.parquet"
+  },
+  "fields": [
+    { "name": "code", "type": "int32", "comment": "Код региона" },
+    { "name": "name", "type": "string", "comment": "Наименование региона" },
+    { "name": "timezone", "type": "int32", "comment": "Смещение от UTC в часах" },
+    { "name": "geometry", "type": "string", "comment": "Геометрия региона в WKT" }
+  ],
+  "csv_path": "src/mobile/raw_data/time_zones.csv",
+  "source_csv": {
+    "sep": ";",
+    "encoding": "utf-8",
+    "chunk_size": 200000
+  },
+  "source_mapping_columns": {
+    "code": "code",
+    "name": "name",
+    "timezone": "timezone",
+    "geometry": "geometry"
+  }
+}
