@@ -1,10 +1,6 @@
 {
   "table": "stg_tac",
   "description": "Справочник TAC (Type Allocation Code) для классификации терминалов и M2M",
-  "readiness": {
-    "parquet_compression": "snappy",
-    "s3_layout": "data/stg/tac.parquet"
-  },
   "fields": [
     { "name": "tac", "type": "string", "comment": "TAC — первые 8 цифр IMEI" },
     { "name": "manufacturer", "type": "string", "comment": "Производитель (GSMA)" },
@@ -18,31 +14,5 @@
     { "name": "chipset", "type": "string", "comment": "Платформа / chipset" },
     { "name": "comment", "type": "string", "comment": "Комментарий" },
     { "name": "is_m2m", "type": "bool", "comment": "Признак M2M/IoT (по equipment_type)" }
-  ],
-  "csv_path": "src/mobile/raw_data/tacdb_v001.csv",
-  "source_csv": {
-    "sep": ";",
-    "encoding": "utf-8-sig"
-  },
-  "source_mapping_columns": {
-    "tac": "tac",
-    "manufacturer": "manufacturer",
-    "model_name": "model_name",
-    "marketing_name": "marketing_name",
-    "equipment_type": "equipment_type",
-    "radio_technology": "radio_technology",
-    "sim_form_factor": "sim_form_factor",
-    "allocation_date": "allocation_date",
-    "reporting_body": "reporting_body",
-    "chipset": "chipset",
-    "comment": "comment"
-  },
-  "m2m_equipment_types": [
-    "Module",
-    "WLAN Router",
-    "Vehicle Unit",
-    "IoT Device",
-    "Modem",
-    "M2M Module"
   ]
 }

@@ -1,73 +1,22 @@
 # build-stg-time-zones
 
-Команда читает [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json), нормализует CSV тайм-зон и перезаписывает [`data/stg/time_zones.parquet`](../../data/stg/time_zones.parquet). Колонка `geometry` — WKT-строка, парсинг в build не выполняется.
+**Витрина:** `stg_time_zones` · **Команда:** `build-stg-time-zones` · **Режим:** полная перезапись одного Parquet-файла.
 
-**Запуск** (из корня репозитория):
-
-```bash
-uv run mobile build-stg-time-zones
-```
-
-Флагов CLI нет. Entry point: `mobile = "mobile.cli:main"` в [`pyproject.toml`](../../pyproject.toml).
+Референс: [`pipelines/stg/time_zones.py`](../../src/mobile/pipelines/stg/time_zones.py). Схема витрины: [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json).
 
 ---
 
-## На вход
+## Задачи pipeline
 
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json) | JSON | `src/mobile/schema/stg/time_zones.json` | `fields`, `csv_path`, `source_mapping_columns`, `readiness` |
+| # | Задача | Результат |
+|---|--------|-----------|
+| 1 | Загрузить сырой CSV справочника тайм-зон | Данные в памяти по чанкам |
+| 2 | Привести набор колонок и типы к целевой схеме `stg_time_zones` | Нормализованный DataFrame |
+| 3 | Записать витрину в Parquet с заданным сжатием | Файл `output_path`, готовый к чтению downstream |
 
-CSV из `csv_path` в JSON. Фактический файл: `src/mobile/raw_data/time_zones.csv`.
+**Бизнес-назначение:** справочник тайм-зон по регионам на STG-слое. Колонка `geometry` — WKT-строка; парсинг геометрии на STG не выполняется.
 
----
-
-## На выходе
-
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | `stg_time_zones` | Parquet (snappy) | `data/stg/time_zones.parquet` | Справочник тайм-зон |
-
----
-
-## Конфиг → код
-
-[`time_zones.json`](../../src/mobile/schema/stg/time_zones.json). JSON Schema не проверяется.
-
-| Ключ | Использование |
-|------|----------------|
-| `csv_path` | Входной CSV |
-| `readiness.s3_layout` | Выходной parquet |
-| `source_csv.sep` / `encoding` | `;`, `utf-8` |
-| `source_csv.chunk_size` | Чанки (200000) |
-| `source_mapping_columns` | CSV → витрина |
-| `fields` | Порядок и типы |
-
-Код: [`pipelines/stg/time_zones.py`](../../src/mobile/pipelines/stg/time_zones.py) — `run_from_config(config_path)`.
-
----
-
-## Логика сборки
-
-`read_csv` (опционально по чанкам) → `_prepare_chunk` → `concat` → `to_parquet` → `append_command_metrics(command="build-stg-time-zones", ...)`.
-
----
-
-## Результат (текущий CSV)
-
-- **86** строк, **4** колонки: `code`, `name`, `timezone`, `geometry`.
-- JSONL: `read_csv_sec`, `write_parquet_sec`, `elapsed_total_sec`, `run_id`.
-
----
-
-## Ошибки
-
-| Исключение | Когда |
-|------------|-------|
-| `FileNotFoundError` | Нет конфига или CSV |
-| `ValueError` | Нет колонок CSV / неподдерживаемый `type` |
-| `KeyError` | Нет обязательного ключа в JSON |
-| pandas / pyarrow | Битый CSV, запись на диск |
+**В scope задач:** чтение CSV, маппинг 1:1, приведение типов, запись Parquet.
 
 ---
 
@@ -75,3 +24,135 @@ CSV из `csv_path` в JSON. Фактический файл: `src/mobile/raw_da
 
 1. Проверить актуальность справочника тайм-зон относительно ОКТМО/регионов.
 2. Автоматизировать загрузку от внешнего поставщика, если такого удастся найти.
+
+---
+
+## Параметры запуска
+
+Переменные, передаваемые в job (аргументы `time_zones.run()`).
+
+| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
+|------------|-----|----------------|----------------------|----------|
+| `csv_path` | string (path) | Да | `src/mobile/raw_data/time_zones.csv` | Входной CSV |
+| `output_path` | string (path) | Да | `data/stg/time_zones.parquet` | Выходной Parquet (перезапись) |
+| `compression` | string | Да | `snappy` | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
+
+Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
+
+**Константы ETL в коде** ([`time_zones.py`](../../src/mobile/pipelines/stg/time_zones.py), на вход job **не передаются**):
+
+| Константа | Значение |
+|-----------|----------|
+| `STG_TIME_ZONES_TABLE` | `stg_time_zones` |
+| `STG_TIME_ZONES_FIELDS` | порядок и типы колонок (см. [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json)) |
+| `CSV_SEP` | `;` |
+| `CSV_ENCODING` | `utf-8` |
+| `CSV_CHUNK_SIZE` | `200000` |
+| `SOURCE_MAPPING_COLUMNS` | `code`, `name`, `timezone`, `geometry` → те же имена (1:1) |
+
+Локальный запуск референса:
+
+```bash
+uv run mobile build-stg-time-zones
+```
+
+---
+
+## Структура генерируемой витрины
+
+| Свойство | Значение |
+|----------|----------|
+| Имя таблицы | `stg_time_zones` — [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json) → `table` |
+| Описание | Справочник тайм-зон по регионам — `description` в JSON |
+| Формат хранения | Parquet |
+| Партиционирование | Нет |
+| Календарный срез / `load_date` | Нет (актуальный snapshot) |
+| Сжатие | Параметр `compression` (по умолчанию `snappy`) |
+
+### Поля витрины
+
+Контракт полей — [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json) → `fields`; в ETL дублируется в `STG_TIME_ZONES_FIELDS` ([`time_zones.py`](../../src/mobile/pipelines/stg/time_zones.py)).
+
+| # | Поле | Тип | Nullable | Смысл |
+|---|------|-----|----------|-------|
+| 1 | `code` | int32 | Да* | Код региона |
+| 2 | `name` | string | Да* | Наименование региона |
+| 3 | `timezone` | int32 | Да* | Смещение от UTC в часах |
+| 4 | `geometry` | string | Да* | Геометрия региона в WKT; не парсится на STG |
+
+\* Nullable после cast: для `int32` нечисловые значения → null; строки — как в CSV.
+
+### Ожидаемый объём (эталон `time_zones.csv`)
+
+~**86** строк, **4** колонки. Использовать для sanity-check после деплоя.
+
+---
+
+## Источники витрины
+
+Единственный внешний источник — **сырой CSV тайм-зон**.
+
+| Атрибут | Значение |
+|---------|----------|
+| Путь | `src/mobile/raw_data/time_zones.csv` (параметр `csv_path`) |
+| Происхождение | Справочник тайм-зон по регионам |
+| Формат | CSV: разделитель `;`, UTF-8, первая строка — заголовок |
+| Чтение | Потоково, `chunksize = 200000` |
+
+**Обязательные колонки в CSV** (точные имена):
+
+| Колонка | Описание |
+|---------|----------|
+| `code` | Код региона |
+| `name` | Наименование |
+| `timezone` | Смещение UTC, часы |
+| `geometry` | Геометрия WKT |
+
+Прочие колонки CSV в витрину **не попадают**.
+
+---
+
+## Алгоритм обработки данных
+
+### Шаг 0. Инициализация
+
+1. Проверить существование `csv_path`; иначе `FileNotFoundError`.
+2. Взять целевую схему из `STG_TIME_ZONES_FIELDS` (согласована с [`time_zones.json`](../../src/mobile/schema/stg/time_zones.json), чтение JSON в runtime не выполняется).
+3. Разрешить пути относительно `PROJECT_ROOT` при необходимости.
+
+### Шаг 1. Чтение источника
+
+```
+FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000):
+    обработать chunk (шаг 2)
+```
+
+### Шаг 2. Нормализация чанка
+
+1. Проверка обязательных колонок (`SOURCE_MAPPING_COLUMNS`).
+2. Переименование 1:1.
+3. Отбор колонок `STG_TIME_ZONES_FIELDS`.
+4. Приведение типов (`string`, `int32`, …).
+
+### Шаг 3. Сборка и запись
+
+1. `concat` чанков (`ignore_index=True`).
+2. `to_parquet(output_path, compression=compression, index=False)` — полная перезапись.
+
+### Типовые ошибки
+
+| Ошибка | Причина |
+|--------|---------|
+| `FileNotFoundError` | Нет CSV |
+| `ValueError` | Нет обязательной колонки / неподдерживаемый тип поля |
+| pandas / pyarrow | Повреждённый CSV, сбой записи |
+
+---
+
+## Ссылки
+
+| Артефакт | Путь |
+|----------|------|
+| Схема витрины | [`src/mobile/schema/stg/time_zones.json`](../../src/mobile/schema/stg/time_zones.json) |
+| ETL | [`src/mobile/pipelines/stg/time_zones.py`](../../src/mobile/pipelines/stg/time_zones.py) |
+| Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |

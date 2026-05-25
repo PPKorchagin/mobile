@@ -49,8 +49,8 @@ uv run mobile nb-perf-metrics
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
 | `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
-| `build-stg-time-zones` | `src/mobile/schema/stg/time_zones.json` | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` |
-| `build-stg-tac` | `src/mobile/schema/stg/tac.json` | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` |
+| `build-stg-time-zones` | — | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` (snappy) |
+| `build-stg-tac` | — | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` (snappy) |
 | `build-src-bs` | `src/mobile/schema/src/bs.json` | `data/stg/oktmo.parquet`, профиль OpenCellID | `data/src/bs.parquet` |
 | `build-src-person` | `src/mobile/schema/src/person.json` | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | `person.json`, `imsi.json`, `imei.json`, `msisdn.json` | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
@@ -70,8 +70,8 @@ uv run mobile nb-perf-metrics
 ## Пайплайны (код)
 
 - `src/mobile/pipelines/stg/oktmo.py` — `run()`
-- `src/mobile/pipelines/stg/time_zones.py` — `run_from_config()`
-- `src/mobile/pipelines/stg/tac.py` — `run_from_config()`
+- `src/mobile/pipelines/stg/time_zones.py` — `run()`
+- `src/mobile/pipelines/stg/tac.py` — `run()`
 - `src/mobile/pipelines/src/bs.py` — `run_from_config()`
 - `src/mobile/pipelines/src/person.py` — `run_from_config()`
 - `src/mobile/pipelines/src/excl.py` — `run_from_config()`

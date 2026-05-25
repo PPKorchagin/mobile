@@ -1,82 +1,157 @@
 # build-stg-tac
 
-Команда читает [`tac.json`](../../src/mobile/schema/stg/tac.json), нормализует CSV TAC (8 цифр, даты `YYYY-MM-DD`, признак `is_m2m`) и перезаписывает [`data/stg/tac.parquet`](../../data/stg/tac.parquet).
+**Витрина:** `stg_tac` · **Команда:** `build-stg-tac` · **Режим:** полная перезапись одного Parquet-файла.
 
-**Запуск** (из корня репозитория):
-
-```bash
-uv run mobile build-stg-tac
-```
-
-Флагов CLI нет. Entry point: `mobile = "mobile.cli:main"` в [`pyproject.toml`](../../pyproject.toml).
+Референс: [`pipelines/stg/tac.py`](../../src/mobile/pipelines/stg/tac.py). Схема витрины: [`tac.json`](../../src/mobile/schema/stg/tac.json).
 
 ---
 
-## На вход
+## Задачи pipeline
 
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | [`tac.json`](../../src/mobile/schema/stg/tac.json) | JSON | `src/mobile/schema/stg/tac.json` | `fields`, `csv_path`, `m2m_equipment_types`, `readiness` |
+| # | Задача | Результат |
+|---|--------|-----------|
+| 1 | Загрузить сырой CSV TACDB | DataFrame источника |
+| 2 | Нормализовать TAC, даты, признак `is_m2m`, типы | DataFrame целевой схемы `stg_tac` |
+| 3 | Записать витрину в Parquet с заданным сжатием | Файл `output_path` |
 
-CSV из `csv_path` в JSON. Фактический файл: `src/mobile/raw_data/tacdb_v001.csv` (`;`, `utf-8-sig`).
+**Бизнес-назначение:** справочник TAC (Type Allocation Code) для классификации терминалов и M2M/IoT.
 
----
-
-## На выходе
-
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | `stg_tac` | Parquet (snappy) | `data/stg/tac.parquet` | Справочник TAC |
-
-В метриках build: `m2m_row_count`.
-
----
-
-## Конфиг → код
-
-[`tac.json`](../../src/mobile/schema/stg/tac.json). JSON Schema не проверяется.
-
-| Ключ | Использование |
-|------|----------------|
-| `csv_path` | Входной CSV |
-| `readiness.s3_layout` | Выходной parquet |
-| `source_mapping_columns` | CSV → витрина |
-| `m2m_equipment_types` | `equipment_type` → `is_m2m = true` |
-| `fields` | Порядок колонок; `is_m2m` вычисляется |
-
-Код: [`pipelines/stg/tac.py`](../../src/mobile/pipelines/stg/tac.py) — `run_from_config(config_path)`.
-
----
-
-## Логика сборки
-
-1. `read_csv` → `_prepare_dataset`.
-2. TAC: strip, только цифры, `zfill(8)`, regex `^\d{8}$`.
-3. `allocation_date`: `%d.%m.%Y`, fallback `dayfirst=True` → `YYYY-MM-DD` string.
-4. `is_m2m` по `equipment_type in m2m_equipment_types`.
-5. Дубликаты TAC после нормализации → `ValueError`.
-6. `to_parquet` → `append_command_metrics(command="build-stg-tac", ...)`.
-
----
-
-## Результат (текущий CSV)
-
-- **22553** строк, **12** колонок (`is_m2m` — `boolean`, остальное `string`).
-- JSONL: `read_csv_sec`, `write_parquet_sec`, `elapsed_total_sec`, `run_id`, `m2m_row_count`.
-
----
-
-## Ошибки
-
-| Исключение | Когда |
-|------------|-------|
-| `FileNotFoundError` | Нет конфига или CSV |
-| `ValueError` | Невалидный TAC; непарсимая дата; дубликат TAC |
-| pandas / pyarrow | Битый CSV, запись на диск |
+**В scope задач:** чтение CSV, нормализация TAC (8 цифр), даты аллокации (`YYYY-MM-DD`), вычисление `is_m2m`, запись Parquet.
 
 ---
 
 ## TODO
 
-1. Сверить список `m2m_equipment_types` с актуальной таксономией GSMA.
+1. Сверить список `M2M_EQUIPMENT_TYPES` с актуальной таксономией GSMA.
 2. Периодически обновлять `tacdb_v001.csv` (Osmocom TACDB) или перейти на источник от поставщика.
+
+---
+
+## Параметры запуска
+
+Переменные, передаваемые в job (аргументы `tac.run()`).
+
+| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
+|------------|-----|----------------|----------------------|----------|
+| `csv_path` | string (path) | Да | `src/mobile/raw_data/tacdb_v001.csv` | Входной CSV |
+| `output_path` | string (path) | Да | `data/stg/tac.parquet` | Выходной Parquet (перезапись) |
+| `compression` | string | Да | `snappy` | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
+
+Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
+
+**Константы ETL в коде** ([`tac.py`](../../src/mobile/pipelines/stg/tac.py), на вход job **не передаются**):
+
+| Константа | Значение |
+|-----------|----------|
+| `STG_TAC_TABLE` | `stg_tac` |
+| `STG_TAC_FIELDS` | порядок и типы колонок (см. [`tac.json`](../../src/mobile/schema/stg/tac.json)) |
+| `CSV_SEP` | `;` |
+| `CSV_ENCODING` | `utf-8-sig` |
+| `SOURCE_MAPPING_COLUMNS` | колонки CSV → витрина (1:1), без `is_m2m` |
+| `M2M_EQUIPMENT_TYPES` | `Module`, `WLAN Router`, `Vehicle Unit`, `IoT Device`, `Modem`, `M2M Module` |
+
+Локальный запуск референса:
+
+```bash
+uv run mobile build-stg-tac
+```
+
+---
+
+## Структура генерируемой витрины
+
+| Свойство | Значение |
+|----------|----------|
+| Имя таблицы | `stg_tac` — [`tac.json`](../../src/mobile/schema/stg/tac.json) → `table` |
+| Описание | Справочник TAC — `description` в JSON |
+| Формат хранения | Parquet |
+| Партиционирование | Нет |
+| Календарный срез / `load_date` | Нет (актуальный snapshot) |
+| Сжатие | Параметр `compression` (по умолчанию `snappy`) |
+
+### Поля витрины
+
+Контракт полей — [`tac.json`](../../src/mobile/schema/stg/tac.json) → `fields`; в ETL — `STG_TAC_FIELDS` ([`tac.py`](../../src/mobile/pipelines/stg/tac.py)). Поле `is_m2m` **вычисляется** (`equipment_type ∈ M2M_EQUIPMENT_TYPES`).
+
+| # | Поле | Тип | Смысл |
+|---|------|-----|-------|
+| 1 | `tac` | string | TAC, 8 цифр |
+| 2 | `manufacturer` | string | Производитель (GSMA) |
+| 3 | `model_name` | string | Модель |
+| 4 | `marketing_name` | string | Коммерческое наименование |
+| 5 | `equipment_type` | string | Класс оборудования GSMA |
+| 6 | `radio_technology` | string | Радиотехнология |
+| 7 | `sim_form_factor` | string | Форм-фактор SIM |
+| 8 | `allocation_date` | string | Дата аллокации `YYYY-MM-DD` |
+| 9 | `reporting_body` | string | Источник записи |
+| 10 | `chipset` | string | Chipset |
+| 11 | `comment` | string | Комментарий |
+| 12 | `is_m2m` | bool | M2M/IoT по `equipment_type` |
+
+### Ожидаемый объём (эталон `tacdb_v001.csv`)
+
+~**22 553** строк, **12** колонок.
+
+---
+
+## Источники витрины
+
+Единственный внешний источник — **сырой CSV TACDB**.
+
+| Атрибут | Значение |
+|---------|----------|
+| Путь | `src/mobile/raw_data/tacdb_v001.csv` (параметр `csv_path`) |
+| Происхождение | Osmocom TACDB / выгрузка поставщика |
+| Формат | CSV: разделитель `;`, UTF-8 с BOM (`utf-8-sig`), заголовок в первой строке |
+| Чтение | Целиком в память (объём эталона ~22k строк) |
+
+**Обязательные колонки в CSV** (точные имена, без `is_m2m`):
+
+`tac`, `manufacturer`, `model_name`, `marketing_name`, `equipment_type`, `radio_technology`, `sim_form_factor`, `allocation_date`, `reporting_body`, `chipset`, `comment`.
+
+---
+
+## Алгоритм обработки данных
+
+### Шаг 0. Инициализация
+
+1. Проверить существование `csv_path`; иначе `FileNotFoundError`.
+2. Схема из `STG_TAC_FIELDS` (согласована с [`tac.json`](../../src/mobile/schema/stg/tac.json), JSON в runtime не читается).
+
+### Шаг 1. Чтение источника
+
+```
+raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
+```
+
+### Шаг 2. Нормализация
+
+1. Проверка и rename по `SOURCE_MAPPING_COLUMNS`.
+2. **TAC:** strip, только цифры, `zfill(8)`, последние 8 символов; regex `^\d{8}$` — иначе `ValueError`.
+3. Строковые поля — `strip`.
+4. **allocation_date:** `%d.%m.%Y`, fallback `dayfirst=True` → строка `YYYY-MM-DD`.
+5. **is_m2m:** `equipment_type in M2M_EQUIPMENT_TYPES`.
+6. Порядок колонок по `STG_TAC_FIELDS`, cast `string` / `bool`.
+7. Дубликаты `tac` после нормализации → `ValueError`.
+
+### Шаг 3. Запись
+
+`to_parquet(output_path, compression=compression, index=False)` — полная перезапись.
+
+### Типовые ошибки
+
+| Ошибка | Причина |
+|--------|---------|
+| `FileNotFoundError` | Нет CSV |
+| `ValueError` | Невалидный TAC, непарсимая дата, дубликат TAC, нет колонки |
+| pandas / pyarrow | Битый CSV, сбой записи |
+
+---
+
+## Ссылки
+
+| Артефакт | Путь |
+|----------|------|
+| Схема витрины | [`src/mobile/schema/stg/tac.json`](../../src/mobile/schema/stg/tac.json) |
+| ETL | [`src/mobile/pipelines/stg/tac.py`](../../src/mobile/pipelines/stg/tac.py) |
+| Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |

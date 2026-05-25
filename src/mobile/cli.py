@@ -32,8 +32,10 @@ from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
-    DEFAULT_STG_TAC_CONFIG_PATH,
-    DEFAULT_STG_TIME_ZONES_CONFIG_PATH,
+    DEFAULT_STG_TAC_CSV_PATH,
+    DEFAULT_STG_TAC_OUTPUT_PATH,
+    DEFAULT_STG_TIME_ZONES_CSV_PATH,
+    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
     resolve_oktmo_layout,
 )
 
@@ -49,12 +51,20 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
         str(DEFAULT_STG_OKTMO_CSV_PATH),
     ),
     "build-stg-time-zones": (
-        lambda: time_zones.run_from_config(DEFAULT_STG_TIME_ZONES_CONFIG_PATH),
-        str(DEFAULT_STG_TIME_ZONES_CONFIG_PATH),
+        lambda compression=DEFAULT_PARQUET_COMPRESSION: time_zones.run(
+            csv_path=DEFAULT_STG_TIME_ZONES_CSV_PATH,
+            output_path=DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+            compression=compression,
+        ),
+        str(DEFAULT_STG_TIME_ZONES_CSV_PATH),
     ),
     "build-stg-tac": (
-        lambda: tac.run_from_config(DEFAULT_STG_TAC_CONFIG_PATH),
-        str(DEFAULT_STG_TAC_CONFIG_PATH),
+        lambda compression=DEFAULT_PARQUET_COMPRESSION: tac.run(
+            csv_path=DEFAULT_STG_TAC_CSV_PATH,
+            output_path=DEFAULT_STG_TAC_OUTPUT_PATH,
+            compression=compression,
+        ),
+        str(DEFAULT_STG_TAC_CSV_PATH),
     ),
     "build-src-bs": (
         lambda: bs.run_from_config(

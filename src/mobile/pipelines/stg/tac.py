@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
@@ -14,69 +13,117 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
+STG_TAC_TABLE = "stg_tac"
+
 _TAC_RE = re.compile(r"^\d{8}$")
 
+CSV_SEP = ";"
+CSV_ENCODING = "utf-8-sig"
 
-def run_from_config(config_path: str | Path) -> dict[str, Any]:
-    cfg_path = Path(config_path)
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"Config file not found: {cfg_path}")
+SOURCE_MAPPING_COLUMNS: dict[str, str] = {
+    "tac": "tac",
+    "manufacturer": "manufacturer",
+    "model_name": "model_name",
+    "marketing_name": "marketing_name",
+    "equipment_type": "equipment_type",
+    "radio_technology": "radio_technology",
+    "sim_form_factor": "sim_form_factor",
+    "allocation_date": "allocation_date",
+    "reporting_body": "reporting_body",
+    "chipset": "chipset",
+    "comment": "comment",
+}
+
+M2M_EQUIPMENT_TYPES: frozenset[str] = frozenset(
+    {
+        "Module",
+        "WLAN Router",
+        "Vehicle Unit",
+        "IoT Device",
+        "Modem",
+        "M2M Module",
+    }
+)
+
+STG_TAC_FIELDS: list[dict[str, str]] = [
+    {"name": "tac", "type": "string"},
+    {"name": "manufacturer", "type": "string"},
+    {"name": "model_name", "type": "string"},
+    {"name": "marketing_name", "type": "string"},
+    {"name": "equipment_type", "type": "string"},
+    {"name": "radio_technology", "type": "string"},
+    {"name": "sim_form_factor", "type": "string"},
+    {"name": "allocation_date", "type": "string"},
+    {"name": "reporting_body", "type": "string"},
+    {"name": "chipset", "type": "string"},
+    {"name": "comment", "type": "string"},
+    {"name": "is_m2m", "type": "bool"},
+]
+
+
+def run(
+    *,
+    csv_path: str | Path,
+    output_path: str | Path,
+    compression: str,
+) -> dict[str, Any]:
+    csv_file = _resolve_path(csv_path)
+    parquet_file = _resolve_path(output_path)
+
+    if not csv_file.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_file}")
 
     perf: dict[str, Any] = {}
     started = time.perf_counter()
-    with cfg_path.open("r", encoding="utf-8") as file:
-        config = json.load(file)
-
-    csv_path = PROJECT_ROOT / config["csv_path"]
-    output_path = PROJECT_ROOT / config["readiness"]["s3_layout"]
-    compression = config["readiness"].get("parquet_compression", "snappy")
-    source_mapping = config["source_mapping_columns"]
-    fields = config["fields"]
-    m2m_types = {str(v).strip() for v in config.get("m2m_equipment_types", [])}
-    source_csv = config.get("source_csv", {})
-
-    if not csv_path.exists():
-        raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     csv_kwargs: dict[str, Any] = {
-        "sep": source_csv.get("sep", ";"),
-        "encoding": source_csv.get("encoding", "utf-8-sig"),
+        "sep": CSV_SEP,
+        "encoding": CSV_ENCODING,
     }
 
-    logger.info("Reading TAC source CSV: %s", csv_path)
+    logger.info("Reading source CSV: %s", csv_file)
     with timed_stage("read_csv_sec", perf):
-        raw = pd.read_csv(csv_path, **csv_kwargs)
-        data = _prepare_dataset(raw, source_mapping, fields, m2m_types)
+        raw = pd.read_csv(csv_file, **csv_kwargs)
+        data = _prepare_dataset(raw, SOURCE_MAPPING_COLUMNS, STG_TAC_FIELDS, M2M_EQUIPMENT_TYPES)
 
     with timed_stage("write_parquet_sec", perf):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        data.to_parquet(output_path, compression=compression, index=False)
+        parquet_file.parent.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(parquet_file, compression=compression, index=False)
 
     m2m_count = int(data["is_m2m"].sum()) if "is_m2m" in data.columns else 0
     logger.info(
-        "stg_tac parquet created: path=%s rows=%s m2m_rows=%s compression=%s",
-        output_path,
+        "%s parquet created: path=%s rows=%s m2m_rows=%s columns=%s compression=%s",
+        STG_TAC_TABLE,
+        parquet_file,
         len(data),
         m2m_count,
+        len(data.columns),
         compression,
     )
     stats = {
-        "source_csv": str(csv_path),
-        "output_parquet": str(output_path),
+        "table": STG_TAC_TABLE,
+        "source_csv": str(csv_file),
+        "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
         "m2m_row_count": m2m_count,
         "column_count": int(len(data.columns)),
+        "parquet_compression": compression,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-stg-tac", metrics={**stats, **perf})
     return stats
 
 
+def _resolve_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
 def _prepare_dataset(
     chunk: pd.DataFrame,
     source_mapping: dict[str, str],
-    fields: list[dict[str, Any]],
-    m2m_types: set[str],
+    fields: list[dict[str, str]],
+    m2m_types: frozenset[str],
 ) -> pd.DataFrame:
     missing_sources = [src for src in source_mapping.values() if src not in chunk.columns]
     if missing_sources:
@@ -128,7 +175,7 @@ def _prepare_dataset(
     out = selected[ordered].copy()
     for field in fields:
         col = field["name"]
-        logical_type = str(field["type"]).lower()
+        logical_type = field["type"].lower()
         if logical_type == "string":
             out[col] = out[col].astype("string")
         elif logical_type == "bool":
