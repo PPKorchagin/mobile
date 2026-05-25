@@ -7,18 +7,23 @@ import logging
 import sys
 from collections.abc import Callable
 
-from mobile.cli_defaults import default_bs_params, default_excl_params, default_person_params
+from mobile.cli_defaults import default_bs_params, default_excl_params, default_mobile_params, default_person_params
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
-from mobile.pipelines.src import bs, excl, person
+from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_SRC_BS_CONFIG_PATH,
+    DEFAULT_SRC_CDR_CONFIG_PATH,
+    DEFAULT_SRC_GPRS_CONFIG_PATH,
     DEFAULT_SRC_IMEI_CONFIG_PATH,
     DEFAULT_SRC_IMSI_CONFIG_PATH,
+    DEFAULT_SRC_LOCATION_CONFIG_PATH,
     DEFAULT_SRC_MSISDN_CONFIG_PATH,
     DEFAULT_SRC_PERSON_CONFIG_PATH,
+    DEFAULT_SRC_SMS_CONFIG_PATH,
+    DEFAULT_BS_LAYOUT,
     DEFAULT_STG_OKTMO_CONFIG_PATH,
     DEFAULT_STG_TAC_CONFIG_PATH,
     DEFAULT_STG_TIME_ZONES_CONFIG_PATH,
@@ -87,6 +92,19 @@ def _run_command(
         )
         logger.info("%s completed successfully", command)
         return
+    if command == "build-src-mobile":
+        logger.info("Starting %s", command)
+        src_mobile.run_mobile_all(
+            bs_parquet_path=DEFAULT_BS_LAYOUT,
+            person_config_path=DEFAULT_SRC_PERSON_CONFIG_PATH,
+            params=default_mobile_params(),
+            cdr_config_path=DEFAULT_SRC_CDR_CONFIG_PATH,
+            sms_config_path=DEFAULT_SRC_SMS_CONFIG_PATH,
+            gprs_config_path=DEFAULT_SRC_GPRS_CONFIG_PATH,
+            location_config_path=DEFAULT_SRC_LOCATION_CONFIG_PATH,
+        )
+        logger.info("%s completed successfully", command)
+        return
     if command in _BUILD_COMMANDS:
         _run_build(command)
         return
@@ -102,6 +120,7 @@ BUILD_STEPS: tuple[str, ...] = (
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
+    "build-src-mobile",
 )
 RUN_ALL_STEPS: tuple[str, ...] = BUILD_STEPS + ("nb-perf-metrics",)
 

@@ -1,0 +1,117 @@
+{
+  "table": "src_sms",
+  "description": "ОСС формат SMS (eventType=10002)",
+  "TODO": [],
+  "readiness": {
+    "parquet_compression": "snappy",
+    "s3_layout": "data/src/mobile/operator/sms/{name_operator}/10002/{YYYY}/{MM}/{DD}"
+  },
+  "notes": [
+    "Любые колонки могут быть не заполнены (nullable).",
+    "По любому из ~16 источников может встретиться любой тип событий (10001/10002/10003/10004)."
+  ],
+  "fields": [
+    {
+      "name": "Started",
+      "type": "string",
+      "comment": "Время события"
+    },
+    {
+      "name": "Event",
+      "type": "int",
+      "comment": "Тип события"
+    },
+    {
+      "name": "Calling",
+      "type": "string",
+      "comment": "Вызывающий абонент"
+    },
+    {
+      "name": "Called",
+      "type": "string",
+      "comment": "Вызываемый абонент"
+    },
+    {
+      "name": "Owner",
+      "type": "int",
+      "comment": "Владелец"
+    },
+    {
+      "name": "SMSC",
+      "type": "long",
+      "comment": "SMS-центр"
+    },
+    {
+      "name": "IMSI",
+      "type": "string"
+    },
+    {
+      "name": "IMEI",
+      "type": "string"
+    },
+    {
+      "name": "MCC",
+      "type": "int",
+      "comment": "Мобильный код страны"
+    },
+    {
+      "name": "MNC",
+      "type": "int",
+      "comment": "Код мобильной сети"
+    },
+    {
+      "name": "Lac",
+      "type": "int",
+      "comment": "Код местоположения"
+    },
+    {
+      "name": "Cell",
+      "type": "int",
+      "comment": "Идентификатор соты"
+    },
+    {
+      "name": "MAC",
+      "type": "string",
+      "comment": "MAC-адрес"
+    },
+    {
+      "name": "BSID",
+      "type": "int",
+      "comment": "Идентификатор БС"
+    },
+    {
+      "name": "Latitude",
+      "type": "double",
+      "comment": "Широта"
+    },
+    {
+      "name": "Longitude",
+      "type": "double",
+      "comment": "Долгота"
+    },
+    {
+      "name": "PDPAddress.IPV4",
+      "type": "string",
+      "comment": "IP-адрес"
+    },
+    {
+      "name": "PDPAddress.IPV6",
+      "type": "string"
+    },
+    {
+      "name": "PDPAddress.Port",
+      "type": "string",
+      "comment": "IP-порт"
+    },
+    {
+      "name": "Message",
+      "type": "string",
+      "comment": "Сообщение"
+    },
+    {
+      "name": "Custom",
+      "type": "string",
+      "comment": "Поле расширение: key=value"
+    }
+  ]
+}

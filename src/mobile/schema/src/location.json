@@ -1,0 +1,112 @@
+{
+  "table": "src_location",
+  "description": "ОСС формат LOCATION (eventType=10004)",
+  "TODO": [],
+  "readiness": {
+    "parquet_compression": "snappy",
+    "s3_layout": "data/src/mobile/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
+  },
+  "notes": [
+    "Любые колонки могут быть не заполнены (nullable).",
+    "По любому из ~16 источников может встретиться любой тип событий (10001/10002/10003/10004).",
+    "Source: поле сохранено по ответу поставщика; в STG geo_all не маппится.",
+    "Owner отсутствует; Served = MSISDN абонента."
+  ],
+  "fields": [
+    {
+      "name": "Started",
+      "type": "string",
+      "comment": "Время события"
+    },
+    {
+      "name": "Event",
+      "type": "int",
+      "comment": "Тип события"
+    },
+    {
+      "name": "Served",
+      "type": "string",
+      "comment": "Номер абонента (MSISDN)"
+    },
+    {
+      "name": "IMSI",
+      "type": "string",
+      "comment": "Идентификатор мобильного абонента"
+    },
+    {
+      "name": "IMEI",
+      "type": "string",
+      "comment": "Идентификатор мобильного телефона"
+    },
+    {
+      "name": "MCC",
+      "type": "string",
+      "comment": "Мобильный код страны"
+    },
+    {
+      "name": "MNC",
+      "type": "string",
+      "comment": "Код мобильной сети/мобильного оператора"
+    },
+    {
+      "name": "Lac",
+      "type": "int",
+      "comment": "Код местоположения/мобильного региона"
+    },
+    {
+      "name": "Cell",
+      "type": "int",
+      "comment": "Идентификатор соты"
+    },
+    {
+      "name": "MAC",
+      "type": "int",
+      "comment": "MAC-адрес"
+    },
+    {
+      "name": "BSID",
+      "type": "int",
+      "comment": "Идентификатор БС"
+    },
+    {
+      "name": "Latitude",
+      "type": "double",
+      "comment": "Широта"
+    },
+    {
+      "name": "Longitude",
+      "type": "double",
+      "comment": "Долгота"
+    },
+    {
+      "name": "IP4Address",
+      "type": "string",
+      "comment": "приходит либо ipv4, либо ipv6"
+    },
+    {
+      "name": "IP6Address",
+      "type": "string",
+      "comment": "приходит либо ipv4, либо ipv6"
+    },
+    {
+      "name": "Port",
+      "type": "int",
+      "comment": "ip-порт"
+    },
+    {
+      "name": "TA",
+      "type": "int",
+      "comment": "Временная задержка"
+    },
+    {
+      "name": "Source",
+      "type": "int",
+      "comment": "источник данных"
+    },
+    {
+      "name": "Custom",
+      "type": "string",
+      "comment": "поле расширение: key=value"
+    }
+  ]
+}

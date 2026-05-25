@@ -20,6 +20,12 @@ DEFAULT_SRC_MSISDN_CONFIG_PATH = _SCHEMA_ROOT / "src" / "msisdn.json"
 
 DEFAULT_BS_PROFILE_PATH = _RAW_DATA / "build_bs_profile_from_opencellid.json"
 DEFAULT_BS_LAYOUT = PROJECT_ROOT / "data" / "src" / "bs.parquet"
+DEFAULT_TIME_ZONES_RAW_PATH = _RAW_DATA / "time_zones.csv"
+
+DEFAULT_SRC_CDR_CONFIG_PATH = _SCHEMA_ROOT / "src" / "cdr.json"
+DEFAULT_SRC_SMS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "sms.json"
+DEFAULT_SRC_GPRS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "gprs.json"
+DEFAULT_SRC_LOCATION_CONFIG_PATH = _SCHEMA_ROOT / "src" / "location.json"
 
 _NB = Path(__file__).resolve().parent / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"

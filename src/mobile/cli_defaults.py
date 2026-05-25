@@ -34,6 +34,7 @@ DEFAULT_SRC_END_DATE = date(2025, 2, 5)
 DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR = 50_000
 DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS = 7
 DEFAULT_SRC_EXCL_PCT_OF_AB = 0.7
+DEFAULT_SRC_MOBILE_MOVEMENT_RATIO = 0.22
 
 
 def default_max_workers(*, reserve_cores: int = 2, cap: int = 8) -> int:
@@ -86,6 +87,20 @@ def default_excl_params(*, pct_of_ab: float | None = None):
     return BuildSrcExclParams(
         pct_of_ab=float(pct_of_ab if pct_of_ab is not None else DEFAULT_SRC_EXCL_PCT_OF_AB),
         seed=DEFAULT_BS_SEED,
+    )
+
+
+def default_mobile_params():
+    from mobile.pipelines.src.mobile import BuildSrcMobileParams
+
+    return BuildSrcMobileParams(
+        start_date=DEFAULT_SRC_START_DATE,
+        end_date=DEFAULT_SRC_END_DATE,
+        operators=["билайн", "мегафон", "мтс", "теле2"],
+        seed=DEFAULT_BS_SEED,
+        max_workers=len(OPERATORS),
+        movement_ratio=DEFAULT_SRC_MOBILE_MOVEMENT_RATIO,
+        region_subjects=(),
     )
 
 
