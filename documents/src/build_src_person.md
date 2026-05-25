@@ -1,120 +1,22 @@
 ﻿# build-src-person
 
-Команда читает [`person.json`](../../src/mobile/schema/src/person.json), генерирует синтетическую витрину **src_person** (профиль/принадлежность абонента по календарным дням) и пишет parquet по суточным каталогам. Дни **полного среза** помечаются `_SUCCESS`.
+**Витрина:** `src_person` · **Команда:** `build-src-person` · **Режим:** суточные Parquet-каталоги, маркер `_SUCCESS` на полных срезах.
 
-**Запуск** (из корня репозитория):
-
-```bash
-uv run mobile build-src-person
-uv run mobile build-src-person --target-per-operator 5000
-```
-
-Период, операторы, seed и правила полного среза — константы в [`cli_defaults.py`](../../src/mobile/cli_defaults.py). Объём на оператора в полный день задаётся флагом **`--target-per-operator`** (по умолчанию `DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR` = `50_000`). Entry point: `mobile = "mobile.cli:main"` в [`pyproject.toml`](../../pyproject.toml).
+Референс: [`pipelines/src/person.py`](../../src/mobile/pipelines/src/person.py). Схема витрины: [`person.json`](../../src/mobile/schema/src/person.json).
 
 ---
 
-## На вход
+## Задачи pipeline
 
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | [`person.json`](../../src/mobile/schema/src/person.json) | JSON | `src/mobile/schema/src/person.json` | Схема `fields`, `readiness` (`s3_layout`, `success_flag`) |
+| # | Задача | Результат |
+|---|--------|-----------|
+| 1 | Сгенерировать профили абонентов по календарным дням и операторам | Суточные `person.parquet` |
+| 2 | Пометить дни полного среза файлом `_SUCCESS` | Каталоги full snapshot |
+| 3 | Записать метрики сборки | `command=build-src-person` в JSONL |
 
-Внешние справочники для сборки **не требуются**.
+**Бизнес-назначение:** синтетическая витрина принадлежности/профиля абонента (Person) по дням.
 
----
-
-## На выходе
-
-| № | Артефакт | Формат | Путь (по умолчанию) | Назначение |
-|---|----------|--------|---------------------|------------|
-| 1 | `src_person` | Parquet (snappy) | `data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}/person.parquet` | Срез на календарный день |
-| 2 | Маркер готовности | пустой файл | `.../load_day={DD}/_SUCCESS` | Только на днях **полного среза** |
-
-Шаблон каталога — `readiness.s3_layout` в JSON; имя `person.parquet` добавляется в [`person.py`](../../src/mobile/pipelines/src/person.py) (`_resolve_output_path`), если в шаблоне нет `.parquet`.
-
-**Ключ для матчинга с ОСС:** `isdn` + интервал `actually_from` / `actually_to`. `operator_Id` = MNC из `OPERATORS` (имена в CLI: `билайн`, `мегафон`, `мтс`, `теле2`).
-
-**Открытый интервал** у активных: `actually_to` = `ACTUALLY_TO_OPEN` (`2261-12-31 23:59:59`) — предел Parquet `timestamp[ns]`; в Q&A по схеме — `9999-12-31`.
-
----
-
-## Полные срезы и `_SUCCESS`
-
-Функция [`select_full_snapshot_days`](../../src/mobile/pipelines/src/person.py) формирует множество дней с полным объёмом и маркером. Составляется **объединение** двух правил:
-
-| Правило | Описание |
-|---------|----------|
-| **Конец месяца** | Для каждого месяца в `[start_date, end_date]`: последний календарный день месяца, но не позже `end_date` |
-| **Случайные дни** | Ещё `extra_random_full_snapshot_days` дней из остатка периода (без дублей с month-end), детерминированно по `seed` |
-
-Параметры: `extra_random_full_snapshot_days` ← **7** (`DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py)); `seed` ← `DEFAULT_BS_SEED` (`20250407`).
-
-**Пример** для `2024-12-25` … `2025-02-05` при дефолтном seed (10 дней):
-
-| Тип | Даты |
-|-----|------|
-| month-end | `2024-12-31`, `2025-01-31`, `2025-02-05` |
-| random (+7) | `2025-01-03`, `2025-01-05`, `2025-01-07`, `2025-01-08`, `2025-01-09`, `2025-01-12`, `2025-01-15` |
-
-На полном срезе: `per_operator_count = target_active_subscribers_per_operator`; на остальных днях — доля пула `daily_active_ratio_min` … `max`.
-
----
-
-## Параметры CLI → `BuildSrcPersonParams`
-
-Задаются в [`cli_defaults.py`](../../src/mobile/cli_defaults.py) → `default_person_params()`, не в JSON. Из CLI передаётся только **`--target-per-operator`**.
-
-| Параметр | Источник | По умолчанию | Смысл |
-|----------|----------|--------------|-------|
-| `start_date` / `end_date` | `DEFAULT_SRC_START_DATE` / `END` | `2024-12-25` … `2025-02-05` | **43** календарных дня |
-| `operators` | `OPERATORS` | 4 оператора | MNC в `operator_Id` |
-| `target_active_subscribers_per_operator` | `--target-per-operator N` | `50_000` | Пул на оператора в **полный** день |
-| `daily_active_ratio_min` / `max` | константы | `0.55` / `0.95` | Доля пула в частичные дни |
-| `closed_contract_ratio` | константа | `0.18` | Закрытые договоры |
-| `inactive_ratio` | константа | `0.12` | Неактивные |
-| `corporate_ratio` | константа | `0.14` | `client_type=1` |
-| `inter_operator_transition_ratio` | константа | `0.10` | Смена оператора |
-| `movement_ratio` | константа | `0.22` | «Переезд» home operator |
-| `foreign_subscriber_ratio` | константа | `0.10` | Иностранные ФЛ |
-| `extra_random_full_snapshot_days` | `DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS` | **7** | Случайные полные дни поверх month-end |
-| `seed` | `DEFAULT_BS_SEED` | `20250407` | Faker, генерация, выбор random full-дней |
-| `max_workers` | `default_max_workers()` | `1…8` | Параллелизм по **дням** (потоки) |
-
----
-
-## Конфиг → код
-
-[`person.json`](../../src/mobile/schema/src/person.json). JSON Schema не проверяется.
-
-| Ключ | Использование |
-|------|----------------|
-| `readiness.s3_layout` | Шаблон каталога дня |
-| `readiness.success_flag` | Имя `_SUCCESS` |
-| `readiness.parquet_compression` | `snappy` |
-| `fields` | Порядок колонок, Arrow-схема |
-
----
-
-## `run_from_config` ([`person.py`](../../src/mobile/pipelines/src/person.py))
-
-`run_from_config(config_path, params) -> dict` — оркестратор + метрики.
-
-1. **Конфиг** — `fields`, `readiness`; иначе `FileNotFoundError`.
-2. **Faker** — локаль `ru_RU` (`_build_faker_pool`).
-3. **Календарь** — дни `[start_date … end_date]`; `select_full_snapshot_days(...)`.
-4. **Параллелизм** — по дням `ThreadPoolExecutor`; внутри дня операторы в **4 процессах** (`ProcessPoolExecutor`, `OPERATOR_PROCESS_WORKERS=4`).
-5. **Метрики** — `append_command_metrics(command="build-src-person", ...)`.
-
----
-
-## Ошибки
-
-| Исключение | Когда |
-|------------|-------|
-| `FileNotFoundError` | Нет `person.json` |
-| `ValueError` | Пустой период; `extra_random_full_snapshot_days < 0` |
-| `KeyError` | Оператор не из `OPERATORS` |
-| pyarrow | Запись parquet / несовместимость схемы |
+**В scope задач:** Faker `ru_RU`, пулы абонентов по операторам, суточная активность, parquet по layout из JSON.
 
 ---
 
@@ -122,3 +24,164 @@ uv run mobile build-src-person --target-per-operator 5000
 
 1. Вынести `extra_random_full_snapshot_days` и период в аргументы CLI при необходимости.
 2. Сверить `abonent_status` с поставщиком (PER-016).
+
+---
+
+## Параметры запуска
+
+Вызов: `person.run_from_config(config_path, params)` ([`cli.py`](../../src/mobile/cli.py)).
+
+| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
+|------------|-----|----------------|----------------------|----------|
+| `config_path` | string (path) | Да | `src/mobile/schema/src/person.json` | `fields`, `readiness` (layout, `_SUCCESS`, compression) |
+| `params` | `BuildSrcPersonParams` | Да | `default_person_params(...)` | Правила генерации и объём |
+
+| Переменная CLI | Тип | По умолчанию | Описание |
+|----------------|-----|--------------|----------|
+| `--target-per-operator` | int | `50000` | Абонентов на оператора в **полный** день (`run-all` тоже) |
+
+**Поля `BuildSrcPersonParams`** ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)):
+
+| Параметр | По умолчанию | Смысл |
+|----------|--------------|-------|
+| `start_date` / `end_date` | `2024-12-25` … `2025-02-05` | **43** календарных дня |
+| `operators` | 4 оператора | MNC → `operator_Id` |
+| `target_active_subscribers_per_operator` | `--target-per-operator` или `50000` | Пул в полный день |
+| `daily_active_ratio_min` / `max` | `0.55` / `0.95` | Доля пула в частичные дни |
+| `closed_contract_ratio` | `0.18` | Закрытые договоры |
+| `inactive_ratio` | `0.12` | Неактивные |
+| `corporate_ratio` | `0.14` | `client_type=1` |
+| `inter_operator_transition_ratio` | `0.10` | Смена оператора |
+| `movement_ratio` | `0.22` | «Переезд» home operator |
+| `foreign_subscriber_ratio` | `0.10` | Иностранные ФЛ |
+| `extra_random_full_snapshot_days` | `7` | Случайные полные дни поверх month-end |
+| `seed` | `20250407` | Faker и выбор random full-дней |
+| `max_workers` | `default_max_workers()` | Параллелизм по **дням** (потоки) |
+
+**Константы в коде:** `ACTUALLY_TO_OPEN` (`2261-12-31 23:59:59`), `OPERATOR_PROCESS_WORKERS=4`, `PERSON_CHUNK_SIZE`.
+
+Локальный запуск:
+
+```bash
+uv run mobile build-src-person
+uv run mobile build-src-person --target-per-operator 5000
+```
+
+---
+
+## Структура генерируемой витрины
+
+| Свойство | Значение |
+|----------|----------|
+| Имя таблицы | `person` — [`person.json`](../../src/mobile/schema/src/person.json) → `table` |
+| Описание | Источник Person (принадлежность/профиль абонента) |
+| Формат хранения | Parquet по каталогам дня |
+| Layout | `data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}/person.parquet` |
+| Маркер full snapshot | `_SUCCESS` в каталоге дня (`readiness.success_flag`) |
+| Сжатие | `snappy` |
+
+**Ключ матчинга с ОСС:** `isdn` + `actually_from` / `actually_to`. `operator_Id` = MNC. У активных: `actually_to` = `ACTUALLY_TO_OPEN` (в Q&A — `9999-12-31`).
+
+### Поля витрины
+
+Контракт — [`person.json`](../../src/mobile/schema/src/person.json) → `fields` (**99** полей). Порядок колонок в Parquet — как в JSON.
+
+Ключевые идентификаторы: `isdn`, `imsi`, `imei`, `operator_Id`, `actually_from`, `actually_to`, `abonent_status`, `client_type`, `abonent_last_location`, адреса и документы ФЛ/ЮЛ — см. JSON.
+
+### Полные срезы (`_SUCCESS`)
+
+`select_full_snapshot_days`: концы месяцев в периоде + **7** случайных дней (детерминированно по `seed`).
+
+Пример при дефолтном seed (10 дней): month-end `2024-12-31`, `2025-01-31`, `2025-02-05`; random `2025-01-03`, `01-05`, `01-07`, `01-08`, `01-09`, `01-12`, `01-15`.
+
+На полном срезе — `target_active_subscribers_per_operator` строк на оператора; на остальных днях — доля пула `daily_active_ratio_min` … `max`.
+
+### Ожидаемый объём
+
+Зависит от `--target-per-operator` и числа дней (43 × 4 оператора × доля активности).
+
+---
+
+## Источники витрины
+
+Внешние файлы-справочники **не используются** — только JSON-схема и синтетическая генерация (Faker).
+
+---
+
+## Алгоритм обработки данных
+
+Точка входа: `run_from_config(config_path, params)` в [`person.py`](../../src/mobile/pipelines/src/person.py).
+
+### Шаг 0. Конфиг и календарь
+
+1. `person.json` → `fields`, `readiness.s3_layout`, `parquet_compression`, `success_flag` (по умолчанию `_SUCCESS`).
+2. Список дней `tasks`: каждый день от `start_date` до `end_date` включительно; пустой список → `ValueError`.
+3. `full_snapshot_days = select_full_snapshot_days(tasks, extra_random_day_count, seed)`:
+   - `_month_end_snapshot_days`: последний день каждого месяца в периоде (не позже `end_date`).
+   - Из оставшихся дней — `extra_random_day_count` штук через `np.random.default_rng(stable_seed(...))` без повтора.
+4. Faker `ru_RU` с seed `stable_seed("faker_pool", params.seed)`; `_build_faker_pool` — предгенерированные списки имён, адресов, паспортов и т.д.
+
+**Параллелизм по дням:**
+
+`day_parallelism = min(len(tasks), DAY_PARALLELISM_CAP (=3), max(1, max_workers // OPERATOR_PROCESS_WORKERS (=4)))`.
+
+`ThreadPoolExecutor(day_parallelism)` → на каждый день `_generate_and_write_day(...)`.
+
+### Шаг 1. Один календарный день (`_generate_and_write_day`)
+
+1. `output_path = _resolve_output_path(out_template, day)` — подстановка `{YYYY}/{MM}/{DD}`, при отсутствии `.parquet` в пути добавляется `person.parquet` относительно `PROJECT_ROOT`.
+2. `arrow_schema = _build_arrow_schema(fields)`, `field_order` — порядок колонок из JSON.
+3. **Объём на оператора:**
+   - если `day ∈ full_snapshot_days` → `daily_ratio = 1.0`;
+   - иначе `rng.uniform(daily_active_ratio_min, daily_active_ratio_max)` с seed `stable_seed("src_person_daily_ratio", day, seed)`;
+   - `per_operator_count = target` или `max(1, int(target * daily_ratio))`.
+4. **Ветка без процессов** (`operator_workers == 1`): один `ParquetWriter`; для каждого оператора чанки по `PERSON_CHUNK_SIZE` (250_000).
+5. **Ветка с процессами** (`operator_workers = min(4, len(operators))`):
+   - временный каталог `.tmp_person_{YYYYMMDD}_{ms}`;
+   - `ProcessPoolExecutor` + `_init_operator_worker(seed)` — Faker pool в дочернем процессе;
+   - `_write_operator_temp_file` → отдельный parquet на оператора;
+   - финальный `ParquetWriter` склеивает batch'и из tmp через `iter_batches`;
+   - `shutil.rmtree(tmp_dir)`.
+6. **Маркер `_SUCCESS`:** если full snapshot — создать пустой файл; иначе удалить существующий.
+
+### Шаг 2. Срез одного оператора (`_generate_operator_slice`)
+
+Детерминированный RNG: `stable_seed("src_person", serving_operator, day, seed, local_id_offset, count)`.
+
+| Этап | Код |
+|------|-----|
+| Идентичность | `home_operator` = serving; с вероятностью `movement_ratio` — соседний оператор (`_neighbor_operator_vectorized`); с `inter_operator_transition_ratio` — другой оператор для triplet (`_neighbor_operator`) |
+| MSISDN/IMSI/IMEI | `_identity_triplet(home_for_ids, sid)`; ~2% `INVALID_ISDN_PROBABILITY` → `_sample_invalid_isdn_digits`; ~3% `IDENTITY_FIELD_LEAK_PROBABILITY` — imsi/imei в «чужих» `identity_type` |
+| Статусы | `closed_contract_ratio`, `inactive_ratio` → `active_now`; `abonent_status` 0/1 |
+| Тип клиента | `corporate_ratio` → `client_type` 0/1; ФЛ/ЮЛ поля, иностранцы `foreign_subscriber_ratio` → `_assign_citizenship_codes` |
+| identity_type | веса `[0.74, 0.12, 0.06, 0.05, 0.03]` для типов 2/4/5/3/1; условные колонки GSM/data/VoIP/CDMA |
+| Интервалы | `actually_from = day`; `actually_to` = `ACTUALLY_TO_OPEN` если активен, иначе конец дня; договор/услуги согласованы с `closed_contract` |
+| Локация | `abonent_last_location` с весами; `lac`/`cell` только при `== 0` |
+| Гео | `coordinates`, `geo_json` из latitude/longitude пула |
+| SCD2 PER-002 | `_append_scd2_overlap_rows`: +4% строк-копий с пересекающимися `actually_from`/`actually_to`; 35% из них с `ACTUALLY_TO_OPEN` |
+
+Возвращается `DataFrame` → `_align_columns_for_schema` → `pa.Table.from_pandas(..., schema=arrow_schema)`.
+
+### Шаг 3. Завершение оркестратора
+
+1. `as_completed` по дням, агрегация `generated_rows`, `full_days`.
+2. `append_command_metrics` с `elapsed_total_sec`, `rows`, `files`, `day_workers`, `operator_process_workers`, `full_days`.
+
+### Типовые ошибки
+
+| Ошибка | Причина |
+|--------|---------|
+| `FileNotFoundError` | Нет `person.json` |
+| `ValueError` | Пустой период; `extra_random_full_snapshot_days < 0` |
+| `KeyError` | Оператор не из `OPERATORS` |
+| pyarrow | Запись parquet / несовместимость схемы |
+
+---
+
+## Ссылки
+
+| Артефакт | Путь |
+|----------|------|
+| Схема витрины | [`src/mobile/schema/src/person.json`](../../src/mobile/schema/src/person.json) |
+| ETL | [`src/mobile/pipelines/src/person.py`](../../src/mobile/pipelines/src/person.py) |
+| Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
