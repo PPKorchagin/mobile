@@ -48,7 +48,7 @@ uv run mobile nb-perf-metrics
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
-| `build-stg-oktmo` | `src/mobile/schema/stg/oktmo.json` | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` |
+| `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
 | `build-stg-time-zones` | `src/mobile/schema/stg/time_zones.json` | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` |
 | `build-stg-tac` | `src/mobile/schema/stg/tac.json` | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` |
 | `build-src-bs` | `src/mobile/schema/src/bs.json` | `data/stg/oktmo.parquet`, профиль OpenCellID | `data/src/bs.parquet` |
@@ -69,7 +69,7 @@ uv run mobile nb-perf-metrics
 
 ## Пайплайны (код)
 
-- `src/mobile/pipelines/stg/oktmo.py` — `run_from_config()`
+- `src/mobile/pipelines/stg/oktmo.py` — `run()`
 - `src/mobile/pipelines/stg/time_zones.py` — `run_from_config()`
 - `src/mobile/pipelines/stg/tac.py` — `run_from_config()`
 - `src/mobile/pipelines/src/bs.py` — `run_from_config()`

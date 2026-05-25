@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SCHEMA_ROOT = PROJECT_ROOT / "src" / "mobile" / "schema"
 _RAW_DATA = PROJECT_ROOT / "src" / "mobile" / "raw_data"
 
-DEFAULT_STG_OKTMO_CONFIG_PATH = _SCHEMA_ROOT / "stg" / "oktmo.json"
+DEFAULT_STG_OKTMO_CSV_PATH = _RAW_DATA / "oktmo_v001.csv"
+DEFAULT_STG_OKTMO_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oktmo.parquet"
 DEFAULT_STG_TIME_ZONES_CONFIG_PATH = _SCHEMA_ROOT / "stg" / "time_zones.json"
 DEFAULT_STG_TAC_CONFIG_PATH = _SCHEMA_ROOT / "stg" / "tac.json"
 DEFAULT_SRC_BS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "bs.json"
@@ -36,8 +36,5 @@ DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
 
-def resolve_oktmo_layout(config_path: str | Path = DEFAULT_STG_OKTMO_CONFIG_PATH) -> Path:
-    cfg_path = Path(config_path)
-    with cfg_path.open("r", encoding="utf-8") as file:
-        cfg = json.load(file)
-    return PROJECT_ROOT / cfg["readiness"]["s3_layout"]
+def resolve_oktmo_layout() -> Path:
+    return DEFAULT_STG_OKTMO_OUTPUT_PATH

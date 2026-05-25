@@ -7,7 +7,13 @@ import logging
 import sys
 from collections.abc import Callable
 
-from mobile.cli_defaults import default_bs_params, default_excl_params, default_mobile_params, default_person_params
+from mobile.cli_defaults import (
+    DEFAULT_PARQUET_COMPRESSION,
+    default_bs_params,
+    default_excl_params,
+    default_mobile_params,
+    default_person_params,
+)
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
@@ -24,7 +30,8 @@ from mobile.project_paths import (
     DEFAULT_SRC_PERSON_CONFIG_PATH,
     DEFAULT_SRC_SMS_CONFIG_PATH,
     DEFAULT_BS_LAYOUT,
-    DEFAULT_STG_OKTMO_CONFIG_PATH,
+    DEFAULT_STG_OKTMO_CSV_PATH,
+    DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CONFIG_PATH,
     DEFAULT_STG_TIME_ZONES_CONFIG_PATH,
     resolve_oktmo_layout,
@@ -34,8 +41,12 @@ logger = logging.getLogger(__name__)
 
 _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
     "build-stg-oktmo": (
-        lambda: oktmo.run_from_config(DEFAULT_STG_OKTMO_CONFIG_PATH),
-        str(DEFAULT_STG_OKTMO_CONFIG_PATH),
+        lambda compression=DEFAULT_PARQUET_COMPRESSION: oktmo.run(
+            csv_path=DEFAULT_STG_OKTMO_CSV_PATH,
+            output_path=DEFAULT_STG_OKTMO_OUTPUT_PATH,
+            compression=compression,
+        ),
+        str(DEFAULT_STG_OKTMO_CSV_PATH),
     ),
     "build-stg-time-zones": (
         lambda: time_zones.run_from_config(DEFAULT_STG_TIME_ZONES_CONFIG_PATH),

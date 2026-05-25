@@ -22,7 +22,7 @@ uv run mobile build-src-bs
 | 2 | Полигоны субъектов | Parquet | `data/stg/oktmo.parquet` | `level=1`, колонки `name`, `WKT` |
 | 3 | Профиль генерации | JSON | `src/mobile/raw_data/build_bs_profile_from_opencellid.json` | Доли операторов/поколений, LAC/Cell, p50/p95 мощности |
 
-Путь к ОКТМО в коде: `oktmo.json` → `readiness.s3_layout`.
+Путь к ОКТМО в коде: `DEFAULT_STG_OKTMO_OUTPUT_PATH` (`data/stg/oktmo.parquet`).
 
 ---
 

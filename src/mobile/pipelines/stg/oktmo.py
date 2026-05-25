@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -13,72 +12,91 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
+STG_OKTMO_TABLE = "stg_oktmo"
 
-def run_from_config(config_path: str | Path) -> dict[str, Any]:
-    cfg_path = Path(config_path)
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"Config file not found: {cfg_path}")
+CSV_SEP = ";"
+CSV_ENCODING = "utf-8"
+CSV_CHUNK_SIZE = 200_000
+
+SOURCE_MAPPING_COLUMNS: dict[str, str] = {
+    "level": "level",
+    "parent_code": "parent_code",
+    "code": "code",
+    "name": "name",
+    "WKT": "WKT",
+}
+
+STG_OKTMO_FIELDS: list[dict[str, str]] = [
+    {"name": "WKT", "type": "string"},
+    {"name": "level", "type": "int32"},
+    {"name": "parent_code", "type": "string"},
+    {"name": "code", "type": "string"},
+    {"name": "name", "type": "string"},
+]
+
+
+def run(
+    *,
+    csv_path: str | Path,
+    output_path: str | Path,
+    compression: str,
+) -> dict[str, Any]:
+    csv_file = _resolve_path(csv_path)
+    parquet_file = _resolve_path(output_path)
+
+    if not csv_file.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_file}")
 
     perf: dict[str, Any] = {}
     started = time.perf_counter()
-    with cfg_path.open("r", encoding="utf-8") as file:
-        config = json.load(file)
-
-    csv_path = PROJECT_ROOT / config["csv_path"]
-    output_path = PROJECT_ROOT / config["readiness"]["s3_layout"]
-    compression = config["readiness"].get("parquet_compression", "snappy")
-    source_csv = config.get("source_csv", {})
-    source_mapping = config["source_mapping_columns"]
-    fields = config["fields"]
-    chunk_size = source_csv.get("chunk_size")
-
-    if not csv_path.exists():
-        raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     csv_kwargs: dict[str, Any] = {
-        "sep": source_csv.get("sep", ","),
-        "encoding": source_csv.get("encoding", "utf-8"),
+        "sep": CSV_SEP,
+        "encoding": CSV_ENCODING,
+        "chunksize": CSV_CHUNK_SIZE,
     }
-    if chunk_size:
-        csv_kwargs["chunksize"] = int(chunk_size)
 
-    logger.info("Reading source CSV from config: %s", csv_path)
+    logger.info("Reading source CSV: %s", csv_file)
     with timed_stage("read_csv_sec", perf):
-        source = pd.read_csv(csv_path, **csv_kwargs)
-        chunks = source if chunk_size else [source]
-
         prepared_chunks: list[pd.DataFrame] = []
-        for chunk in chunks:
-            prepared_chunks.append(_prepare_chunk(chunk, source_mapping, fields))
-
+        for chunk in pd.read_csv(csv_file, **csv_kwargs):
+            prepared_chunks.append(_prepare_chunk(chunk, SOURCE_MAPPING_COLUMNS, STG_OKTMO_FIELDS))
         data = pd.concat(prepared_chunks, ignore_index=True) if prepared_chunks else pd.DataFrame()
 
     with timed_stage("write_parquet_sec", perf):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        data.to_parquet(output_path, compression=compression, index=False)
+        parquet_file.parent.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(parquet_file, compression=compression, index=False)
 
     logger.info(
-        "stg_oktmo parquet created: path=%s rows=%s columns=%s compression=%s",
-        output_path,
+        "%s parquet created: path=%s rows=%s columns=%s compression=%s",
+        STG_OKTMO_TABLE,
+        parquet_file,
         len(data),
         len(data.columns),
         compression,
     )
     stats = {
-        "source_csv": str(csv_path),
-        "output_parquet": str(output_path),
+        "table": STG_OKTMO_TABLE,
+        "source_csv": str(csv_file),
+        "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
         "column_count": int(len(data.columns)),
+        "parquet_compression": compression,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-stg-oktmo", metrics={**stats, **perf})
     return stats
 
 
+def _resolve_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
 def _prepare_chunk(
     chunk: pd.DataFrame,
     source_mapping: dict[str, str],
-    fields: list[dict[str, Any]],
+    fields: list[dict[str, str]],
 ) -> pd.DataFrame:
     missing_sources = [src for src in source_mapping.values() if src not in chunk.columns]
     if missing_sources:
@@ -95,7 +113,7 @@ def _prepare_chunk(
     selected = renamed[target_columns].copy()
     for field in fields:
         col = field["name"]
-        logical_type = str(field["type"]).lower()
+        logical_type = field["type"].lower()
         if logical_type == "string":
             selected[col] = selected[col].astype("string")
         elif logical_type == "int32":
