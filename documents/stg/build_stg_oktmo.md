@@ -38,12 +38,12 @@
 | ------------- | ------------- | -------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oktmo_v001.csv` | Входной CSV ОКТМО                                                                                      |
 | `output_path` | string (path) | Да             | `data/stg/oktmo.parquet`             | Выходной Parquet (перезапись)                                                                          |
-| `compression` | string        | Да             | `snappy`                             | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION` в `[cli_defaults.py](../../src/mobile/cli_defaults.py)`) |
+| `compression` | string        | Да             | `snappy`                             | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
 
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
 
-**Константы ETL в коде** (`[oktmo.py](../../src/mobile/pipelines/stg/oktmo.py)`, на вход job **не передаются**):
+**Константы ETL в коде** ([`oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py), на вход job **не передаются**):
 
 
 | Константа                | Значение                                                          |

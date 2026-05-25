@@ -18,6 +18,7 @@ from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
+from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_SRC_BS_CONFIG_PATH,
@@ -76,9 +77,33 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
     ),
 }
 
+_DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
+    "dq-stg-oktmo": (
+        lambda: dq_oktmo.run_dq(DEFAULT_STG_OKTMO_OUTPUT_PATH),
+        str(DEFAULT_STG_OKTMO_OUTPUT_PATH),
+    ),
+    "dq-stg-time-zones": (
+        lambda: dq_time_zones.run_dq(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
+        str(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
+    ),
+    "dq-stg-tac": (
+        lambda: dq_tac.run_dq(DEFAULT_STG_TAC_OUTPUT_PATH),
+        str(DEFAULT_STG_TAC_OUTPUT_PATH),
+    ),
+}
+
 _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-perf-metrics": nb_perf_metrics.run,
 }
+
+CLI_COMMANDS: tuple[str, ...] = (
+    *tuple(_BUILD_COMMANDS),
+    "build-src-person",
+    "build-src-excl",
+    "build-src-mobile",
+    *tuple(_DQ_COMMANDS),
+    *tuple(_NB_COMMANDS),
+)
 
 
 def _run_build(command: str) -> None:
@@ -129,6 +154,12 @@ def _run_command(
     if command in _BUILD_COMMANDS:
         _run_build(command)
         return
+    if command in _DQ_COMMANDS:
+        fn, parquet_path = _DQ_COMMANDS[command]
+        logger.info("Starting %s (parquet=%s)", command, parquet_path)
+        fn()
+        logger.info("%s completed successfully", command)
+        return
     if command in _NB_COMMANDS:
         logger.info("Starting %s", command)
         _NB_COMMANDS[command]()
@@ -143,16 +174,16 @@ BUILD_STEPS: tuple[str, ...] = (
     "build-src-excl",
     "build-src-mobile",
 )
-RUN_ALL_STEPS: tuple[str, ...] = BUILD_STEPS + ("nb-perf-metrics",)
+BUILD_SRC_STEPS: tuple[str, ...] = BUILD_STEPS + ("nb-perf-metrics",)
 
 
-def run_all(
+def build_src(
     *,
     target_per_operator: int | None = None,
     excl_pct_of_ab: float | None = None,
 ) -> None:
-    logger.info("Starting run-all: %s", ", ".join(RUN_ALL_STEPS))
-    for command in RUN_ALL_STEPS:
+    logger.info("Starting build-src: %s", ", ".join(BUILD_SRC_STEPS))
+    for command in BUILD_SRC_STEPS:
         run_timed_command(
             command,
             lambda cmd=command: _run_command(
@@ -161,7 +192,7 @@ def run_all(
                 excl_pct_of_ab=excl_pct_of_ab,
             ),
         )
-    logger.info("run-all completed successfully")
+    logger.info("build-src completed successfully")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -171,22 +202,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "command",
-        choices=sorted({*RUN_ALL_STEPS, "run-all"}),
-        help="Шаг пайплайна или обёртка run-all",
+        choices=sorted({*CLI_COMMANDS, "build-src"}),
+        help="Шаг пайплайна или цепочка build-src (STG + SRC + nb-perf-metrics)",
     )
     parser.add_argument(
         "--target-per-operator",
         type=int,
         default=None,
         metavar="N",
-        help="build-src-person / run-all: абонентов на оператора в полный день (по умолчанию 50000)",
+        help="build-src-person / build-src: абонентов на оператора в полный день (по умолчанию 50000)",
     )
     parser.add_argument(
         "--excl-pct-of-ab",
         type=float,
         default=None,
         metavar="PCT",
-        help="build-src-excl / run-all: %% строк АБ в списках исключений (по умолчанию 0.7)",
+        help="build-src-excl / build-src: %% строк АБ в списках исключений (по умолчанию 0.7)",
     )
     return parser
 
@@ -197,10 +228,10 @@ def main() -> None:
 
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
-        if args.command == "run-all":
+        if args.command == "build-src":
             run_timed_command(
-                "run-all",
-                lambda: run_all(
+                "build-src",
+                lambda: build_src(
                     target_per_operator=args.target_per_operator,
                     excl_pct_of_ab=args.excl_pct_of_ab,
                 ),

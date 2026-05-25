@@ -38,7 +38,7 @@
 
 | Переменная CLI | Тип | По умолчанию | Описание |
 |----------------|-----|--------------|----------|
-| `--target-per-operator` | int | `50000` | Абонентов на оператора в **полный** день (`run-all` тоже) |
+| `--target-per-operator` | int | `50000` | Абонентов на оператора в **полный** день (`build-src` тоже) |
 
 **Поля `BuildSrcPersonParams`** ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)):
 

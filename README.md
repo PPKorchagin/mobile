@@ -6,10 +6,10 @@ CLI и пайплайны для mobile OSS-витрин. Схемы — `src/mo
 
 ```bash
 uv sync
-uv run mobile run-all
+uv run mobile build-src
 ```
 
-`run-all` выполняет build STG/SRC-справочников и в конце — `nb-perf-metrics`.
+`build-src` выполняет build STG/SRC-справочников и в конце — `nb-perf-metrics`.
 
 Или по отдельности:
 
@@ -17,6 +17,9 @@ uv run mobile run-all
 uv run mobile build-stg-oktmo
 uv run mobile build-stg-time-zones
 uv run mobile build-stg-tac
+uv run mobile dq-stg-oktmo
+uv run mobile dq-stg-time-zones
+uv run mobile dq-stg-tac
 uv run mobile build-src-bs
 uv run mobile build-src-person
 uv run mobile build-src-excl
@@ -32,25 +35,31 @@ uv run mobile nb-perf-metrics
 
 | Команда | Описание |
 |---------|----------|
-| `run-all` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-src-bs` → `build-src-person` → `build-src-excl` → `build-src-mobile` → `nb-perf-metrics` |
+| `build-src` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-src-bs` → `build-src-person` → `build-src-excl` → `build-src-mobile` → `nb-perf-metrics` |
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |
+| `dq-stg-oktmo` | DQ `data/stg/oktmo.parquet` (логи `DQ_STG_OKTMO`) |
+| `dq-stg-time-zones` | DQ `data/stg/time_zones.parquet` |
+| `dq-stg-tac` | DQ `data/stg/tac.parquet` |
 | `build-src-bs` | ОКТМО + профиль → `data/src/bs.parquet` |
 | `build-src-person` | Суточные срезы → `data/src/person/...` |
 | `build-src-excl` | Списки IMSI/IMEI/MSISDN из последнего full snapshot person |
 | `build-src-mobile` | CDR / SMS / GPRS / location по дням и операторам |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
-Флаг **`--target-per-operator N`** — для `build-src-person` и `run-all` (по умолчанию `50000`).
+Флаг **`--target-per-operator N`** — для `build-src-person` и `build-src` (по умолчанию `50000`).
 
-Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `run-all` (по умолчанию `0.7` — доля строк АБ в исключениях).
+Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
 | `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
 | `build-stg-time-zones` | — | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` (snappy) |
 | `build-stg-tac` | — | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` (snappy) |
+| `dq-stg-oktmo` | — | `data/stg/oktmo.parquet` | логи + `command_timing.jsonl` |
+| `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
+| `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
 | `build-src-bs` | `src/mobile/schema/src/bs.json` | `data/stg/oktmo.parquet`, профиль OpenCellID | `data/src/bs.parquet` |
 | `build-src-person` | `src/mobile/schema/src/person.json` | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | `person.json`, `imsi.json`, `imei.json`, `msisdn.json` | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
@@ -62,6 +71,9 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_stg_oktmo.md`](documents/stg/build_stg_oktmo.md)
 - [`documents/stg/build_stg_time_zones.md`](documents/stg/build_stg_time_zones.md)
 - [`documents/stg/build_stg_tac.md`](documents/stg/build_stg_tac.md)
+- [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
+- [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
+- [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
 - [`documents/src/build_src_bs.md`](documents/src/build_src_bs.md)
 - [`documents/src/build_src_person.md`](documents/src/build_src_person.md)
 - [`documents/src/build_src_excl.md`](documents/src/build_src_excl.md)
@@ -72,6 +84,9 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/stg/oktmo.py` — `run()`
 - `src/mobile/pipelines/stg/time_zones.py` — `run()`
 - `src/mobile/pipelines/stg/tac.py` — `run()`
+- `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
 - `src/mobile/pipelines/src/bs.py` — `run_from_config()`
 - `src/mobile/pipelines/src/person.py` — `run_from_config()`
 - `src/mobile/pipelines/src/excl.py` — `run_from_config()`
