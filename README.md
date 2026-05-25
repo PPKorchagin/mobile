@@ -14,6 +14,7 @@ uv run mobile build-src
 Или по отдельности:
 
 ```bash
+uv run mobile build-stg-day
 uv run mobile build-stg-oktmo
 uv run mobile build-stg-time-zones
 uv run mobile build-stg-tac
@@ -36,6 +37,7 @@ uv run mobile nb-perf-metrics
 | Команда | Описание |
 |---------|----------|
 | `build-src` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-src-bs` → `build-src-person` → `build-src-excl` → `build-src-mobile` → `nb-perf-metrics` |
+| `build-stg-day` | STG build + DQ за `--day` (по умолчанию `2025-01-01`) → `data/stg/load_day=…/` |
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |
@@ -48,12 +50,15 @@ uv run mobile nb-perf-metrics
 | `build-src-mobile` | CDR / SMS / GPRS / location по дням и операторам |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
+Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
+
 Флаг **`--target-per-operator N`** — для `build-src-person` и `build-src` (по умолчанию `50000`).
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
+| `build-stg-day` | — | raw CSV (см. ниже) | `data/stg/load_day={day}/*.parquet` |
 | `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
 | `build-stg-time-zones` | — | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` (snappy) |
 | `build-stg-tac` | — | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` (snappy) |
@@ -68,6 +73,7 @@ uv run mobile nb-perf-metrics
 
 Документация:
 
+- [`documents/stg/build_stg_day.md`](documents/stg/build_stg_day.md)
 - [`documents/stg/build_stg_oktmo.md`](documents/stg/build_stg_oktmo.md)
 - [`documents/stg/build_stg_time_zones.md`](documents/stg/build_stg_time_zones.md)
 - [`documents/stg/build_stg_tac.md`](documents/stg/build_stg_tac.md)
@@ -81,6 +87,7 @@ uv run mobile nb-perf-metrics
 
 ## Пайплайны (код)
 
+- `src/mobile/pipelines/stg/day.py` — `run()` / `BuildStgDayParams`
 - `src/mobile/pipelines/stg/oktmo.py` — `run()`
 - `src/mobile/pipelines/stg/time_zones.py` — `run()`
 - `src/mobile/pipelines/stg/tac.py` — `run()`

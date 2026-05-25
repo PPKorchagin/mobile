@@ -6,10 +6,13 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
+from datetime import date
 
 from mobile.cli_defaults import (
     DEFAULT_PARQUET_COMPRESSION,
+    DEFAULT_STG_DAY,
     default_bs_params,
+    default_build_stg_day_params,
     default_excl_params,
     default_mobile_params,
     default_person_params,
@@ -19,7 +22,9 @@ from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
+from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
     DEFAULT_SRC_BS_CONFIG_PATH,
     DEFAULT_SRC_CDR_CONFIG_PATH,
@@ -97,6 +102,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
 }
 
 CLI_COMMANDS: tuple[str, ...] = (
+    "build-stg-day",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -104,6 +110,59 @@ CLI_COMMANDS: tuple[str, ...] = (
     *tuple(_DQ_COMMANDS),
     *tuple(_NB_COMMANDS),
 )
+
+
+def _parse_day(value: str) -> date:
+    return date.fromisoformat(value)
+
+
+def build_stg_day(*, day: date | None = None) -> None:
+    params = default_build_stg_day_params(day)
+    logger.info(
+        "Starting build-stg-day: day=%s steps=%s",
+        params.day.isoformat(),
+        ", ".join(BUILD_STG_DAY_STEPS),
+    )
+    for step in BUILD_STG_DAY_STEPS:
+        run_timed_command(
+            step,
+            lambda s=step, p=params: _run_build_stg_day_step(s, p),
+        )
+    logger.info("build-stg-day completed successfully")
+
+
+def _run_build_stg_day_step(step: str, params: stg_day.BuildStgDayParams) -> None:
+    if step == "build-stg-oktmo":
+        oktmo.run(
+            csv_path=params.oktmo_csv_path,
+            output_path=params.oktmo_output_path,
+            compression=params.compression,
+        )
+        return
+    if step == "dq-stg-oktmo":
+        dq_oktmo.run_dq(params.oktmo_output_path)
+        return
+    if step == "build-stg-time-zones":
+        time_zones.run(
+            csv_path=params.time_zones_csv_path,
+            output_path=params.time_zones_output_path,
+            compression=params.compression,
+        )
+        return
+    if step == "dq-stg-time-zones":
+        dq_time_zones.run_dq(params.time_zones_output_path)
+        return
+    if step == "build-stg-tac":
+        tac.run(
+            csv_path=params.tac_csv_path,
+            output_path=params.tac_output_path,
+            compression=params.compression,
+        )
+        return
+    if step == "dq-stg-tac":
+        dq_tac.run_dq(params.tac_output_path)
+        return
+    raise ValueError(f"Unknown build-stg-day step: {step}")
 
 
 def _run_build(command: str) -> None:
@@ -203,7 +262,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=sorted({*CLI_COMMANDS, "build-src"}),
-        help="Шаг пайплайна или цепочка build-src (STG + SRC + nb-perf-metrics)",
+        help="Шаг пайплайна, build-stg-day или build-src",
+    )
+    parser.add_argument(
+        "--day",
+        type=_parse_day,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help=f"build-stg-day: календарный срез STG (по умолчанию {DEFAULT_STG_DAY.isoformat()})",
     )
     parser.add_argument(
         "--target-per-operator",
@@ -228,7 +294,12 @@ def main() -> None:
 
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
-        if args.command == "build-src":
+        if args.command == "build-stg-day":
+            run_timed_command(
+                "build-stg-day",
+                lambda: build_stg_day(day=args.day),
+            )
+        elif args.command == "build-src":
             run_timed_command(
                 "build-src",
                 lambda: build_src(
