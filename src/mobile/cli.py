@@ -27,6 +27,8 @@ from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
+from mobile.pipelines.stg import move_event as stg_move_event
+from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
@@ -36,6 +38,7 @@ from mobile.project_paths import (
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
+    DEFAULT_STG_EVENT_DDS_ROOT,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_CSV_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
@@ -43,6 +46,7 @@ from mobile.project_paths import (
     mobile_datacenter_root,
     mobile_mart_paths,
     resolve_oktmo_layout,
+    stg_event_dds_output_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,6 +114,8 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-src-mobile",
     "dq-src-mobile",
     "build-stg-event",
+    "build-move-event",
+    "dq-stg-event",
     *tuple(_DQ_COMMANDS),
     *tuple(_NB_COMMANDS),
 )
@@ -160,6 +166,32 @@ def build_stg_event_run(
         paths["gprs"],
         paths["location"],
     )
+
+
+def run_build_move_event(*, report_date: date | None) -> None:
+    """build-move-event: один день или цикл DEFAULT_SRC_START_DATE..END."""
+    if report_date is not None:
+        run_timed_command(
+            "build-move-event",
+            lambda: stg_move_event.run_move(report_date),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    logger.info(
+        "Starting build-move-event: days=%s (%s .. %s)",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+    )
+    for day in days:
+        run_timed_command(
+            f"build-move-event-{day.isoformat()}",
+            lambda d=day: stg_move_event.run_move(d),
+        )
+    logger.info("build-move-event completed successfully")
 
 
 def run_build_stg_event(
@@ -218,6 +250,86 @@ def run_build_stg_event(
             logger.info("build-stg-event spawn: %s", " ".join(cmd))
             subprocess.run(cmd, check=True)
     logger.info("build-stg-event completed successfully")
+
+
+def dq_stg_event_run(
+    *,
+    report_date: date,
+    event_dds_path: Path | None = None,
+    datacenter: str | None = None,
+) -> dict:
+    if event_dds_path is not None:
+        path = event_dds_path
+    elif datacenter is not None:
+        path = stg_event_dds_output_path(datacenter, report_date)
+    else:
+        path = DEFAULT_STG_EVENT_DDS_ROOT
+    return dq_stg_event.run_dq(report_date, path)
+
+
+def run_dq_stg_event(
+    *,
+    datacenter: str | None,
+    report_date: date | None,
+    event_dds_path: str | None,
+) -> None:
+    """DQ ``event_dds``: worker (``--report-date`` + путь или ``--dc``) или оркестратор по дням × ЦОД."""
+    path = Path(event_dds_path) if event_dds_path else None
+
+    if datacenter is not None:
+        if report_date is None:
+            raise SystemExit("dq-stg-event: --report-date is required with --dc")
+        run_timed_command(
+            f"dq-stg-event-{datacenter}",
+            lambda: dq_stg_event_run(
+                report_date=report_date,
+                event_dds_path=path,
+                datacenter=datacenter,
+            ),
+        )
+        return
+
+    if report_date is not None and path is not None:
+        run_timed_command(
+            "dq-stg-event",
+            lambda: dq_stg_event_run(report_date=report_date, event_dds_path=path),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    if report_date is not None:
+        lo = hi = report_date
+    if lo > hi:
+        raise ValueError(f"Invalid date range: {lo} > {hi}")
+
+    days = _calendar_days_inclusive(lo, hi)
+    dcs = mobile_datacenter_ids()
+    logger.info(
+        "Starting dq-stg-event: days=%s (%s process per day) datacenters=%s (%s .. %s)",
+        len(days),
+        len(dcs),
+        ", ".join(dcs),
+        lo.isoformat(),
+        hi.isoformat(),
+    )
+    for day in days:
+        for dc in dcs:
+            cmd = [
+                sys.executable,
+                "-m",
+                "mobile",
+                "dq-stg-event",
+                "--dc",
+                dc,
+                "--report-date",
+                day.isoformat(),
+            ]
+            if event_dds_path is not None:
+                cmd.extend(["--event-dds-path", event_dds_path])
+            logger.info("dq-stg-event spawn: %s", " ".join(cmd))
+            subprocess.run(cmd, check=True)
+    logger.info("dq-stg-event completed successfully")
 
 
 def run_dq_src_mobile(
@@ -444,20 +556,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dc",
         choices=list(mobile_datacenter_ids()),
         default=None,
-        help="dq-src-mobile / build-stg-event: ЦОД (central / far-east)",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: ЦОД (central / far-east)",
     )
     parser.add_argument(
         "--report-date",
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event: отчётная дата в локальном времени (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END)",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event: день (без флага — цикл)",
     )
     parser.add_argument(
         "--mobile-root",
         default=None,
         metavar="PATH",
         help="dq-src-mobile / build-stg-event: корень витрин ЦОД (по умолчанию data/src/mobile/{dc})",
+    )
+    parser.add_argument(
+        "--event-dds-path",
+        default=None,
+        metavar="PATH",
+        help=f"dq-stg-event: корень event_dds, каталог YYYY-MM-DD или файл {{dc}}.parquet (с --dc: путь дня; иначе {DEFAULT_STG_EVENT_DDS_ROOT})",
     )
     return parser
 
@@ -490,6 +608,8 @@ def main() -> None:
                     mobile_root=args.mobile_root,
                 ),
             )
+        elif args.command == "build-move-event":
+            run_build_move_event(report_date=args.report_date)
         elif args.command == "build-stg-event":
             run_timed_command(
                 "build-stg-event",
@@ -497,6 +617,15 @@ def main() -> None:
                     datacenter=args.dc,
                     report_date=args.report_date,
                     mobile_root=args.mobile_root,
+                ),
+            )
+        elif args.command == "dq-stg-event":
+            run_timed_command(
+                "dq-stg-event",
+                lambda: run_dq_stg_event(
+                    datacenter=args.dc,
+                    report_date=args.report_date,
+                    event_dds_path=args.event_dds_path,
                 ),
             )
         else:

@@ -37,6 +37,9 @@ SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/gprs/{name_operator}/1
 SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
 
 STG_EVENT_LAYOUT_TEMPLATE = "data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet"
+STG_EVENT_DDS_LAYOUT_TEMPLATE = "data/stg/event_dds/{report_date}/{source_id}.parquet"
+DEFAULT_STG_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
+DEFAULT_STG_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
 DEFAULT_STG_EVENT_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "event.json"
 
 MOBILE_DATA_ROOT = PROJECT_ROOT / "data" / "src" / "mobile"
@@ -49,6 +52,10 @@ MART_PARQUET_FILES: dict[str, str] = {
 }
 
 _CALENDAR_DAY_IN_PATH = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/[^/]+\.parquet$", re.IGNORECASE)
+_DDS_EVENT_IN_PATH = re.compile(
+    r"/event_dds/(\d{4})-(\d{2})-(\d{2})/([^/]+)\.parquet$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -123,6 +130,22 @@ def calendar_day_key_from_path(path: Path) -> str | None:
     if not m:
         return None
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+
+
+def stg_event_dds_day_key_from_path(path: Path) -> str | None:
+    """Ключ отчётного дня из DDS-пути: ``…/event_dds/YYYY-MM-DD/{source_id}.parquet``."""
+    m = _DDS_EVENT_IN_PATH.search(path.as_posix())
+    if not m:
+        return None
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+
+
+def stg_event_dds_source_id_from_path(path: Path) -> str | None:
+    """``source_id`` (ЦОД) из DDS-пути ``…/event_dds/YYYY-MM-DD/{source_id}.parquet``."""
+    m = _DDS_EVENT_IN_PATH.search(path.as_posix())
+    if not m:
+        return None
+    return str(m.group(4))
 
 
 def discover_mart_parquet_paths(mart_root: Path, mart_file: str) -> list[Path]:
@@ -227,6 +250,15 @@ def stg_event_output_path(source_id: str, day: date) -> Path:
         YYYY=day.strftime("%Y"),
         MM=day.strftime("%m"),
         DD=day.strftime("%d"),
+        source_id=source_id,
+    )
+    return PROJECT_ROOT / resolved
+
+
+def stg_event_dds_output_path(source_id: str, day: date) -> Path:
+    """DDS-слой: ``data/stg/event_dds/{YYYY-MM-DD}/{source_id}.parquet``."""
+    resolved = STG_EVENT_DDS_LAYOUT_TEMPLATE.format(
+        report_date=day.isoformat(),
         source_id=source_id,
     )
     return PROJECT_ROOT / resolved

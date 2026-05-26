@@ -27,8 +27,10 @@ uv run mobile build-src-excl
 uv run mobile build-src-mobile
 uv run mobile build-stg-event
 uv run mobile build-stg-event --dc central --report-date 2025-01-01
+uv run mobile build-move-event --report-date 2025-01-01
 uv run mobile dq-src-mobile
 uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
+uv run mobile dq-stg-event --dc central --report-date 2025-01-01
 uv run mobile nb-perf-metrics
 ```
 
@@ -53,7 +55,9 @@ uv run mobile nb-perf-metrics
 | `build-src-excl` | Списки IMSI/IMEI/MSISDN из последнего full snapshot person |
 | `build-src-mobile` | CDR / SMS / GPRS / location по дням и операторам |
 | `build-stg-event` | CDR/SMS/GPRS/location → `data/stg/event/.../events.parquet` ([doc](documents/stg/build_stg_event.md)); фильтр по `Started`, сортировка по абоненту, сжатие 5m |
+| `build-move-event` | `stg/event/{dc}` → `stg/event_dds/{date}/{dc}.parquet` ([doc](documents/stg/build_move_event.md)) |
 | `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
+| `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
@@ -62,9 +66,11 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
-Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile` и `build-stg-event` (отчётная дата; с `--dc` обязателен).
+Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event` (с `--dc` обязателен).
 
-Флаг **`--dc`** — для `dq-src-mobile` / `build-stg-event`: `central` или `far-east` (worker). Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
+Флаг **`--dc`** — для `dq-src-mobile` / `build-stg-event` / `dq-stg-event`: `central` или `far-east` (worker). Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
+
+Флаг **`--event-dds-path PATH`** — для `dq-stg-event`: корень `data/stg/event_dds`, каталог `YYYY-MM-DD` или файл `{dc}.parquet`.
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
@@ -76,7 +82,9 @@ uv run mobile nb-perf-metrics
 | `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
 | `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
+| `build-move-event` | `--report-date` | `data/stg/event/.../events.parquet` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` |
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
+| `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | — | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
@@ -90,10 +98,12 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_stg_time_zones.md`](documents/stg/build_stg_time_zones.md)
 - [`documents/stg/build_stg_tac.md`](documents/stg/build_stg_tac.md)
 - [`documents/stg/build_stg_event.md`](documents/stg/build_stg_event.md)
+- [`documents/stg/build_move_event.md`](documents/stg/build_move_event.md)
 - [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
 - [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
+- [`documents/dq/stg/dq_stg_event.md`](documents/dq/stg/dq_stg_event.md)
 - [`documents/src/build_src_bs.md`](documents/src/build_src_bs.md)
 - [`documents/src/build_src_person.md`](documents/src/build_src_person.md)
 - [`documents/src/build_src_excl.md`](documents/src/build_src_excl.md)
@@ -106,6 +116,8 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/stg/time_zones.py` — `run()`
 - `src/mobile/pipelines/stg/tac.py` — `run()`
 - `src/mobile/pipelines/stg/event.py` — `run_build()`
+- `src/mobile/pipelines/stg/move_event.py` — `run_move()`
+- `src/mobile/pipelines/dq/stg/event.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`

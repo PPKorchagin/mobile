@@ -23,7 +23,7 @@
 
 ## TODO
 
-1. Команда `dq-stg-event` и notebook DQ (по аналогии с geo).
+1. Notebook DQ (по аналогии с geo).
 2. Включить `build-stg-event` в цепочку `build-src` / `run-all`, если потребуется сквозной прогон.
 
 ---
@@ -174,3 +174,5 @@ Struct `location`: cdr/gprs — из `OwnerMCCMNC` + `BSStartLac` + `BSStartCell
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
 | Сборка mobile | [`build_src_mobile.md`](../src/build_src_mobile.md) |
 | DQ mobile (входные витрины) | [`dq_src_mobile.md`](../dq/src/dq_src_mobile.md) |
+| DDS перенос | [`build_move_event.md`](./build_move_event.md) — `build-move-event` |
+| DQ DDS (`event_dds`) | [`dq_stg_event.md`](../dq/stg/dq_stg_event.md) — `dq-stg-event` |
