@@ -1,0 +1,46 @@
+{
+    "table": "stg_event",
+    "description": "Единая витрина mobile-событий из CDR/SMS/GPRS/location по ЦОД",
+    "fields": [
+        {
+            "name": "event_timestamp",
+            "type": "string",
+            "comment": "Started из витрины, YYYYMMDDhhmmss (локальное время абонента)"
+        },
+        {
+            "name": "imsi",
+            "type": "string",
+            "comment": "IMSI"
+        },
+        {
+            "name": "imei",
+            "type": "string",
+            "comment": "IMEI"
+        },
+        {
+            "name": "msisdn",
+            "type": "string",
+            "comment": "MSISDN"
+        },
+        {
+            "name": "location",
+            "type": "struct",
+            "comment": "mcc, mnc, lac, cell"
+        },
+        {
+            "name": "event",
+            "type": "uint32",
+            "comment": "10001 CDR, 10002 SMS, 10003 GPRS, 10004 LOCATION"
+        },
+        {
+            "name": "event_name",
+            "type": "string",
+            "comment": "cdr, sms, gprs, location"
+        },
+        {
+            "name": "event_count",
+            "type": "uint32",
+            "comment": "Число исходных событий в группе после 5m-схлопывания; 1 — без схлопывания или невалидный lac/cell"
+        }
+    ]
+}

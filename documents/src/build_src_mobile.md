@@ -186,3 +186,4 @@ uv run mobile build-src-mobile
 | Person layout | [`person.json`](../../src/mobile/schema/src/person.json) |
 | ETL | [`src/mobile/pipelines/src/mobile.py`](../../src/mobile/pipelines/src/mobile.py) |
 | Пути | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
+| Следующий шаг STG | [`build_stg_event.md`](../stg/build_stg_event.md) — `build-stg-event` |

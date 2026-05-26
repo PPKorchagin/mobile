@@ -110,8 +110,6 @@ uv run mobile build-stg-day --day 2025-01-15
 | 4 | `dq-stg-time-zones` | [`dq_stg_time_zones.md`](../dq/stg/dq_stg_time_zones.md#проверки) — timezone, распределение TZ, geometry |
 | 6 | `dq-stg-tac` | [`dq_stg_tac.md`](../dq/stg/dq_stg_tac.md#проверки) — TAC, M2M, даты |
 
-Обзор всех DQ-команд: [`documents/dq/README.md`](../dq/README.md).
-
 ### Типовые ошибки
 
 | Ошибка | Причина |

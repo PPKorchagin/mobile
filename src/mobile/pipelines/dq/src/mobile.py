@@ -2,23 +2,27 @@ from __future__ import annotations
 
 import json
 import logging
-import re
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
 import pandas as pd
 
-from mobile.project_paths import PROJECT_ROOT
+from mobile.project_paths import (
+    MART_PARQUET_FILES,
+    discover_mart_parquet_paths,
+    filter_df_by_local_report_date,
+    filter_paths_near_report_date,
+    read_all_parquets_concat,
+    resolve_project_path,
+    started_parseable_mask,
+)
 
 
 logger = logging.getLogger(__name__)
 LOG_TAG = "DQ_SRC_MOBILE"
 
-_MART_FILE = {"cdr": "cdr.parquet", "sms": "sms.parquet", "gprs": "gprs.parquet", "location": "location.parquet"}
 _EXPECTED_EVENT_SEG = {"cdr": "10001", "sms": "10002", "gprs": "10003", "location": "10004"}
-# .../YYYY/MM/DD/<file>.parquet (layout readiness mobile OSS)
-_CALENDAR_DAY_IN_PATH = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/[^/]+\.parquet$", re.IGNORECASE)
 
 SRC_CDR_FIELDS: list[dict[str, str]] = [
     {"name": "Started", "type": "string"},
@@ -230,10 +234,10 @@ def run_dq(
     по календарю в пути, чтобы не пропустить события на границе суток.
     """
     mart_roots = {
-        "cdr": _resolve_path(cdr_path),
-        "sms": _resolve_path(sms_path),
-        "gprs": _resolve_path(gprs_path),
-        "location": _resolve_path(location_path),
+        "cdr": resolve_project_path(cdr_path),
+        "sms": resolve_project_path(sms_path),
+        "gprs": resolve_project_path(gprs_path),
+        "location": resolve_project_path(location_path),
     }
     configs = {
         "cdr": {"fields": SRC_CDR_FIELDS},
@@ -272,13 +276,13 @@ def run_dq(
     rows_before_filter = 0
 
     for key, cfg in configs.items():
-        paths_all = _discover_mart_parquet_paths(mart_roots[key], _MART_FILE[key])
-        paths = _filter_paths_near_report_date(paths_all, report_date=report_date)
+        paths_all = discover_mart_parquet_paths(mart_roots[key], MART_PARQUET_FILES[key])
+        paths = filter_paths_near_report_date(paths_all, report_date=report_date)
         mart_paths[key] = paths
         mart_files_scanned[key] = len(paths)
-        df_all = _read_all_parquets_concat(paths)
+        df_all = read_all_parquets_concat(paths)
         rows_before_filter += int(len(df_all))
-        df = _filter_df_by_local_report_date(df_all, report_date)
+        df = filter_df_by_local_report_date(df_all, report_date)
         mart_dfs[key] = df
         mart_rows[key] = int(len(df))
         cov: dict[str, Any] = {
@@ -391,66 +395,6 @@ def run_dq(
     }
 
 
-def _resolve_path(path: str | Path) -> Path:
-    p = Path(path)
-    if not p.is_absolute():
-        p = PROJECT_ROOT / p
-    return p
-
-
-def _calendar_day_key_from_path(path: Path) -> str | None:
-    m = _CALENDAR_DAY_IN_PATH.search(path.as_posix())
-    if not m:
-        return None
-    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-
-
-def _discover_mart_parquet_paths(mart_root: Path, mart_file: str) -> list[Path]:
-    if mart_root.is_file() and mart_root.name == mart_file:
-        return [mart_root]
-    if mart_root.is_dir():
-        return sorted(mart_root.rglob(mart_file))
-    return []
-
-
-def _filter_paths_near_report_date(
-    paths: list[Path],
-    *,
-    report_date: date,
-    slack_days: int = 1,
-) -> list[Path]:
-    lo = report_date - timedelta(days=slack_days)
-    hi = report_date + timedelta(days=slack_days)
-    out: list[Path] = []
-    for p in paths:
-        day_iso = _calendar_day_key_from_path(p)
-        if day_iso is None:
-            out.append(p)
-            continue
-        d = date.fromisoformat(day_iso)
-        if lo <= d <= hi:
-            out.append(p)
-    return out
-
-
-def _local_report_date_mask(df: pd.DataFrame, report_date: date) -> pd.Series:
-    """``Started`` хранится в локальном времени абонента (см. build-src-mobile)."""
-    if df.empty or "Started" not in df.columns:
-        return pd.Series(False, index=df.index)
-    day_str = report_date.strftime("%Y%m%d")
-    s = df["Started"].astype("string").str.strip()
-    return _started_parseable_mask(s) & (s.str[:8] == day_str)
-
-
-def _filter_df_by_local_report_date(df: pd.DataFrame, report_date: date) -> pd.DataFrame:
-    if df.empty:
-        return df
-    mask = _local_report_date_mask(df, report_date)
-    if not bool(mask.any()):
-        return df.iloc[0:0].copy()
-    return df.loc[mask].copy()
-
-
 def _emit_cross_mart_day_traffic_mix(
     calendar_day: str,
     rows: dict[str, int],
@@ -484,19 +428,6 @@ def _emit_cross_mart_day_traffic_mix(
         },
         mart="cross_mart",
     )
-
-
-def _read_all_parquets_concat(paths: list[Path]) -> pd.DataFrame:
-    """Read every parquet in ``paths`` fully and concatenate."""
-    parts: list[pd.DataFrame] = []
-    for p in paths:
-        try:
-            parts.append(pd.read_parquet(p))
-        except Exception:
-            continue
-    if not parts:
-        return pd.DataFrame()
-    return pd.concat(parts, ignore_index=True)
 
 
 def _emit_mart_deep_metrics(
@@ -559,7 +490,7 @@ def _emit_mart_deep_metrics(
         mart=key,
     )
     if "Started" in df.columns:
-        parseable = _started_parseable_mask(df["Started"])
+        parseable = started_parseable_mask(df["Started"])
         ratio = float(parseable.mean()) if len(df) else 1.0
         bad_ratio = 1.0 - ratio
         emit_metric(
@@ -642,7 +573,7 @@ def _emit_mart_distributions(
     if "Started" not in df.columns:
         return
     s = df["Started"].astype("string").str.strip()
-    ok = _started_parseable_mask(s)
+    ok = started_parseable_mask(s)
     if not bool(ok.any()):
         return
     hours = s.loc[ok].str[8:10]
@@ -703,17 +634,10 @@ def _valid_rate(mask: pd.Series) -> float:
     return float(mask.mean())
 
 
-def _started_parseable_mask(series: pd.Series | None) -> pd.Series:
-    if series is None or len(series) == 0:
-        return pd.Series(dtype=bool)
-    s = series.astype("string").str.strip()
-    return s.notna() & (s.str.len() == 14) & s.str.fullmatch(r"\d{14}", na=False)
-
-
 def _check_started_series(series: pd.Series | None) -> tuple[float, dict[str, Any]]:
     if series is None or len(series) == 0:
         return 1.0, {"rows": 0}
-    ok = _started_parseable_mask(series)
+    ok = started_parseable_mask(series)
     rate = _valid_rate(ok)
     return rate, {"parseable_rate": round(rate, 6), "rows": int(len(series))}
 

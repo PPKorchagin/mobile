@@ -2,7 +2,7 @@
 
 **Витрины:** CDR, SMS, GPRS, location · **Команда:** `dq-src-mobile` · **Режим:** read-only DQ (процесс не падает при failed checks).
 
-Референс: [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py). Сборка витрин: [`build_src_mobile.md`](../../src/build_src_mobile.md). Схемы: [`cdr.json`](../../../src/mobile/schema/src/cdr.json), [`sms.json`](../../../src/mobile/schema/src/sms.json), [`gprs.json`](../../../src/mobile/schema/src/gprs.json), [`location.json`](../../../src/mobile/schema/src/location.json).
+Референс: [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py). Сборка витрин: [`build_src_mobile.md`](../../src/build_src_mobile.md). Сборка событий: [`build_stg_event.md`](../../stg/build_stg_event.md). Схемы: [`cdr.json`](../../../src/mobile/schema/src/cdr.json), [`sms.json`](../../../src/mobile/schema/src/sms.json), [`gprs.json`](../../../src/mobile/schema/src/gprs.json), [`location.json`](../../../src/mobile/schema/src/location.json).
 
 ---
 
@@ -216,8 +216,8 @@ CLI не завершается с ненулевым exit code при failed ch
 
 | Артефакт | Путь |
 |----------|------|
-| Обзор DQ | [`../README.md`](../README.md) |
 | DQ pipeline | [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
+| Сборка событий STG | [`build_stg_event.md`](../../stg/build_stg_event.md) — `build-stg-event` |
 | STG gate | константы и `_emit_stg_field_checks` в [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
 | Поля SRC (DQ) | `SRC_*_FIELDS` в [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
 | ETL build | [`pipelines/src/mobile.py`](../../../src/mobile/pipelines/src/mobile.py) |

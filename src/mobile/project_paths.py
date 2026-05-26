@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
+
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SCHEMA_ROOT = PROJECT_ROOT / "src" / "mobile" / "schema"
@@ -33,7 +36,19 @@ SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/sms/{name_operator}/100
 SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
 SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
 
+STG_EVENT_LAYOUT_TEMPLATE = "data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet"
+DEFAULT_STG_EVENT_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "event.json"
+
 MOBILE_DATA_ROOT = PROJECT_ROOT / "data" / "src" / "mobile"
+
+MART_PARQUET_FILES: dict[str, str] = {
+    "cdr": "cdr.parquet",
+    "sms": "sms.parquet",
+    "gprs": "gprs.parquet",
+    "location": "location.parquet",
+}
+
+_CALENDAR_DAY_IN_PATH = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/[^/]+\.parquet$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -96,6 +111,85 @@ def mobile_mart_paths(
     }
 
 
+def resolve_project_path(path: str | Path) -> Path:
+    p = Path(path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    return p
+
+
+def calendar_day_key_from_path(path: Path) -> str | None:
+    m = _CALENDAR_DAY_IN_PATH.search(path.as_posix())
+    if not m:
+        return None
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+
+
+def discover_mart_parquet_paths(mart_root: Path, mart_file: str) -> list[Path]:
+    if mart_root.is_file() and mart_root.name == mart_file:
+        return [mart_root]
+    if mart_root.is_dir():
+        return sorted(mart_root.rglob(mart_file))
+    return []
+
+
+def filter_paths_near_report_date(
+    paths: list[Path],
+    *,
+    report_date: date,
+    slack_days: int = 1,
+) -> list[Path]:
+    lo = report_date - timedelta(days=slack_days)
+    hi = report_date + timedelta(days=slack_days)
+    out: list[Path] = []
+    for p in paths:
+        day_iso = calendar_day_key_from_path(p)
+        if day_iso is None:
+            out.append(p)
+            continue
+        d = date.fromisoformat(day_iso)
+        if lo <= d <= hi:
+            out.append(p)
+    return out
+
+
+def started_parseable_mask(series: pd.Series | None) -> pd.Series:
+    if series is None or len(series) == 0:
+        return pd.Series(dtype=bool)
+    s = series.astype("string").str.strip()
+    return s.notna() & (s.str.len() == 14) & s.str.fullmatch(r"\d{14}", na=False)
+
+
+def local_report_date_mask(df: pd.DataFrame, report_date: date) -> pd.Series:
+    """``Started`` в локальном времени абонента (см. build-src-mobile)."""
+    if df.empty or "Started" not in df.columns:
+        return pd.Series(False, index=df.index)
+    day_str = report_date.strftime("%Y%m%d")
+    s = df["Started"].astype("string").str.strip()
+    return started_parseable_mask(s) & (s.str[:8] == day_str)
+
+
+def filter_df_by_local_report_date(df: pd.DataFrame, report_date: date) -> pd.DataFrame:
+    if df.empty:
+        return df
+    mask = local_report_date_mask(df, report_date)
+    if not bool(mask.any()):
+        return df.iloc[0:0].copy()
+    return df.loc[mask].copy()
+
+
+def read_all_parquets_concat(paths: list[Path], *, columns: list[str] | None = None) -> pd.DataFrame:
+    parts: list[pd.DataFrame] = []
+    for p in paths:
+        try:
+            parts.append(pd.read_parquet(p, columns=columns))
+        except Exception:
+            continue
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True)
+
+
 _NB = Path(__file__).resolve().parent / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"
 
@@ -125,3 +219,14 @@ def stg_load_day_paths(day: date) -> dict[str, Path]:
 
 def resolve_oktmo_layout() -> Path:
     return DEFAULT_STG_OKTMO_OUTPUT_PATH
+
+
+def stg_event_output_path(source_id: str, day: date) -> Path:
+    """Parquet событий за отчётный день и ЦОД: ``data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet``."""
+    resolved = STG_EVENT_LAYOUT_TEMPLATE.format(
+        YYYY=day.strftime("%Y"),
+        MM=day.strftime("%m"),
+        DD=day.strftime("%d"),
+        source_id=source_id,
+    )
+    return PROJECT_ROOT / resolved

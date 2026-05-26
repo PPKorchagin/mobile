@@ -31,6 +31,7 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-src-person",
         "build-src-excl",
         "build-src-mobile",
+        "build-stg-event",
     }
 )
 
