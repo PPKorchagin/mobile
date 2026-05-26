@@ -127,7 +127,8 @@ uv run mobile build-move-event --report-date 2025-01-01
 ## Место в пайплайне
 
 ```text
-build-src-mobile → build-stg-event → build-move-event → dq-stg-event → (потребители DDS)
+build-src-mobile → build-stg-event → build-move-event → dq-stg-event
+  → build-stg-msisdn-imsi / build-stg-msisdn-imei → (потребители)
 ```
 
 DQ после переноса: [`dq-stg-event`](../dq/stg/dq_stg_event.md) на `data/stg/event_dds/…`.

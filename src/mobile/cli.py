@@ -28,6 +28,8 @@ from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import move_event as stg_move_event
+from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
+from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
 from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
@@ -39,6 +41,8 @@ from mobile.project_paths import (
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
     DEFAULT_STG_EVENT_DDS_ROOT,
+    STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
+    STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_CSV_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
@@ -116,6 +120,8 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-event",
     "build-move-event",
     "dq-stg-event",
+    "build-stg-msisdn-imsi",
+    "build-stg-msisdn-imei",
     *tuple(_DQ_COMMANDS),
     *tuple(_NB_COMMANDS),
 )
@@ -166,6 +172,43 @@ def build_stg_event_run(
         paths["gprs"],
         paths["location"],
     )
+
+
+def run_build_stg_binding(
+    command: str,
+    *,
+    report_date: date | None,
+    event_dds_path: str | None,
+    output_path: str | None,
+    runner: Callable[..., dict],
+) -> None:
+    """build-stg-msisdn-imsi / build-stg-msisdn-imei: один день или цикл DEFAULT_SRC_START_DATE..END."""
+    dds = Path(event_dds_path) if event_dds_path else None
+    out = Path(output_path) if output_path else None
+
+    if report_date is not None:
+        run_timed_command(
+            command,
+            lambda: runner(report_date=report_date, event_dds_path=dds, output_path=out),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    logger.info(
+        "Starting %s: days=%s (%s .. %s)",
+        command,
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+    )
+    for day in days:
+        run_timed_command(
+            f"{command}-{day.isoformat()}",
+            lambda d=day: runner(report_date=d, event_dds_path=dds, output_path=out),
+        )
+    logger.info("%s completed successfully", command)
 
 
 def run_build_move_event(*, report_date: date | None) -> None:
@@ -575,7 +618,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--event-dds-path",
         default=None,
         metavar="PATH",
-        help=f"dq-stg-event: корень event_dds, каталог YYYY-MM-DD или файл {{dc}}.parquet (с --dc: путь дня; иначе {DEFAULT_STG_EVENT_DDS_ROOT})",
+        help=(
+            f"dq-stg-event / build-stg-msisdn-*: корень event_dds или каталог/файл дня "
+            f"(по умолчанию {DEFAULT_STG_EVENT_DDS_ROOT})"
+        ),
+    )
+    parser.add_argument(
+        "--output-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            "build-stg-msisdn-imsi: выходной parquet (по умолчанию "
+            f"{STG_MSISDN_IMSI_LAYOUT_TEMPLATE}); "
+            "build-stg-msisdn-imei: "
+            f"{STG_MSISDN_IMEI_LAYOUT_TEMPLATE}"
+        ),
     )
     return parser
 
@@ -627,6 +684,22 @@ def main() -> None:
                     report_date=args.report_date,
                     event_dds_path=args.event_dds_path,
                 ),
+            )
+        elif args.command == "build-stg-msisdn-imsi":
+            run_build_stg_binding(
+                "build-stg-msisdn-imsi",
+                report_date=args.report_date,
+                event_dds_path=args.event_dds_path,
+                output_path=args.output_path,
+                runner=stg_msisdn_imsi.run_build,
+            )
+        elif args.command == "build-stg-msisdn-imei":
+            run_build_stg_binding(
+                "build-stg-msisdn-imei",
+                report_date=args.report_date,
+                event_dds_path=args.event_dds_path,
+                output_path=args.output_path,
+                runner=stg_msisdn_imei.run_build,
             )
         else:
             run_timed_command(

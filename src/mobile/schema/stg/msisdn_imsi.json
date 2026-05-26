@@ -1,0 +1,26 @@
+{
+    "table": "stg_msisdn_imsi",
+    "description": "Интервалы актуальности связки MSISDN–IMSI по наблюдениям event_dds за отчётный день",
+    "fields": [
+        {
+            "name": "msisdn",
+            "type": "string",
+            "comment": "MSISDN, E.164 (RU и иностранные номера)"
+        },
+        {
+            "name": "imsi",
+            "type": "string",
+            "comment": "IMSI, 14–15 цифр (MCC+MNC+MSIN)"
+        },
+        {
+            "name": "valid_from",
+            "type": "timestamp",
+            "comment": "Первое событие интервала (локальное время event_timestamp)"
+        },
+        {
+            "name": "valid_to",
+            "type": "timestamp",
+            "comment": "Последнее событие интервала (локальное время)"
+        }
+    ]
+}
