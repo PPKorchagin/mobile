@@ -65,7 +65,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-oktmo` | — | `data/stg/oktmo.parquet` | логи + `command_timing.jsonl` |
 | `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
 | `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
-| `build-src-bs` | `src/mobile/schema/src/bs.json` | `data/stg/oktmo.parquet`, профиль OpenCellID | `data/src/bs.parquet` |
+| `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | `src/mobile/schema/src/person.json` | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | `person.json`, `imsi.json`, `imei.json`, `msisdn.json` | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
 | `build-src-mobile` | `cdr/sms/gprs/location.json`, `person.json` | `data/src/bs.parquet`, person с `_SUCCESS` | `data/src/mobile/operator/...` |
@@ -94,7 +94,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
-- `src/mobile/pipelines/src/bs.py` — `run_from_config()`
+- `src/mobile/pipelines/src/bs.py` — `run()`
 - `src/mobile/pipelines/src/person.py` — `run_from_config()`
 - `src/mobile/pipelines/src/excl.py` — `run_from_config()`
 - `src/mobile/pipelines/src/mobile.py` — `run_mobile_all()`

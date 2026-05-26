@@ -22,6 +22,46 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
+SRC_BS_TABLE = "bs"
+
+SRC_BS_FIELDS: list[dict[str, str]] = [
+    {"name": "id", "type": "int"},
+    {"name": "mcc", "type": "smallint"},
+    {"name": "mnc", "type": "smallint"},
+    {"name": "lac", "type": "int"},
+    {"name": "cell", "type": "long"},
+    {"name": "date_on", "type": "timestamp"},
+    {"name": "date_off", "type": "timestamp"},
+    {"name": "coord_x", "type": "float"},
+    {"name": "coord_y", "type": "float"},
+    {"name": "bs_type", "type": "string"},
+    {"name": "generation", "type": "string"},
+    {"name": "address", "type": "string"},
+    {"name": "subject", "type": "string"},
+    {"name": "location", "type": "string"},
+    {"name": "description", "type": "string"},
+    {"name": "controllernum", "type": "string"},
+    {"name": "frequency_out", "type": "string"},
+    {"name": "frequency_in", "type": "string"},
+    {"name": "rad_class", "type": "string"},
+    {"name": "bcch", "type": "string"},
+    {"name": "azimuth", "type": "float"},
+    {"name": "height", "type": "float"},
+    {"name": "tilt", "type": "float"},
+    {"name": "el_tilt", "type": "float"},
+    {"name": "mech_tilt", "type": "float"},
+    {"name": "raster", "type": "float"},
+    {"name": "thickness", "type": "float"},
+    {"name": "frequency", "type": "float"},
+    {"name": "power", "type": "float"},
+    {"name": "amplification", "type": "float"},
+    {"name": "polarization", "type": "float"},
+    {"name": "rac", "type": "int"},
+    {"name": "border", "type": "boolean"},
+    {"name": "avtocod", "type": "int"},
+    {"name": "bsic", "type": "int"},
+    {"name": "bsid", "type": "long"},
+]
 
 OPERATOR_PROFILE_ALIASES = {
     "мтс": {"мтс", "mts"},
@@ -216,22 +256,20 @@ class BuildBsProfile:
     samples_p95: float | None
 
 
-def run_from_config(
-    config_path: str | Path,
+def _resolve_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
+def run(
+    *,
     oktmo_parquet_path: str | Path,
+    output_path: str | Path,
+    compression: str,
     params: BuildBsParams,
 ) -> dict[str, Any]:
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-
-    with config_file.open("r", encoding="utf-8") as file:
-        config = json.load(file)
-
-    readiness = config["readiness"]
-    fields = config["fields"]
-    output_path = PROJECT_ROOT / readiness["s3_layout"]
-    compression = readiness.get("parquet_compression", "snappy")
+    fields = SRC_BS_FIELDS
+    parquet_file = _resolve_path(output_path)
 
     perf: dict[str, Any] = {}
     started = time.perf_counter()
@@ -250,16 +288,17 @@ def run_from_config(
     _validate_dataset(data, fields, params.subjects)
 
     with timed_stage("write_parquet_sec", perf):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Writing BS parquet (overwrite): %s", output_path)
-        data.to_parquet(output_path, compression=compression, index=False)
+        parquet_file.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Writing BS parquet (overwrite): %s", parquet_file)
+        data.to_parquet(parquet_file, compression=compression, index=False)
 
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-src-bs", metrics={**stats, **perf})
     logger.info(
-        "BS build done. rows=%s, output=%s, compression=%s",
+        "%s build done. rows=%s, output=%s, compression=%s",
+        SRC_BS_TABLE,
         stats["row_count"],
-        output_path,
+        parquet_file,
         compression,
     )
     logger.info("BS validation and stats: %s", json.dumps(stats, ensure_ascii=False))

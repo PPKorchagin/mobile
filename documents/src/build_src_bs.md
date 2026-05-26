@@ -29,12 +29,13 @@
 
 ## Параметры запуска
 
-Вызов: `bs.run_from_config(config_path, oktmo_parquet_path, params)` ([`cli.py`](../../src/mobile/cli.py)).
+Вызов: `bs.run(oktmo_parquet_path, output_path, compression, params)` ([`cli.py`](../../src/mobile/cli.py)).
 
 | Переменная / объект | Тип | Обязательность | Значение по умолчанию | Описание |
 |---------------------|-----|----------------|----------------------|----------|
-| `config_path` | string (path) | Да | `src/mobile/schema/src/bs.json` | Схема `fields`, `readiness` (читается в runtime) |
-| `oktmo_parquet_path` | string (path) | Да | `data/stg/oktmo.parquet` | Полигоны субъектов (`DEFAULT_STG_OKTMO_OUTPUT_PATH`) |
+| `oktmo_parquet_path` | string (path) | Да | `data/stg/oktmo.parquet` | Полигоны субъектов (`resolve_oktmo_layout()`) |
+| `output_path` | string (path) | Да | `data/src/bs.parquet` | Выходной Parquet (перезапись) |
+| `compression` | string | Да | `snappy` | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION`) |
 | `params` | `BuildBsParams` | Да | `default_bs_params()` | Период, регионы, операторы, seed, профиль |
 
 Флагов CLI **нет**.
@@ -53,6 +54,8 @@
 
 | Константа | Значение |
 |-----------|----------|
+| `SRC_BS_TABLE` | `bs` |
+| `SRC_BS_FIELDS` | порядок и типы колонок (см. [`bs.json`](../../src/mobile/schema/src/bs.json)) |
 | `OPEN_BS_DATE_OFF` | `2999-12-31 23:59:59` (активные БС на конец периода) |
 | `NOISE_FIELD_PROBABILITY` | `0.35` |
 | `LAC_CELL_NULL_PROBABILITY` / `ZERO` | `0.015` / `0.01` (OCC-013) |
@@ -75,7 +78,7 @@ uv run mobile build-src-bs
 | Формат хранения | Parquet |
 | Партиционирование | Нет |
 | Календарный срез / `load_date` | Нет (snapshot) |
-| Сжатие | `snappy` (`readiness.parquet_compression` в JSON) |
+| Сжатие | `snappy` (`DEFAULT_PARQUET_COMPRESSION` в CLI) |
 
 **Бизнес-ключ:** `mcc` + `mnc` + `lac` + `cell` + `date_on`.
 
@@ -109,13 +112,12 @@ uv run mobile build-src-bs
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_from_config(config_path, oktmo_parquet_path, params)` в [`bs.py`](../../src/mobile/pipelines/src/bs.py).
+Точка входа: `run(oktmo_parquet_path, output_path, compression, params)` в [`bs.py`](../../src/mobile/pipelines/src/bs.py).
 
-### Шаг 0. Конфиг и подготовка
+### Шаг 0. Подготовка
 
-1. `config_path` → `json.load`: `readiness`, `fields`.
-2. `output_path = PROJECT_ROOT / readiness["s3_layout"]`, `compression = readiness.get("parquet_compression", "snappy")`.
-3. `rng = random.Random(params.seed)`.
+1. `fields = SRC_BS_FIELDS`, `output_path` и `compression` — аргументы job.
+2. `rng = random.Random(params.seed)`.
 4. Стадия `load_oktmo_sec`: `_load_subject_geometries(oktmo_parquet_path, params.subjects)`.
 5. `profile = _load_build_profile(params.profile_path, params.operators)` — при отсутствии файла профиля возвращается `None` (дефолтные веса поколений и диапазоны LAC/Cell).
 
@@ -175,7 +177,7 @@ uv run mobile build-src-bs
 
 | Ошибка | Причина |
 |--------|---------|
-| `FileNotFoundError` | Нет `bs.json`, ОКТМО или профиля |
+| `FileNotFoundError` | Нет ОКТМО или профиля |
 | `ValueError` | Субъект не найден; неподдерживаемая геометрия; пустой датасет |
 | pandas / pyarrow | Запись parquet |
 

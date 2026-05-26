@@ -26,7 +26,6 @@ from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
-    DEFAULT_SRC_BS_CONFIG_PATH,
     DEFAULT_SRC_CDR_CONFIG_PATH,
     DEFAULT_SRC_GPRS_CONFIG_PATH,
     DEFAULT_SRC_IMEI_CONFIG_PATH,
@@ -73,12 +72,13 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
         str(DEFAULT_STG_TAC_CSV_PATH),
     ),
     "build-src-bs": (
-        lambda: bs.run_from_config(
-            DEFAULT_SRC_BS_CONFIG_PATH,
-            resolve_oktmo_layout(),
-            default_bs_params(),
+        lambda compression=DEFAULT_PARQUET_COMPRESSION: bs.run(
+            oktmo_parquet_path=resolve_oktmo_layout(),
+            output_path=DEFAULT_BS_LAYOUT,
+            compression=compression,
+            params=default_bs_params(),
         ),
-        str(DEFAULT_SRC_BS_CONFIG_PATH),
+        str(DEFAULT_BS_LAYOUT),
     ),
 }
 

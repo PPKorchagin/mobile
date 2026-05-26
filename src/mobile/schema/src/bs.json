@@ -1,183 +1,42 @@
 {
     "table": "bs",
     "description": "Справочник мобильных базовых станций",
-    "TODO": [],
-    "readiness": {
-      "s3_layout": "data/src/bs.parquet",
-      "parquet_compression": "snappy"
-    },
     "fields": [
-      {
-        "name": "id",
-        "type": "int",
-        "comment": "Технический id строки генерации (не id БС поставщика); бизнес-ключ — mcc+mnc+lac+cell+date_on"
-      },
-      {
-        "name": "mcc",
-        "type": "smallint",
-        "comment": "Mobile country code (250 — РФ)"
-      },
-      {
-        "name": "mnc",
-        "type": "smallint",
-        "comment": "Mobile network code (оператор)"
-      },
-      {
-        "name": "lac",
-        "type": "int",
-        "comment": "Location area code"
-      },
-      {
-        "name": "cell",
-        "type": "long",
-        "comment": "Идентификатор соты (CI); CGI = mcc,mnc,lac,cell"
-      },
-      {
-        "name": "date_on",
-        "type": "timestamp",
-        "comment": "Начало действия записи, наивное wall-clock Europe/Moscow"
-      },
-      {
-        "name": "date_off",
-        "type": "timestamp",
-        "comment": "Конец действия; активная БС — 2999-12-31 23:59:59; закрытая — фактическая дата (МСК)"
-      },
-      {
-        "name": "coord_x",
-        "type": "float",
-        "comment": "Долгота БС (WGS84)"
-      },
-      {
-        "name": "coord_y",
-        "type": "float",
-        "comment": "Широта БС (WGS84)"
-      },
-      {
-        "name": "bs_type",
-        "type": "string",
-        "comment": "Тип БС: macro/micro/indoor/femto/small cell"
-      },
-      {
-        "name": "generation",
-        "type": "string",
-        "comment": "Поколение сети: 2G/3G/4G/LTE/5G"
-      },
-      {
-        "name": "address",
-        "type": "string",
-        "comment": "Произвольное текстовое описание адреса или места расположения"
-      },
-      {
-        "name": "subject",
-        "type": "string",
-        "comment": "Субъект РФ (имя stg_oktmo level=1)"
-      },
-      {
-        "name": "location",
-        "type": "string",
-        "comment": "Место расположения БС: underground/outdoor/indoor/small cell"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "comment": "Описание БС: NO COMMENT, FEMTO, femto-сота"
-      },
-      {
-        "name": "controllernum",
-        "type": "string",
-        "comment": "Идентификатор контроллера: UAG_NNOV, RNC888_FEM, BSC10NCH"
-      },
-      {
-        "name": "frequency_out",
-        "type": "string",
-        "comment": "Исходящие полосы, МГц; несколько значений через запятую (BS-009)"
-      },
-      {
-        "name": "frequency_in",
-        "type": "string",
-        "comment": "Входящие полосы, МГц; несколько значений через запятую (BS-009)"
-      },
-      {
-        "name": "rad_class",
-        "type": "string",
-        "comment": "Класс БС"
-      },
-      {
-        "name": "bcch",
-        "type": "string"
-      },
-      {
-        "name": "azimuth",
-        "type": "float",
-        "comment": "Азимут БС; -1 — без направленности (indoor); иначе 0–360"
-      },
-      {
-        "name": "height",
-        "type": "float",
-        "comment": "Высота подвеса БС (-50 - 240)"
-      },
-      {
-        "name": "tilt",
-        "type": "float",
-        "comment": "Угол наклона антенны (-90 - 360)"
-      },
-      {
-        "name": "el_tilt",
-        "type": "float",
-        "comment": "Электрический угол наклона антенны (-359 - 46)"
-      },
-      {
-        "name": "mech_tilt",
-        "type": "float",
-        "comment": "Механический угол наклона антенны (-240 - 25)"
-      },
-      {
-        "name": "raster",
-        "type": "float",
-        "comment": "Растр (-360 - 360)"
-      },
-      {
-        "name": "thickness",
-        "type": "float",
-        "comment": "(-360 - 360)"
-      },
-      {
-        "name": "frequency",
-        "type": "float",
-        "comment": "Несущая полоса, МГц"
-      },
-      {
-        "name": "power",
-        "type": "float"
-      },
-      {
-        "name": "amplification",
-        "type": "float"
-      },
-      {
-        "name": "polarization",
-        "type": "float"
-      },
-      {
-        "name": "rac",
-        "type": "int"
-      },
-      {
-        "name": "border",
-        "type": "boolean",
-        "comment": "БС у границы полигона субъекта ОКТМО (~1.3 км); не критерий поставщика BS-010"
-      },
-      {
-        "name": "avtocod",
-        "type": "int"
-      },
-      {
-        "name": "bsic",
-        "type": "int"
-      },
-      {
-        "name": "bsid",
-        "type": "long"
-      }
+        { "name": "id", "type": "int", "comment": "Технический id строки генерации (не id БС поставщика); бизнес-ключ — mcc+mnc+lac+cell+date_on" },
+        { "name": "mcc", "type": "smallint", "comment": "Mobile country code (250 — РФ)" },
+        { "name": "mnc", "type": "smallint", "comment": "Mobile network code (оператор)" },
+        { "name": "lac", "type": "int", "comment": "Location area code" },
+        { "name": "cell", "type": "long", "comment": "Идентификатор соты (CI); CGI = mcc,mnc,lac,cell" },
+        { "name": "date_on", "type": "timestamp", "comment": "Начало действия записи, наивное wall-clock Europe/Moscow" },
+        { "name": "date_off", "type": "timestamp", "comment": "Конец действия; активная БС — 2999-12-31 23:59:59; закрытая — фактическая дата (МСК)" },
+        { "name": "coord_x", "type": "float", "comment": "Долгота БС (WGS84)" },
+        { "name": "coord_y", "type": "float", "comment": "Широта БС (WGS84)" },
+        { "name": "bs_type", "type": "string", "comment": "Тип БС: macro/micro/indoor/femto/small cell" },
+        { "name": "generation", "type": "string", "comment": "Поколение сети: 2G/3G/4G/LTE/5G" },
+        { "name": "address", "type": "string", "comment": "Произвольное текстовое описание адреса или места расположения" },
+        { "name": "subject", "type": "string", "comment": "Субъект РФ (имя stg_oktmo level=1)" },
+        { "name": "location", "type": "string", "comment": "Место расположения БС: underground/outdoor/indoor/small cell" },
+        { "name": "description", "type": "string", "comment": "Описание БС: NO COMMENT, FEMTO, femto-сота" },
+        { "name": "controllernum", "type": "string", "comment": "Идентификатор контроллера: UAG_NNOV, RNC888_FEM, BSC10NCH" },
+        { "name": "frequency_out", "type": "string", "comment": "Исходящие полосы, МГц; несколько значений через запятую (BS-009)" },
+        { "name": "frequency_in", "type": "string", "comment": "Входящие полосы, МГц; несколько значений через запятую (BS-009)" },
+        { "name": "rad_class", "type": "string", "comment": "Класс БС" },
+        { "name": "bcch", "type": "string" },
+        { "name": "azimuth", "type": "float", "comment": "Азимут БС; -1 — без направленности (indoor); иначе 0–360" },
+        { "name": "height", "type": "float", "comment": "Высота подвеса БС (-50 - 240)" },
+        { "name": "tilt", "type": "float", "comment": "Угол наклона антенны (-90 - 360)" },
+        { "name": "el_tilt", "type": "float", "comment": "Электрический угол наклона антенны (-359 - 46)" },
+        { "name": "mech_tilt", "type": "float", "comment": "Механический угол наклона антенны (-240 - 25)" },
+        { "name": "raster", "type": "float", "comment": "Растр (-360 - 360)" },
+        { "name": "thickness", "type": "float", "comment": "(-360 - 360)" },
+        { "name": "frequency", "type": "float", "comment": "Несущая полоса, МГц" },
+        { "name": "power", "type": "float" },
+        { "name": "amplification", "type": "float" },
+        { "name": "polarization", "type": "float" },
+        { "name": "rac", "type": "int" },
+        { "name": "border", "type": "boolean", "comment": "БС у границы полигона субъекта ОКТМО (~1.3 км); не критерий поставщика BS-010" },
+        { "name": "avtocod", "type": "int" },
+        { "name": "bsic", "type": "int" },
+        { "name": "bsid", "type": "long" }
     ]
-  }
+}
