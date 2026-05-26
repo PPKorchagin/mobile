@@ -75,7 +75,7 @@ uv run mobile build-src-mobile
 |----------|----------|
 | Формат | Parquet (один файл на витрину × оператор × день × ЦОД) |
 | Сжатие | `snappy` (`DEFAULT_PARQUET_COMPRESSION`) |
-| Поля | `SRC_CDR_FIELDS`, `SRC_SMS_FIELDS`, … в [`schema_fields.py`](../../src/mobile/pipelines/src/schema_fields.py); контракт — JSON в `schema/src/` |
+| Поля | `SRC_CDR_FIELDS`, `SRC_SMS_FIELDS`, … в [`mobile.py`](../../src/mobile/pipelines/src/mobile.py); контракт — JSON в `schema/src/` |
 
 Примечания из JSON: колонки nullable; между витринами возможны перекрёстные типы событий (см. `notes` в схемах).
 

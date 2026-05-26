@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 import sys
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
+from pathlib import Path
 
 from mobile.cli_defaults import (
     DEFAULT_PARQUET_COMPRESSION,
+    DEFAULT_SRC_END_DATE,
+    DEFAULT_SRC_START_DATE,
     DEFAULT_STG_DAY,
     default_bs_params,
     default_build_stg_day_params,
@@ -21,6 +25,7 @@ from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
+from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
@@ -33,6 +38,9 @@ from mobile.project_paths import (
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_CSV_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+    mobile_datacenter_ids,
+    mobile_datacenter_root,
+    mobile_mart_paths,
     resolve_oktmo_layout,
 )
 
@@ -99,6 +107,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-src-person",
     "build-src-excl",
     "build-src-mobile",
+    "dq-src-mobile",
     *tuple(_DQ_COMMANDS),
     *tuple(_NB_COMMANDS),
 )
@@ -106,6 +115,90 @@ CLI_COMMANDS: tuple[str, ...] = (
 
 def _parse_day(value: str) -> date:
     return date.fromisoformat(value)
+
+
+def _calendar_days_inclusive(start: date, end: date) -> list[date]:
+    out: list[date] = []
+    cur = start
+    while cur <= end:
+        out.append(cur)
+        cur += timedelta(days=1)
+    return out
+
+
+def dq_src_mobile_run(
+    *,
+    datacenter: str,
+    report_date: date,
+    mobile_root: Path | None = None,
+) -> dict:
+    paths = mobile_mart_paths(datacenter, mobile_root=mobile_root)
+    return dq_src_mobile.run_dq(
+        datacenter,
+        report_date,
+        paths["cdr"],
+        paths["sms"],
+        paths["gprs"],
+        paths["location"],
+    )
+
+
+def run_dq_src_mobile(
+    *,
+    datacenter: str | None,
+    report_date: date | None,
+    mobile_root: str | None,
+) -> None:
+    """DQ mobile: worker (``--dc`` + ``--report-date``) или оркестратор (2 процесса на день)."""
+    root = Path(mobile_root) if mobile_root else None
+
+    if datacenter is not None:
+        if report_date is None:
+            raise SystemExit("dq-src-mobile: --report-date is required with --dc")
+        run_timed_command(
+            f"dq-src-mobile-{datacenter}",
+            lambda: dq_src_mobile_run(
+                datacenter=datacenter,
+                report_date=report_date,
+                mobile_root=root,
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    if report_date is not None:
+        lo = hi = report_date
+    if lo > hi:
+        raise ValueError(f"Invalid date range: {lo} > {hi}")
+
+    days = _calendar_days_inclusive(lo, hi)
+    dcs = mobile_datacenter_ids()
+    logger.info(
+        "Starting dq-src-mobile: days=%s (%s process per day) datacenters=%s (%s .. %s)",
+        len(days),
+        len(dcs),
+        ", ".join(dcs),
+        lo.isoformat(),
+        hi.isoformat(),
+    )
+    for day in days:
+        for dc in dcs:
+            cmd = [
+                sys.executable,
+                "-m",
+                "mobile",
+                "dq-src-mobile",
+                "--dc",
+                dc,
+                "--report-date",
+                day.isoformat(),
+            ]
+            if mobile_root is not None:
+                cmd.extend(["--mobile-root", mobile_root])
+            logger.info("dq-src-mobile spawn: %s", " ".join(cmd))
+            subprocess.run(cmd, check=True)
+    logger.info("dq-src-mobile completed successfully")
 
 
 def build_stg_day(*, day: date | None = None) -> None:
@@ -270,6 +363,25 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PCT",
         help="build-src-excl / build-src: %% строк АБ в списках исключений (по умолчанию 0.7)",
     )
+    parser.add_argument(
+        "--dc",
+        choices=list(mobile_datacenter_ids()),
+        default=None,
+        help="dq-src-mobile: ЦОД (central / far-east)",
+    )
+    parser.add_argument(
+        "--report-date",
+        type=_parse_day,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="dq-src-mobile: отчётная дата в локальном времени абонента (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END)",
+    )
+    parser.add_argument(
+        "--mobile-root",
+        default=None,
+        metavar="PATH",
+        help="dq-src-mobile: корень витрин ЦОД (по умолчанию data/src/mobile/{dc})",
+    )
     return parser
 
 
@@ -290,6 +402,15 @@ def main() -> None:
                 lambda: build_src(
                     target_per_operator=args.target_per_operator,
                     excl_pct_of_ab=args.excl_pct_of_ab,
+                ),
+            )
+        elif args.command == "dq-src-mobile":
+            run_timed_command(
+                "dq-src-mobile",
+                lambda: run_dq_src_mobile(
+                    datacenter=args.dc,
+                    report_date=args.report_date,
+                    mobile_root=args.mobile_root,
                 ),
             )
         else:

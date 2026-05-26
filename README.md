@@ -25,6 +25,8 @@ uv run mobile build-src-bs
 uv run mobile build-src-person
 uv run mobile build-src-excl
 uv run mobile build-src-mobile
+uv run mobile dq-src-mobile
+uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
 uv run mobile nb-perf-metrics
 ```
 
@@ -48,6 +50,7 @@ uv run mobile nb-perf-metrics
 | `build-src-person` | Суточные срезы → `data/src/person/...` |
 | `build-src-excl` | Списки IMSI/IMEI/MSISDN из последнего full snapshot person |
 | `build-src-mobile` | CDR / SMS / GPRS / location по дням и операторам |
+| `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни периода × оба ЦОД (логи `DQ_SRC_MOBILE`) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
@@ -55,6 +58,10 @@ uv run mobile nb-perf-metrics
 Флаг **`--target-per-operator N`** — для `build-src-person` и `build-src` (по умолчанию `50000`).
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
+
+Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile` (отчётная дата; с `--dc` обязателен).
+
+Флаг **`--dc`** — для `dq-src-mobile`: `central` или `far-east` (worker). Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
@@ -65,6 +72,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-oktmo` | — | `data/stg/oktmo.parquet` | логи + `command_timing.jsonl` |
 | `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
 | `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
+| `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | — | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
@@ -80,6 +88,7 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
 - [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
+- [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
 - [`documents/src/build_src_bs.md`](documents/src/build_src_bs.md)
 - [`documents/src/build_src_person.md`](documents/src/build_src_person.md)
 - [`documents/src/build_src_excl.md`](documents/src/build_src_excl.md)
@@ -94,6 +103,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
+- `src/mobile/pipelines/dq/src/mobile.py` — `run_dq(dc, report_date, cdr_path, …)`
 - `src/mobile/pipelines/src/bs.py` — `run()`
 - `src/mobile/pipelines/src/person.py` — `run()`
 - `src/mobile/pipelines/src/excl.py` — `run()`

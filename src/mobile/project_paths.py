@@ -33,6 +33,8 @@ SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/sms/{name_operator}/100
 SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
 SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
 
+MOBILE_DATA_ROOT = PROJECT_ROOT / "data" / "src" / "mobile"
+
 
 @dataclass(frozen=True)
 class MobileDatacenterSpec:
@@ -72,6 +74,27 @@ def subject_to_mobile_datacenter(subject: str) -> str:
         if name in spec.subjects:
             return spec.id
     return DEFAULT_MOBILE_DATACENTERS[0].id
+
+
+def mobile_datacenter_root(datacenter_id: str) -> Path:
+    """Корень витрин одного ЦОД: ``data/src/mobile/{central|far-east}/``."""
+    return MOBILE_DATA_ROOT / datacenter_id
+
+
+def mobile_mart_paths(
+    datacenter_id: str,
+    *,
+    mobile_root: Path | None = None,
+) -> dict[str, Path]:
+    """Корни витрин CDR/SMS/GPRS/location под одним ЦОД."""
+    root = mobile_root if mobile_root is not None else mobile_datacenter_root(datacenter_id)
+    return {
+        "cdr": root / "operator" / "cdr",
+        "sms": root / "operator" / "sms",
+        "gprs": root / "operator" / "gprs",
+        "location": root / "operator" / "location",
+    }
+
 
 _NB = Path(__file__).resolve().parent / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"

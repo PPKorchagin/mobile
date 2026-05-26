@@ -10,7 +10,6 @@ from typing import Any
 import pandas as pd
 
 from mobile.command_timing import append_command_metrics
-from mobile.pipelines.src.schema_fields import SRC_IMEI_FIELDS, SRC_IMSI_FIELDS, SRC_MSISDN_FIELDS
 from mobile.project_paths import (
     DEFAULT_SRC_EXCL_IMEI_OUTPUT,
     DEFAULT_SRC_EXCL_IMSI_OUTPUT,
@@ -26,6 +25,10 @@ logger = logging.getLogger(__name__)
 SRC_EXCL_IMSI_TABLE = "src_imsi"
 SRC_EXCL_IMEI_TABLE = "src_imei"
 SRC_EXCL_MSISDN_TABLE = "src_msisdn"
+
+SRC_IMSI_FIELDS: list[dict[str, str]] = [{"name": "value", "type": "string"}]
+SRC_IMEI_FIELDS: list[dict[str, str]] = [{"name": "value", "type": "string"}]
+SRC_MSISDN_FIELDS: list[dict[str, str]] = [{"name": "value", "type": "string"}]
 
 
 @dataclass(frozen=True)
