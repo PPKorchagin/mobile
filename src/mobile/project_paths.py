@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -27,10 +28,50 @@ DEFAULT_SRC_EXCL_IMSI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_ims
 DEFAULT_SRC_EXCL_IMEI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_imei.parquet"
 DEFAULT_SRC_EXCL_MSISDN_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_msisdn.parquet"
 
-SRC_CDR_LAYOUT_TEMPLATE = "data/src/mobile/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}"
-SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/operator/sms/{name_operator}/10002/{YYYY}/{MM}/{DD}"
-SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
-SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
+SRC_CDR_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}"
+SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/sms/{name_operator}/10002/{YYYY}/{MM}/{DD}"
+SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
+SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
+
+
+@dataclass(frozen=True)
+class MobileDatacenterSpec:
+    """Синтетический ЦОД: каталог ``data/src/mobile/{id}/`` и привязка к субъектам РФ."""
+
+    id: str
+    title: str
+    subjects: frozenset[str]
+
+
+DEFAULT_MOBILE_DATACENTERS: tuple[MobileDatacenterSpec, ...] = (
+    MobileDatacenterSpec(
+        "central",
+        "Центральный",
+        frozenset(
+            {
+                "Тюменская область",
+                "Красноярский край",
+            }
+        ),
+    ),
+    MobileDatacenterSpec(
+        "far-east",
+        "Дальневосточный",
+        frozenset({"Республика Саха (Якутия)"}),
+    ),
+)
+
+
+def mobile_datacenter_ids() -> tuple[str, ...]:
+    return tuple(dc.id for dc in DEFAULT_MOBILE_DATACENTERS)
+
+
+def subject_to_mobile_datacenter(subject: str) -> str:
+    name = str(subject or "").strip()
+    for spec in DEFAULT_MOBILE_DATACENTERS:
+        if name in spec.subjects:
+            return spec.id
+    return DEFAULT_MOBILE_DATACENTERS[0].id
 
 _NB = Path(__file__).resolve().parent / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"

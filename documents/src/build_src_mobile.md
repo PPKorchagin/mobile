@@ -12,11 +12,11 @@
 |---|--------|-----------|
 | 1 | Загрузить BS и пулы абонентов из `src_person` по месяцам | Контекст для событий |
 | 2 | Сгенерировать события по дням и операторам (4 витрины) | DataFrame на витрину × день × оператор |
-| 3 | Записать Parquet в layout из JSON | Каталоги `data/src/mobile/operator/...` |
+| 3 | Записать Parquet в layout (`{dc}`) | `data/src/mobile/{central\|far-east}/operator/...` |
 
 **Бизнес-назначение:** синтетические мобильные события (звонки, SMS, GPRS, location) для операторов.
 
-**В scope задач:** привязка к BS и person, локальное время (опционально TZ CSV), cross-mart шум, запись parquet.
+**В scope задач:** привязка к BS и person, **два ЦОД** (`central` / `far-east`) по региону БС в момент события, локальное время (опционально TZ CSV), cross-mart шум, запись parquet.
 
 ---
 
@@ -60,18 +60,20 @@ uv run mobile build-src-mobile
 
 ## Структура генерируемых витрин
 
-| Витрина | Event | JSON | Шаблон каталога (`s3_layout`) |
-|---------|-------|------|-------------------------------|
-| CDR | `10001` | [`cdr.json`](../../src/mobile/schema/src/cdr.json) | `data/src/mobile/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}/` |
+| Витрина | Event | JSON | Шаблон каталога (`SRC_*_LAYOUT_TEMPLATE`) |
+|---------|-------|------|------------------------------------------|
+| CDR | `10001` | [`cdr.json`](../../src/mobile/schema/src/cdr.json) | `data/src/mobile/{dc}/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}/` |
 | SMS | `10002` | [`sms.json`](../../src/mobile/schema/src/sms.json) | `.../sms/.../10002/...` |
 | GPRS | `10003` | [`gprs.json`](../../src/mobile/schema/src/gprs.json) | `.../gprs/.../10003/...` |
 | location | `10004` | [`location.json`](../../src/mobile/schema/src/location.json) | `.../location/.../10004/...` |
+
+**ЦОД (`{dc}`):** `central` — Тюменская область, Красноярский край; `far-east` — Республика Саха (Якутия). Событие пишется в ЦОД по региону **БС** (`RecEntOwnerRegion` или LAC/Cell → `subject`), не по «домашнему» региону абонента. Пустой parquet в ЦОД без событий за день — ожидаемо.
 
 `{name_operator}` — `beeline`, `megafon`, `mts`, `tele2` (`OPERATOR_SLUG` в [`mobile.py`](../../src/mobile/pipelines/src/mobile.py)).
 
 | Свойство | Значение |
 |----------|----------|
-| Формат | Parquet (один файл на витрину × оператор × день) |
+| Формат | Parquet (один файл на витрину × оператор × день × ЦОД) |
 | Сжатие | `snappy` (`DEFAULT_PARQUET_COMPRESSION`) |
 | Поля | `SRC_CDR_FIELDS`, `SRC_SMS_FIELDS`, … в [`schema_fields.py`](../../src/mobile/pipelines/src/schema_fields.py); контракт — JSON в `schema/src/` |
 
@@ -146,9 +148,10 @@ uv run mobile build-src-mobile
    - **`inject_cross_mart_rows`** (in-place):
      - `n_moves = max(1, int(total_rows * 0.025))` — перенос строк между витринами с `_wrong_event_for_mart`;
      - для оставшихся строк с вероятностью `0.02` — неверный `Event`; для cdr/gprs — `pick_weighted_service` (OCC-018).
-4. **Запись дня** (по одному parquet на витрину):
-   - `finalize_cdr_day_parquet_from_rows` / `finalize_sms_*` / `finalize_gprs_*` / `finalize_location_*`;
-   - путь: `resolve_mobile_output_path(out_template, operator_slug(operator), day)` → подстановка `{name_operator}`, `{YYYY}`, `{MM}`, `{DD}`.
+4. **Запись дня** (`write_mobile_day_parquet_by_datacenter`):
+   - `partition_mobile_rows_by_datacenter` → `central` / `far-east`;
+   - `finalize_*_day_parquet_from_rows` → по parquet на витрину в каждый ЦОД;
+   - путь: `resolve_mobile_oss_output_path` → `{dc}`, `{name_operator}`, `{YYYY}`, `{MM}`, `{DD}`.
 5. Лог строк cdr/sms/gprs/location за день; `files_per_mart = n_days`.
 
 ### Шаг 3. Вспомогательная логика (используется внутри генераторов)

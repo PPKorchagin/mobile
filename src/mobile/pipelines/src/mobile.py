@@ -45,6 +45,8 @@ from mobile.project_paths import (
     SRC_PERSON_LAYOUT_TEMPLATE,
     SRC_PERSON_SUCCESS_FLAG,
     SRC_SMS_LAYOUT_TEMPLATE,
+    mobile_datacenter_ids,
+    subject_to_mobile_datacenter,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,27 +179,7 @@ def _infer_mart_from_row(row: dict[str, Any]) -> str:
 # --- I/O ---
 
 
-def resolve_mobile_output_path(
-    template: str,
-    operator: str,
-    day: date,
-    filename: str,
-) -> Path:
-    resolved = template.format(
-        name_operator=operator_slug(operator),
-        YYYY=day.strftime("%Y"),
-        MM=day.strftime("%m"),
-        DD=day.strftime("%d"),
-    )
-    path = Path(resolved)
-    if not path.is_absolute():
-        path = PROJECT_ROOT / path
-    if path.suffix.lower() == ".parquet":
-        return path
-    return path / filename
-
-
-def write_mobile_day_parquet(
+def write_mobile_day_parquet_by_datacenter(
     *,
     rows: list[dict[str, Any]],
     fields: list[dict[str, Any]],
@@ -207,27 +189,55 @@ def write_mobile_day_parquet(
     compression: str,
     filename: str,
     coerce_types: Callable[[pd.DataFrame], pd.DataFrame],
+    bs_op: pd.DataFrame | None = None,
+    region_column: str | None = "RecEntOwnerRegion",
+    lac_col: str | None = None,
+    cell_col: str | None = None,
     fallback_rows: list[dict[str, Any]] | None = None,
-    **_: Any,
 ) -> dict[str, Any]:
-    """Single parquet per vitrine/day/operator (no datacenter split)."""
-    col_names = [field["name"] for field in fields]
-    out_rows = list(rows)
-    if not out_rows and fallback_rows:
-        out_rows = list(fallback_rows)
+    """По одному parquet на витрину/день/оператора в каждый ЦОД (каталог ``{dc}``)."""
+    buckets = partition_mobile_rows_by_datacenter(
+        rows,
+        region_column=region_column,
+        bs_op=bs_op,
+        lac_col=lac_col,
+        cell_col=cell_col,
+    )
+    if not rows and fallback_rows:
+        lac_cell_subject = build_bs_lac_cell_to_subject(bs_op) if bs_op is not None else {}
+        for fb in fallback_rows:
+            dc = datacenter_id_for_mobile_row(
+                fb,
+                region_column=region_column,
+                lac_cell_subject=lac_cell_subject,
+                lac_col=lac_col,
+                cell_col=cell_col,
+            )
+            buckets.setdefault(dc, []).append(fb)
 
-    if out_rows:
-        data = coerce_types(pd.DataFrame(out_rows))
-    else:
-        data = coerce_types(pd.DataFrame(columns=col_names))
+    total_rows = 0
+    output_paths: list[str] = []
+    col_names = [f["name"] for f in fields]
 
-    output_path = resolve_mobile_output_path(out_template, operator, day, filename)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    data.to_parquet(output_path, compression=compression, index=False)
+    for dc in mobile_datacenter_ids():
+        dc_rows = buckets.get(dc, [])
+        if dc_rows:
+            data = coerce_types(pd.DataFrame(dc_rows))
+        else:
+            data = coerce_types(pd.DataFrame(columns=col_names))
+        output_path = resolve_mobile_oss_output_path(
+            out_template, operator, day, filename, dc=dc
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(output_path, compression=compression, index=False)
+        total_rows += len(dc_rows)
+        output_paths.append(str(output_path))
+
     return {
-        "row_count": int(len(out_rows)),
-        "output_path": str(output_path),
-        "output_paths": [str(output_path)],
+        "row_count": total_rows,
+        "output_path": output_paths[0] if output_paths else "",
+        "output_paths": output_paths,
+        "datacenters": list(mobile_datacenter_ids()),
     }
 
 # --- behavior / orchestration ---
@@ -2046,8 +2056,13 @@ def resolve_mobile_oss_output_path(
     *,
     dc: str | None = None,
 ) -> Path:
-    _ = dc
-    return resolve_mobile_output_path(template, operator, day, filename)
+    return resolve_dated_layout_path(
+        template,
+        day,
+        filename=filename,
+        name_operator=operator_slug(operator),
+        dc=dc or mobile_datacenter_ids()[0],
+    )
 
 
 def resolve_dated_layout_path(
@@ -2140,10 +2155,6 @@ def partition_mobile_rows_by_datacenter(
         )
         buckets.setdefault(dc, []).append(row)
     return buckets
-
-
-write_mobile_day_parquet_by_datacenter = write_mobile_day_parquet  # legacy alias
-
 
 
 def resolve_dated_layout_root(layout_template: str) -> Path:
@@ -3032,7 +3043,7 @@ def finalize_cdr_day_parquet_from_rows(
     fallback_rows = None
     if not out_rows and fallback_state is not None:
         fallback_rows = [_generate_cdr_row(bs_op, operator, mnc, fallback_state, rng, 0)]
-    return write_mobile_day_parquet(
+    return write_mobile_day_parquet_by_datacenter(
         rows=out_rows,
         fields=fields,
         operator=operator,
@@ -3548,7 +3559,7 @@ def finalize_sms_day_parquet_from_rows(
     fallback_rows = None
     if not out_rows and fallback_state is not None:
         fallback_rows = [_generate_sms_row(bs_op, mnc, fallback_state, rng, 0)]
-    return write_mobile_day_parquet(
+    return write_mobile_day_parquet_by_datacenter(
         rows=out_rows,
         fields=fields,
         operator=operator,
@@ -4032,7 +4043,7 @@ def finalize_gprs_day_parquet_from_rows(
     fallback_rows = None
     if not out_rows and fallback_state is not None:
         fallback_rows = [_generate_gprs_row(bs_op, fallback_state, mnc, rng, 0)]
-    return write_mobile_day_parquet(
+    return write_mobile_day_parquet_by_datacenter(
         rows=out_rows,
         fields=fields,
         operator=operator,
@@ -4498,7 +4509,7 @@ def finalize_location_day_parquet_from_rows(
         fallback_rows = _location_rows_from_states(
             bs_op, [fallback_state], mnc, rng, day=day, seed=seed, spatial_ctx=spatial_ctx
         )
-    return write_mobile_day_parquet(
+    return write_mobile_day_parquet_by_datacenter(
         rows=out_rows,
         fields=fields,
         operator=operator,

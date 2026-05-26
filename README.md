@@ -68,7 +68,7 @@ uv run mobile nb-perf-metrics
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | — | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
-| `build-src-mobile` | — | `data/src/bs.parquet`, person с `_SUCCESS` | `data/src/mobile/operator/...` |
+| `build-src-mobile` | — | `data/src/bs.parquet`, person с `_SUCCESS` | `data/src/mobile/{central\|far-east}/operator/...` |
 | `nb-perf-metrics` | `src/mobile/nb/perf_metrics.ipynb` | `data/qa/command_timing.jsonl` | `data/notebooks/perf_metrics.executed.ipynb` |
 
 Документация:
