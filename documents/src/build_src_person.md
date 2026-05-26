@@ -29,11 +29,13 @@
 
 ## Параметры запуска
 
-Вызов: `person.run_from_config(config_path, params)` ([`cli.py`](../../src/mobile/cli.py)).
+Вызов: `person.run(output_layout, compression, success_flag, params)` ([`cli.py`](../../src/mobile/cli.py)).
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
-| `config_path` | string (path) | Да | `src/mobile/schema/src/person.json` | `fields`, `readiness` (layout, `_SUCCESS`, compression) |
+| `output_layout` | string (template) | Да | `data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}` | Шаблон каталога среза |
+| `compression` | string | Да | `snappy` | Сжатие Parquet |
+| `success_flag` | string | Да | `_SUCCESS` | Маркер полного среза в каталоге дня |
 | `params` | `BuildSrcPersonParams` | Да | `default_person_params(...)` | Правила генерации и объём |
 
 | Переменная CLI | Тип | По умолчанию | Описание |
@@ -58,7 +60,7 @@
 | `seed` | `20250407` | Faker и выбор random full-дней |
 | `max_workers` | `default_max_workers()` | Параллелизм по **дням** (потоки) |
 
-**Константы в коде:** `ACTUALLY_TO_OPEN` (`2261-12-31 23:59:59`), `OPERATOR_PROCESS_WORKERS=4`, `PERSON_CHUNK_SIZE`.
+**Константы в коде:** `SRC_PERSON_TABLE`, `SRC_PERSON_FIELDS` (см. [`person.json`](../../src/mobile/schema/src/person.json)), `ACTUALLY_TO_OPEN`, `OPERATOR_PROCESS_WORKERS=4`, `PERSON_CHUNK_SIZE`.
 
 Локальный запуск:
 
@@ -77,7 +79,7 @@ uv run mobile build-src-person --target-per-operator 5000
 | Описание | Источник Person (принадлежность/профиль абонента) |
 | Формат хранения | Parquet по каталогам дня |
 | Layout | `data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}/person.parquet` |
-| Маркер full snapshot | `_SUCCESS` в каталоге дня (`readiness.success_flag`) |
+| Маркер full snapshot | `_SUCCESS` в каталоге дня (`SRC_PERSON_SUCCESS_FLAG`) |
 | Сжатие | `snappy` |
 
 **Ключ матчинга с ОСС:** `isdn` + `actually_from` / `actually_to`. `operator_Id` = MNC. У активных: `actually_to` = `ACTUALLY_TO_OPEN` (в Q&A — `9999-12-31`).
@@ -110,11 +112,11 @@ uv run mobile build-src-person --target-per-operator 5000
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_from_config(config_path, params)` в [`person.py`](../../src/mobile/pipelines/src/person.py).
+Точка входа: `run(output_layout, compression, success_flag, params)` в [`person.py`](../../src/mobile/pipelines/src/person.py).
 
-### Шаг 0. Конфиг и календарь
+### Шаг 0. Подготовка и календарь
 
-1. `person.json` → `fields`, `readiness.s3_layout`, `parquet_compression`, `success_flag` (по умолчанию `_SUCCESS`).
+1. `fields = SRC_PERSON_FIELDS`, layout и `success_flag` — аргументы job (`project_paths`).
 2. Список дней `tasks`: каждый день от `start_date` до `end_date` включительно; пустой список → `ValueError`.
 3. `full_snapshot_days = select_full_snapshot_days(tasks, extra_random_day_count, seed)`:
    - `_month_end_snapshot_days`: последний день каждого месяца в периоде (не позже `end_date`).

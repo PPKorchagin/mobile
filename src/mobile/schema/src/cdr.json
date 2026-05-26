@@ -1,185 +1,176 @@
 {
-  "table": "src_cdr",
-  "description": "Звонки (eventType=10001)",
-  "TODO": [],
-  "readiness": {
-    "parquet_compression": "snappy",
-    "s3_layout": "data/src/mobile/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}"
-  },
-  "notes": [
-    "Любые колонки могут быть не заполнены (nullable).",
-    "По любому из ~16 источников может встретиться любой тип событий (10001/10002/10003/10004)."
-  ],
-  "fields": [
-    {
-      "name": "Started",
-      "type": "string",
-      "comment": "Дата/время начала события в формате YYYYMMDDhhmmss."
-    },
-    {
-      "name": "Duration",
-      "type": "uint32",
-      "comment": "Длительность соединения, сек"
-    },
-    {
-      "name": "Category",
-      "type": "uint8",
-      "comment": "Категория содержимого"
-    },
-    {
-      "name": "Event",
-      "type": "uint32",
-      "comment": "Тип события"
-    },
-    {
-      "name": "Service",
-      "type": "uint32",
-      "comment": "Тип сервиса"
-    },
-    {
-      "name": "CallingNumber",
-      "type": "string",
-      "comment": "Номер вызывающего абонента, прошедший процедуру нормализации.(isdn)"
-    },
-    {
-      "name": "CallingSource",
-      "type": "string",
-      "comment": "Исходный номер вызывающего абонента, если отличается от  нормализованного. (ненормализованный)"
-    },
-    {
-      "name": "CallingRegion",
-      "type": "string",
-      "comment": "Страна/регион вызывающего абонента"
-    },
-    {
-      "name": "CalledNumber",
-      "type": "string",
-      "comment": "Номер вызываемого абонента, прошедший процедуру нормализации.(контакт,  )peer "
-    },
-    {
-      "name": "CalledSource",
-      "type": "string",
-      "comment": "Исходный номер вызываемого абонента, если отличается от нормализованного. (ненормализованный)"
-    },
-    {
-      "name": "CalledRegion",
-      "type": "string",
-      "comment": "Страна/регион вызываемого абонента"
-    },
-    {
-      "name": "DialedNumber",
-      "type": "string",
-      "comment": "Набранный номер вызываемого абонента или IP адрес PDP (для GPRS)"
-    },
-    {
-      "name": "Owner",
-      "type": "int",
-      "comment": "Направление звонка в трактовке абонент/контакт: 1 calling, 2 called"
-    },
-    {
-      "name": "IMSI",
-      "type": "string",
-      "comment": "Идентификатор мобильного абонента"
-    },
-    {
-      "name": "IMEI",
-      "type": "string",
-      "comment": "Идентификатор мобильного телефона"
-    },
-    {
-      "name": "BSStartLac",
-      "type": "uint16",
-      "comment": "LAC  абонента на начало соединения."
-    },
-    {
-      "name": "BSStartCell",
-      "type": "uint32",
-      "comment": "CELL абонента на начало соединения"
-    },
-    {
-      "name": "BSEndLac",
-      "type": "uint16",
-      "comment": "LAC абонента в конце соединения."
-    },
-    {
-      "name": "BSEndCell",
-      "type": "uint32",
-      "comment": "CELL абонента  в конце соединения"
-    },
-    {
-      "name": "RouteIn",
-      "type": "string",
-      "comment": "Входящее направление/транк/пучок"
-    },
-    {
-      "name": "RouteOut",
-      "type": "string",
-      "comment": "Исходящее направление/транк/пучок"
-    },
-    {
-      "name": "RecEntNumber",
-      "type": "string",
-      "comment": "Номер устройства, обслужившего (записавшего) вызов"
-    },
-    {
-      "name": "OwnerMCCMNC",
-      "type": "string",
-      "comment": "MCCMNC или TADIG сети обслужившей вызов: MCCMNC = код страны+код оператора, TADIG - код партнера по роумингу = = код страны+код оператора"
-    },
-    {
-      "name": "RecipientMCCMNC",
-      "type": "string",
-      "comment": "MCCMNC или TADIG сети записавшей запись"
-    },
-    {
-      "name": "RecEntOwnerRegion",
-      "type": "string",
-      "comment": "Регион устройства, записавшего вызов, или регион OwnMccMnc"
-    },
-    {
-      "name": "dateTimeOriginal",
-      "type": "string",
-      "comment": "Дата/время начала события в исходном виде: YYYYMMDDThhmmss | YYYYMMDDThhmmssZ | YYYYMMDDThhmmss[+-]HH | YYYYMMDDThhmmss[+-]HHNN"
-    },
-    {
-      "name": "Custom",
-      "type": "string",
-      "comment": "Любые произвольные данные. Как вариант - key-value поле: tag=value,"
-    },
-    {
-      "name": "RecEntType",
-      "type": "string",
-      "comment": "Тип обслужившего устройства (MSC, SMSC, ..)"
-    },
-    {
-      "name": "PartyEntType",
-      "type": "string",
-      "comment": "Тип устройства партнёра (связанного с RecEnt) (MSC, SMSC, ..)"
-    },
-    {
-      "name": "SequenceID",
-      "type": "string",
-      "comment": "Идентификатор звонка (уникален для исходной записи, может быть уникален для разных записей одного звонка, в зависимости от оборудования)"
-    },
-    {
-      "name": "CauseDiagnostic",
-      "type": "string",
-      "comment": "Причина завершения вызова / диагностика причины завершения"
-    },
-    {
-      "name": "OwnerMSRNNumber",
-      "type": "string",
-      "comment": "MSRN владельца (Owner), нормализованный"
-    },
-    {
-      "name": "OtherMSRNNumber",
-      "type": "string",
-      "comment": "MSRN контакта (Противоположного Owner), нормализованный"
-    },
-    {
-      "name": "Intermediate",
-      "type": "string",
-      "comment": "Промежуточные номера звонка. Calling, Called вначале/в конце - удаляются"
-    }
-  ]
+    "table": "src_cdr",
+    "description": "Звонки (eventType=10001)",
+    "fields": [
+        {
+            "name": "Started",
+            "type": "string",
+            "comment": "Дата/время начала события в формате YYYYMMDDhhmmss."
+        },
+        {
+            "name": "Duration",
+            "type": "uint32",
+            "comment": "Длительность соединения, сек"
+        },
+        {
+            "name": "Category",
+            "type": "uint8",
+            "comment": "Категория содержимого"
+        },
+        {
+            "name": "Event",
+            "type": "uint32",
+            "comment": "Тип события"
+        },
+        {
+            "name": "Service",
+            "type": "uint32",
+            "comment": "Тип сервиса"
+        },
+        {
+            "name": "CallingNumber",
+            "type": "string",
+            "comment": "Номер вызывающего абонента, прошедший процедуру нормализации.(isdn)"
+        },
+        {
+            "name": "CallingSource",
+            "type": "string",
+            "comment": "Исходный номер вызывающего абонента, если отличается от  нормализованного. (ненормализованный)"
+        },
+        {
+            "name": "CallingRegion",
+            "type": "string",
+            "comment": "Страна/регион вызывающего абонента"
+        },
+        {
+            "name": "CalledNumber",
+            "type": "string",
+            "comment": "Номер вызываемого абонента, прошедший процедуру нормализации.(контакт,  )peer "
+        },
+        {
+            "name": "CalledSource",
+            "type": "string",
+            "comment": "Исходный номер вызываемого абонента, если отличается от нормализованного. (ненормализованный)"
+        },
+        {
+            "name": "CalledRegion",
+            "type": "string",
+            "comment": "Страна/регион вызываемого абонента"
+        },
+        {
+            "name": "DialedNumber",
+            "type": "string",
+            "comment": "Набранный номер вызываемого абонента или IP адрес PDP (для GPRS)"
+        },
+        {
+            "name": "Owner",
+            "type": "int",
+            "comment": "Направление звонка в трактовке абонент/контакт: 1 calling, 2 called"
+        },
+        {
+            "name": "IMSI",
+            "type": "string",
+            "comment": "Идентификатор мобильного абонента"
+        },
+        {
+            "name": "IMEI",
+            "type": "string",
+            "comment": "Идентификатор мобильного телефона"
+        },
+        {
+            "name": "BSStartLac",
+            "type": "uint16",
+            "comment": "LAC  абонента на начало соединения."
+        },
+        {
+            "name": "BSStartCell",
+            "type": "uint32",
+            "comment": "CELL абонента на начало соединения"
+        },
+        {
+            "name": "BSEndLac",
+            "type": "uint16",
+            "comment": "LAC абонента в конце соединения."
+        },
+        {
+            "name": "BSEndCell",
+            "type": "uint32",
+            "comment": "CELL абонента  в конце соединения"
+        },
+        {
+            "name": "RouteIn",
+            "type": "string",
+            "comment": "Входящее направление/транк/пучок"
+        },
+        {
+            "name": "RouteOut",
+            "type": "string",
+            "comment": "Исходящее направление/транк/пучок"
+        },
+        {
+            "name": "RecEntNumber",
+            "type": "string",
+            "comment": "Номер устройства, обслужившего (записавшего) вызов"
+        },
+        {
+            "name": "OwnerMCCMNC",
+            "type": "string",
+            "comment": "MCCMNC или TADIG сети обслужившей вызов: MCCMNC = код страны+код оператора, TADIG - код партнера по роумингу = = код страны+код оператора"
+        },
+        {
+            "name": "RecipientMCCMNC",
+            "type": "string",
+            "comment": "MCCMNC или TADIG сети записавшей запись"
+        },
+        {
+            "name": "RecEntOwnerRegion",
+            "type": "string",
+            "comment": "Регион устройства, записавшего вызов, или регион OwnMccMnc"
+        },
+        {
+            "name": "dateTimeOriginal",
+            "type": "string",
+            "comment": "Дата/время начала события в исходном виде: YYYYMMDDThhmmss | YYYYMMDDThhmmssZ | YYYYMMDDThhmmss[+-]HH | YYYYMMDDThhmmss[+-]HHNN"
+        },
+        {
+            "name": "Custom",
+            "type": "string",
+            "comment": "Любые произвольные данные. Как вариант - key-value поле: tag=value,"
+        },
+        {
+            "name": "RecEntType",
+            "type": "string",
+            "comment": "Тип обслужившего устройства (MSC, SMSC, ..)"
+        },
+        {
+            "name": "PartyEntType",
+            "type": "string",
+            "comment": "Тип устройства партнёра (связанного с RecEnt) (MSC, SMSC, ..)"
+        },
+        {
+            "name": "SequenceID",
+            "type": "string",
+            "comment": "Идентификатор звонка (уникален для исходной записи, может быть уникален для разных записей одного звонка, в зависимости от оборудования)"
+        },
+        {
+            "name": "CauseDiagnostic",
+            "type": "string",
+            "comment": "Причина завершения вызова / диагностика причины завершения"
+        },
+        {
+            "name": "OwnerMSRNNumber",
+            "type": "string",
+            "comment": "MSRN владельца (Owner), нормализованный"
+        },
+        {
+            "name": "OtherMSRNNumber",
+            "type": "string",
+            "comment": "MSRN контакта (Противоположного Owner), нормализованный"
+        },
+        {
+            "name": "Intermediate",
+            "type": "string",
+            "comment": "Промежуточные номера звонка. Calling, Called вначале/в конце - удаляются"
+        }
+    ]
 }

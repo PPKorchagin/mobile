@@ -1,509 +1,498 @@
 {
-  "table": "person",
-  "description": "Источник Person (принадлежность/профиль абонента/данные биллинга)",
-  "readiness": {
-    "success_flag": "_SUCCESS",
-    "s3_layout": "data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}",
-    "selection_rule": "полный срез: конец каждого месяца в периоде + 7 случайных дней (маркер _SUCCESS); для потребления — поздний каталог с _SUCCESS"
-  },
-  "notes": [
-    "actually_to=2261-12-31 23:59:59 для активных в синтетике (ACTUALLY_TO_OPEN; макс. Parquet timestamp[ns]; в Q&A — 9999-12-31).",
-    "abonent_status: синтетика 0/1 по active_now; в поставщике семантика может отличаться — сверять с OCC/PER.",
-    "full snapshot: month-end в [start,end] + 7 случайных дней (DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS в cli_defaults.py); период генерации — DEFAULT_SRC_START_DATE / DEFAULT_SRC_END_DATE."
-  ],
-  "TODO": [],
-  "fields": [
-    {
-      "name": "identity_type",
-      "type": "int",
-      "comment": "0 pager, 1 PSTN, 2 GSM, 3 CDMA, 4 DATA_NETWORK, 5 VoIP"
-    },
-    {
-      "name": "operator_Id",
-      "type": "long",
-      "comment": "Идентификатор филиала/ абонента/ оператора"
-    },
-    {
-      "name": "network_pager_id",
-      "type": "string",
-      "comment": "Идентификатор сети персонального радиовызова (pager)"
-    },
-    {
-      "name": "isdn_world_pstn",
-      "type": "long",
-      "comment": "Телефонный номер в международном формате (PSTN)"
-    },
-    {
-      "name": "additional_isdn_pstn",
-      "type": "long",
-      "comment": "Дополнительный внутренний номер (PSTN)"
-    },
-    {
-      "name": "isdn",
-      "type": "long",
-      "comment": "Телефонный номер в международном формате (GSM)"
-    },
-    {
-      "name": "imsi",
-      "type": "long",
-      "comment": "Идентификатор мобильного абонента (GSM)"
-    },
-    {
-      "name": "imei",
-      "type": "long",
-      "comment": "Идентификатор мобильной станции (GSM)"
-    },
-    {
-      "name": "iccid",
-      "type": "string",
-      "comment": "Идентификатор SIM-карты абонента (GSM)"
-    },
-    {
-      "name": "isdn_cdma",
-      "type": "long",
-      "comment": "Телефонный номер в международном формате (CDMA)"
-    },
-    {
-      "name": "cdma_imsi_a",
-      "type": "long",
-      "comment": "Идентификатор мобильного абонента (CDMA)"
-    },
-    {
-      "name": "cdma_Imei_a",
-      "type": "long",
-      "comment": "Идентификатор мобильной станции (CDMA)"
-    },
-    {
-      "name": "cdma_imsi_b",
-      "type": "long",
-      "comment": "Идентификатор мобильного абонента (CDMA)"
-    },
-    {
-      "name": "icc_cdma",
-      "type": "long",
-      "comment": "Идентификатор SIM-карты абонента (CDMA)"
-    },
-    {
-      "name": "hardware_type",
-      "type": "int",
-      "comment": "Идентификатор пользовательского оборудования (DATA_NETWORK): 0 MAC, 1 ATM (DATA_NETWORK)"
-    },
-    {
-      "name": "mac",
-      "type": "string",
-      "comment": "MAC-адрес оконечного сетевого Оборудования (DATA_NETWORK / MAC)"
-    },
-    {
-      "name": "atm_vpi_network",
-      "type": "string",
-      "comment": "Номер виртуального пути сети АТМ (VPI) (DATA_NETWORK / ATM)"
-    },
-    {
-      "name": "atm_vci_network",
-      "type": "string",
-      "comment": "Номер виртуального канала сети АТМ (VCI) (DATA_NETWORK / ATM)"
-    },
-    {
-      "name": "login",
-      "type": "string",
-      "comment": "Имя пользователя – login (DATA_NETWORK)"
-    },
-    {
-      "name": "ip_type",
-      "type": "int",
-      "comment": "Тип IP-адреса (DATA_NETWORK): 0 IPv4, 1 IPv6 (DATA_NETWORK)"
-    },
-    {
-      "name": "ip4",
-      "type": "string",
-      "comment": "IPv4-адрес (DATA_NETWORK / IPv4)"
-    },
-    {
-      "name": "ip6",
-      "type": "string",
-      "comment": "IPv6-адрес (DATA_NETWORK / IPv6)"
-    },
-    {
-      "name": "email",
-      "type": "string",
-      "comment": "Адрес электронной почты (DATA_NETWORK)"
-    },
-    {
-      "name": "pin",
-      "type": "string",
-      "comment": "PIN (DATA_NETWORK)"
-    },
-    {
-      "name": "isdn_date_network",
-      "type": "long",
-      "comment": "Номер телефона (DATA_NETWORK)"
-    },
-    {
-      "name": "user_domain",
-      "type": "string",
-      "comment": "Пользовательский домен (DATA_NETWORK)"
-    },
-    {
-      "name": "reserved",
-      "type": "string",
-      "comment": "Резерв (DATA_NETWORK)"
-    },
-    {
-      "name": "ip_mask_type",
-      "type": "int",
-      "comment": "Тип IP-маски (DATA_NETWORK) (0 - IPv4, 1 - IPv6)"
-    },
-    {
-      "name": "ip4_mask",
-      "type": "string",
-      "comment": "IPv4-маска (DATA_NETWORK / IPv4)"
-    },
-    {
-      "name": "ip6_mask",
-      "type": "string",
-      "comment": "IPv6-маска (DATA_NETWORK / IPv6)"
-    },
-    {
-      "name": "ip_type_voip",
-      "type": "int",
-      "comment": "Тип IP-адреса (0 - IPv4, 1 - IPv6) (VoIP)"
-    },
-    {
-      "name": "ip4_voip",
-      "type": "string",
-      "comment": "IPv4-адрес (VoIP)"
-    },
-    {
-      "name": "ip6_voip",
-      "type": "string",
-      "comment": "IPv6-адрес (VoIP)"
-    },
-    {
-      "name": "voip_starter_name",
-      "type": "string",
-      "comment": "Общедоступное имя инициатора связи (VoIP)"
-    },
-    {
-      "name": "voip_calling_isdn",
-      "type": "long",
-      "comment": "Номер вызывающего абонента (VoIP)"
-    },
-    {
-      "name": "contract_date",
-      "type": "date",
-      "comment": "Дата и время заключения договора"
-    },
-    {
-      "name": "contract_number",
-      "type": "string",
-      "comment": "Номер договора"
-    },
-    {
-      "name": "actually_from",
-      "type": "timestamp",
-      "comment": "Дата и время начала интервала времени, на котором актуальна информация"
-    },
-    {
-      "name": "actually_to",
-      "type": "timestamp",
-      "comment": "Дата и время окончания интервала времени, на котором актуальна информация"
-    },
-    {
-      "name": "client_type",
-      "type": "int",
-      "comment": "Тип абонента (клиента оператора связи) (0 – физ. лицо, 1 – юр. лицо)"
-    },
-    {
-      "name": "struct_fio_type",
-      "type": "int",
-      "comment": "Структурированное/неструктурированное ФИО абонента (0 – структурированная, 1 – неструктурированная) (физ. лицо)"
-    },
-    {
-      "name": "first_name",
-      "type": "string",
-      "comment": "Имя (физ. лицо)"
-    },
-    {
-      "name": "second_name",
-      "type": "string",
-      "comment": "Отчество (физ. лицо)"
-    },
-    {
-      "name": "last_name",
-      "type": "string",
-      "comment": "Фамилия (физ. лицо)"
-    },
-    {
-      "name": "abonent",
-      "type": "string",
-      "comment": "Неструктурированное ФИО (физ. лицо)"
-    },
-    {
-      "name": "birth_day",
-      "type": "date",
-      "comment": "Дата рождения (физ. лицо)"
-    },
-    {
-      "name": "struct_dul_type",
-      "type": "int",
-      "comment": "Структурированная/неструктурированная информация о паспортных данных абонента (0 – структурированная, 1 – неструктурированная) (физ. лицо)"
-    },
-    {
-      "name": "dul_serial",
-      "type": "string",
-      "comment": "Серия удостоверения личности (физ. лицо)"
-    },
-    {
-      "name": "doc_number",
-      "type": "string",
-      "comment": "Номер удостоверения личности (физ. лицо)"
-    },
-    {
-      "name": "document",
-      "type": "string",
-      "comment": "ДУЛ"
-    },
-    {
-      "name": "dul_department",
-      "type": "string",
-      "comment": "Когда и кем выдано (физ. лицо)"
-    },
-    {
-      "name": "unstruct_dul",
-      "type": "string",
-      "comment": "Неструктурированные паспортные данные (физ. лицо)"
-    },
-    {
-      "name": "doc_type",
-      "type": "int",
-      "comment": "Идентификатор типа документа, удостоверяющего личность (физ. лицо)"
-    },
-    {
-      "name": "client_bank",
-      "type": "string",
-      "comment": "Банк абонента (используемый при расчетах с оператором связи) (физ. лицо)"
-    },
-    {
-      "name": "client_bank_account",
-      "type": "string",
-      "comment": "Счет абонента в банке (используемый при расчетах с оператором связи) (физ. лицо)"
-    },
-    {
-      "name": "org_name",
-      "type": "string",
-      "comment": "Полное наименование организации (юр. лицо)"
-    },
-    {
-      "name": "inn",
-      "type": "long",
-      "comment": "ИНН (юр. лицо)"
-    },
-    {
-      "name": "contact",
-      "type": "string",
-      "comment": "Контактное лицо (юр. лицо)"
-    },
-    {
-      "name": "contact_info",
-      "type": "string",
-      "comment": "Контактные телефоны, факс (юр. лицо)"
-    },
-    {
-      "name": "inner_users_list",
-      "type": "string",
-      "comment": "Список внутренних пользователей (юр. лицо)"
-    },
-    {
-      "name": "org_bank",
-      "type": "string",
-      "comment": "Банк организации-абонента (используемый при расчетах с оператором связи) (юр. лицо)"
-    },
-    {
-      "name": "org_bank_account",
-      "type": "string",
-      "comment": "Счет организации-абонента в банке (используемый при расчетах с оператором связи) (юр. лицо)"
-    },
-    {
-      "name": "abonent_status",
-      "type": "int",
-      "comment": "Текущий статус абонента (подключен/отключен): Значения для Ворожена: 0 – активный, 1 – не активный"
-    },
-    {
-      "name": "main_service_start_ts",
-      "type": "timestamp",
-      "comment": "Дата и время подключения основной услуги (если подключение производилось на интервале актуальности)"
-    },
-    {
-      "name": "main_service_end_ts",
-      "type": "timestamp",
-      "comment": "Дата и время отключения основной услуги (если отключение производилось на интервале актуальности)"
-    },
-    {
-      "name": "abonent_last_location",
-      "type": "int",
-      "comment": "Последнее зафиксированное местоположение для мобильных абонентов: Значения для Ворожена: 0 – MOBILE, 1 – WIRELESS, 2 – GEO, 3 – IP"
-    },
-    {
-      "name": "lac",
-      "type": "long",
-      "comment": "Код зоны (LAC) (MOBILE)"
-    },
-    {
-      "name": "cell",
-      "type": "long",
-      "comment": "Идентификатор базовой станции (CELL) (MOBILE)"
-    },
-    {
-      "name": "timing_advance",
-      "type": "string",
-      "comment": "Timing Advance (временная компенсация) (MOBILE)"
-    },
-    {
-      "name": "network_location_id",
-      "type": "string",
-      "comment": "Местоположение абонента мобильной сети передачи данных (идентификатор сектора) (WIRELESS)"
-    },
-    {
-      "name": "network_mac",
-      "type": "string",
-      "comment": "Местоположение абонента мобильной сети передачи данных (MAC-адрес сетевого оборудования сектора) (WIRELESS)"
-    },
-    {
-      "name": "latitude",
-      "type": "double",
-      "comment": "Широта(GEO)"
-    },
-    {
-      "name": "longitude",
-      "type": "double",
-      "comment": "Долгота(GEO)"
-    },
-    {
-      "name": "coordinates",
-      "type": "string",
-      "comment": "Координаты"
-    },
-    {
-      "name": "geo_json",
-      "type": "string",
-      "comment": "Координаты в geoJson формате"
-    },
-    {
-      "name": "geo_projection_type",
-      "type": "int",
-      "comment": "Тип проекции координат(GEO): Значения для Ворожена: 0 – wgs84, 1 – utm, 2 – sgs85"
-    },
-    {
-      "name": "ip_location_type",
-      "type": "string",
-      "comment": "Местоположение по IP-адресу (IP) (0 - IPv4, 1 - IPv6)"
-    },
-    {
-      "name": "ip4_location",
-      "type": "string",
-      "comment": "Местоположение по IPv4-адресу (IP / IPv4)"
-    },
-    {
-      "name": "ip6_location",
-      "type": "string",
-      "comment": "Местоположение по IPv6-адресу (IP / IPv6)"
-    },
-    {
-      "name": "ip_port_location",
-      "type": "string",
-      "comment": "Местоположение по IP порту"
-    },
-    {
-      "name": "object_conn_desc",
-      "type": "string",
-      "comment": "Описание объекта связи"
-    },
-    {
-      "name": "cross_desc",
-      "type": "string",
-      "comment": "Описание кросса"
-    },
-    {
-      "name": "block_desc",
-      "type": "string",
-      "comment": "Описание блока"
-    },
-    {
-      "name": "pair_desc",
-      "type": "string",
-      "comment": "Описание пары"
-    },
-    {
-      "name": "reserve",
-      "type": "string",
-      "comment": "Резерв"
-    },
-    {
-      "name": "network_conn_type",
-      "type": "int",
-      "comment": "Тип сети связи (стандарт): Значения для Ворожена: 0 – неконкретизированный стандарт, 1 – сеть мобильной связи стандарта GSM, 2 – сеть мобильной связи стандарта CDMA, 3 – ТФоП-сеть, 4 – стационарные сети передачи данных, 5 – ТМС-службы, 6 – мобильная сеть передачи данных, 7 – беспроводная сеть передачи данных стандарта WiFi, 8 – беспроводная сеть передачи данных стандарта WiMAX, 9 – персональный радиовызов, 10 – сеть передачи голосовой информации посредством сети передачи данных"
-    },
-    {
-      "name": "address_registration",
-      "type": "string",
-      "comment": "Адреса абонента типа «registered» в формате: «address_1;address_2;...;address_N»"
-    },
-    {
-      "name": "abonent_postal_address",
-      "type": "string",
-      "comment": "Адреса абонента типа «postal» в формате предыдущего поля"
-    },
-    {
-      "name": "address_invoice",
-      "type": "string",
-      "comment": "Адреса абонента типа «invoice» в формате предыдущего поля"
-    },
-    {
-      "name": "address_installation",
-      "type": "string",
-      "comment": "Адреса абонента типа «device-location» в формате предыдущего поля"
-    },
-    {
-      "name": "abonent_reserved_address",
-      "type": "string",
-      "comment": "Адреса абонента типа «reserved» в формате предыдущего поля"
-    },
-    {
-      "name": "service_list",
-      "type": "string",
-      "comment": "Список подключенных сервисов абонента в формате: «service_1\\x11service_2\\x11...\\x11service_N», где service_N имеет формат: «service_id;time_range», где time_range это время начала и конца в формате: «yyMMddHHmmss»"
-    },
-    {
-      "name": "COL84",
-      "type": "string"
-    },
-    {
-      "name": "COL85",
-      "type": "string"
-    },
-    {
-      "name": "COL86",
-      "type": "string"
-    },
-    {
-      "name": "last_change_date",
-      "type": "date",
-      "comment": "Дата изменения"
-    },
-    {
-      "name": "end_contract_date",
-      "type": "date",
-      "comment": "Дата окончания контракта"
-    },
-    {
-      "name": "tariff",
-      "type": "string",
-      "comment": "Тариф"
-    },
-    {
-      "name": "dealer",
-      "type": "string",
-      "comment": "Дилер"
-    }
-  ]
+    "table": "person",
+    "description": "Источник Person (принадлежность/профиль абонента/данные биллинга)",
+    "fields": [
+        {
+            "name": "identity_type",
+            "type": "int",
+            "comment": "0 pager, 1 PSTN, 2 GSM, 3 CDMA, 4 DATA_NETWORK, 5 VoIP"
+        },
+        {
+            "name": "operator_Id",
+            "type": "long",
+            "comment": "Идентификатор филиала/ абонента/ оператора"
+        },
+        {
+            "name": "network_pager_id",
+            "type": "string",
+            "comment": "Идентификатор сети персонального радиовызова (pager)"
+        },
+        {
+            "name": "isdn_world_pstn",
+            "type": "long",
+            "comment": "Телефонный номер в международном формате (PSTN)"
+        },
+        {
+            "name": "additional_isdn_pstn",
+            "type": "long",
+            "comment": "Дополнительный внутренний номер (PSTN)"
+        },
+        {
+            "name": "isdn",
+            "type": "long",
+            "comment": "Телефонный номер в международном формате (GSM)"
+        },
+        {
+            "name": "imsi",
+            "type": "long",
+            "comment": "Идентификатор мобильного абонента (GSM)"
+        },
+        {
+            "name": "imei",
+            "type": "long",
+            "comment": "Идентификатор мобильной станции (GSM)"
+        },
+        {
+            "name": "iccid",
+            "type": "string",
+            "comment": "Идентификатор SIM-карты абонента (GSM)"
+        },
+        {
+            "name": "isdn_cdma",
+            "type": "long",
+            "comment": "Телефонный номер в международном формате (CDMA)"
+        },
+        {
+            "name": "cdma_imsi_a",
+            "type": "long",
+            "comment": "Идентификатор мобильного абонента (CDMA)"
+        },
+        {
+            "name": "cdma_Imei_a",
+            "type": "long",
+            "comment": "Идентификатор мобильной станции (CDMA)"
+        },
+        {
+            "name": "cdma_imsi_b",
+            "type": "long",
+            "comment": "Идентификатор мобильного абонента (CDMA)"
+        },
+        {
+            "name": "icc_cdma",
+            "type": "long",
+            "comment": "Идентификатор SIM-карты абонента (CDMA)"
+        },
+        {
+            "name": "hardware_type",
+            "type": "int",
+            "comment": "Идентификатор пользовательского оборудования (DATA_NETWORK): 0 MAC, 1 ATM (DATA_NETWORK)"
+        },
+        {
+            "name": "mac",
+            "type": "string",
+            "comment": "MAC-адрес оконечного сетевого Оборудования (DATA_NETWORK / MAC)"
+        },
+        {
+            "name": "atm_vpi_network",
+            "type": "string",
+            "comment": "Номер виртуального пути сети АТМ (VPI) (DATA_NETWORK / ATM)"
+        },
+        {
+            "name": "atm_vci_network",
+            "type": "string",
+            "comment": "Номер виртуального канала сети АТМ (VCI) (DATA_NETWORK / ATM)"
+        },
+        {
+            "name": "login",
+            "type": "string",
+            "comment": "Имя пользователя – login (DATA_NETWORK)"
+        },
+        {
+            "name": "ip_type",
+            "type": "int",
+            "comment": "Тип IP-адреса (DATA_NETWORK): 0 IPv4, 1 IPv6 (DATA_NETWORK)"
+        },
+        {
+            "name": "ip4",
+            "type": "string",
+            "comment": "IPv4-адрес (DATA_NETWORK / IPv4)"
+        },
+        {
+            "name": "ip6",
+            "type": "string",
+            "comment": "IPv6-адрес (DATA_NETWORK / IPv6)"
+        },
+        {
+            "name": "email",
+            "type": "string",
+            "comment": "Адрес электронной почты (DATA_NETWORK)"
+        },
+        {
+            "name": "pin",
+            "type": "string",
+            "comment": "PIN (DATA_NETWORK)"
+        },
+        {
+            "name": "isdn_date_network",
+            "type": "long",
+            "comment": "Номер телефона (DATA_NETWORK)"
+        },
+        {
+            "name": "user_domain",
+            "type": "string",
+            "comment": "Пользовательский домен (DATA_NETWORK)"
+        },
+        {
+            "name": "reserved",
+            "type": "string",
+            "comment": "Резерв (DATA_NETWORK)"
+        },
+        {
+            "name": "ip_mask_type",
+            "type": "int",
+            "comment": "Тип IP-маски (DATA_NETWORK) (0 - IPv4, 1 - IPv6)"
+        },
+        {
+            "name": "ip4_mask",
+            "type": "string",
+            "comment": "IPv4-маска (DATA_NETWORK / IPv4)"
+        },
+        {
+            "name": "ip6_mask",
+            "type": "string",
+            "comment": "IPv6-маска (DATA_NETWORK / IPv6)"
+        },
+        {
+            "name": "ip_type_voip",
+            "type": "int",
+            "comment": "Тип IP-адреса (0 - IPv4, 1 - IPv6) (VoIP)"
+        },
+        {
+            "name": "ip4_voip",
+            "type": "string",
+            "comment": "IPv4-адрес (VoIP)"
+        },
+        {
+            "name": "ip6_voip",
+            "type": "string",
+            "comment": "IPv6-адрес (VoIP)"
+        },
+        {
+            "name": "voip_starter_name",
+            "type": "string",
+            "comment": "Общедоступное имя инициатора связи (VoIP)"
+        },
+        {
+            "name": "voip_calling_isdn",
+            "type": "long",
+            "comment": "Номер вызывающего абонента (VoIP)"
+        },
+        {
+            "name": "contract_date",
+            "type": "date",
+            "comment": "Дата и время заключения договора"
+        },
+        {
+            "name": "contract_number",
+            "type": "string",
+            "comment": "Номер договора"
+        },
+        {
+            "name": "actually_from",
+            "type": "timestamp",
+            "comment": "Дата и время начала интервала времени, на котором актуальна информация"
+        },
+        {
+            "name": "actually_to",
+            "type": "timestamp",
+            "comment": "Дата и время окончания интервала времени, на котором актуальна информация"
+        },
+        {
+            "name": "client_type",
+            "type": "int",
+            "comment": "Тип абонента (клиента оператора связи) (0 – физ. лицо, 1 – юр. лицо)"
+        },
+        {
+            "name": "struct_fio_type",
+            "type": "int",
+            "comment": "Структурированное/неструктурированное ФИО абонента (0 – структурированная, 1 – неструктурированная) (физ. лицо)"
+        },
+        {
+            "name": "first_name",
+            "type": "string",
+            "comment": "Имя (физ. лицо)"
+        },
+        {
+            "name": "second_name",
+            "type": "string",
+            "comment": "Отчество (физ. лицо)"
+        },
+        {
+            "name": "last_name",
+            "type": "string",
+            "comment": "Фамилия (физ. лицо)"
+        },
+        {
+            "name": "abonent",
+            "type": "string",
+            "comment": "Неструктурированное ФИО (физ. лицо)"
+        },
+        {
+            "name": "birth_day",
+            "type": "date",
+            "comment": "Дата рождения (физ. лицо)"
+        },
+        {
+            "name": "struct_dul_type",
+            "type": "int",
+            "comment": "Структурированная/неструктурированная информация о паспортных данных абонента (0 – структурированная, 1 – неструктурированная) (физ. лицо)"
+        },
+        {
+            "name": "dul_serial",
+            "type": "string",
+            "comment": "Серия удостоверения личности (физ. лицо)"
+        },
+        {
+            "name": "doc_number",
+            "type": "string",
+            "comment": "Номер удостоверения личности (физ. лицо)"
+        },
+        {
+            "name": "document",
+            "type": "string",
+            "comment": "ДУЛ"
+        },
+        {
+            "name": "dul_department",
+            "type": "string",
+            "comment": "Когда и кем выдано (физ. лицо)"
+        },
+        {
+            "name": "unstruct_dul",
+            "type": "string",
+            "comment": "Неструктурированные паспортные данные (физ. лицо)"
+        },
+        {
+            "name": "doc_type",
+            "type": "int",
+            "comment": "Идентификатор типа документа, удостоверяющего личность (физ. лицо)"
+        },
+        {
+            "name": "client_bank",
+            "type": "string",
+            "comment": "Банк абонента (используемый при расчетах с оператором связи) (физ. лицо)"
+        },
+        {
+            "name": "client_bank_account",
+            "type": "string",
+            "comment": "Счет абонента в банке (используемый при расчетах с оператором связи) (физ. лицо)"
+        },
+        {
+            "name": "org_name",
+            "type": "string",
+            "comment": "Полное наименование организации (юр. лицо)"
+        },
+        {
+            "name": "inn",
+            "type": "long",
+            "comment": "ИНН (юр. лицо)"
+        },
+        {
+            "name": "contact",
+            "type": "string",
+            "comment": "Контактное лицо (юр. лицо)"
+        },
+        {
+            "name": "contact_info",
+            "type": "string",
+            "comment": "Контактные телефоны, факс (юр. лицо)"
+        },
+        {
+            "name": "inner_users_list",
+            "type": "string",
+            "comment": "Список внутренних пользователей (юр. лицо)"
+        },
+        {
+            "name": "org_bank",
+            "type": "string",
+            "comment": "Банк организации-абонента (используемый при расчетах с оператором связи) (юр. лицо)"
+        },
+        {
+            "name": "org_bank_account",
+            "type": "string",
+            "comment": "Счет организации-абонента в банке (используемый при расчетах с оператором связи) (юр. лицо)"
+        },
+        {
+            "name": "abonent_status",
+            "type": "int",
+            "comment": "Текущий статус абонента (подключен/отключен): Значения для Ворожена: 0 – активный, 1 – не активный"
+        },
+        {
+            "name": "main_service_start_ts",
+            "type": "timestamp",
+            "comment": "Дата и время подключения основной услуги (если подключение производилось на интервале актуальности)"
+        },
+        {
+            "name": "main_service_end_ts",
+            "type": "timestamp",
+            "comment": "Дата и время отключения основной услуги (если отключение производилось на интервале актуальности)"
+        },
+        {
+            "name": "abonent_last_location",
+            "type": "int",
+            "comment": "Последнее зафиксированное местоположение для мобильных абонентов: Значения для Ворожена: 0 – MOBILE, 1 – WIRELESS, 2 – GEO, 3 – IP"
+        },
+        {
+            "name": "lac",
+            "type": "long",
+            "comment": "Код зоны (LAC) (MOBILE)"
+        },
+        {
+            "name": "cell",
+            "type": "long",
+            "comment": "Идентификатор базовой станции (CELL) (MOBILE)"
+        },
+        {
+            "name": "timing_advance",
+            "type": "string",
+            "comment": "Timing Advance (временная компенсация) (MOBILE)"
+        },
+        {
+            "name": "network_location_id",
+            "type": "string",
+            "comment": "Местоположение абонента мобильной сети передачи данных (идентификатор сектора) (WIRELESS)"
+        },
+        {
+            "name": "network_mac",
+            "type": "string",
+            "comment": "Местоположение абонента мобильной сети передачи данных (MAC-адрес сетевого оборудования сектора) (WIRELESS)"
+        },
+        {
+            "name": "latitude",
+            "type": "double",
+            "comment": "Широта(GEO)"
+        },
+        {
+            "name": "longitude",
+            "type": "double",
+            "comment": "Долгота(GEO)"
+        },
+        {
+            "name": "coordinates",
+            "type": "string",
+            "comment": "Координаты"
+        },
+        {
+            "name": "geo_json",
+            "type": "string",
+            "comment": "Координаты в geoJson формате"
+        },
+        {
+            "name": "geo_projection_type",
+            "type": "int",
+            "comment": "Тип проекции координат(GEO): Значения для Ворожена: 0 – wgs84, 1 – utm, 2 – sgs85"
+        },
+        {
+            "name": "ip_location_type",
+            "type": "string",
+            "comment": "Местоположение по IP-адресу (IP) (0 - IPv4, 1 - IPv6)"
+        },
+        {
+            "name": "ip4_location",
+            "type": "string",
+            "comment": "Местоположение по IPv4-адресу (IP / IPv4)"
+        },
+        {
+            "name": "ip6_location",
+            "type": "string",
+            "comment": "Местоположение по IPv6-адресу (IP / IPv6)"
+        },
+        {
+            "name": "ip_port_location",
+            "type": "string",
+            "comment": "Местоположение по IP порту"
+        },
+        {
+            "name": "object_conn_desc",
+            "type": "string",
+            "comment": "Описание объекта связи"
+        },
+        {
+            "name": "cross_desc",
+            "type": "string",
+            "comment": "Описание кросса"
+        },
+        {
+            "name": "block_desc",
+            "type": "string",
+            "comment": "Описание блока"
+        },
+        {
+            "name": "pair_desc",
+            "type": "string",
+            "comment": "Описание пары"
+        },
+        {
+            "name": "reserve",
+            "type": "string",
+            "comment": "Резерв"
+        },
+        {
+            "name": "network_conn_type",
+            "type": "int",
+            "comment": "Тип сети связи (стандарт): Значения для Ворожена: 0 – неконкретизированный стандарт, 1 – сеть мобильной связи стандарта GSM, 2 – сеть мобильной связи стандарта CDMA, 3 – ТФоП-сеть, 4 – стационарные сети передачи данных, 5 – ТМС-службы, 6 – мобильная сеть передачи данных, 7 – беспроводная сеть передачи данных стандарта WiFi, 8 – беспроводная сеть передачи данных стандарта WiMAX, 9 – персональный радиовызов, 10 – сеть передачи голосовой информации посредством сети передачи данных"
+        },
+        {
+            "name": "address_registration",
+            "type": "string",
+            "comment": "Адреса абонента типа «registered» в формате: «address_1;address_2;...;address_N»"
+        },
+        {
+            "name": "abonent_postal_address",
+            "type": "string",
+            "comment": "Адреса абонента типа «postal» в формате предыдущего поля"
+        },
+        {
+            "name": "address_invoice",
+            "type": "string",
+            "comment": "Адреса абонента типа «invoice» в формате предыдущего поля"
+        },
+        {
+            "name": "address_installation",
+            "type": "string",
+            "comment": "Адреса абонента типа «device-location» в формате предыдущего поля"
+        },
+        {
+            "name": "abonent_reserved_address",
+            "type": "string",
+            "comment": "Адреса абонента типа «reserved» в формате предыдущего поля"
+        },
+        {
+            "name": "service_list",
+            "type": "string",
+            "comment": "Список подключенных сервисов абонента в формате: «service_1\\x11service_2\\x11...\\x11service_N», где service_N имеет формат: «service_id;time_range», где time_range это время начала и конца в формате: «yyMMddHHmmss»"
+        },
+        {
+            "name": "COL84",
+            "type": "string"
+        },
+        {
+            "name": "COL85",
+            "type": "string"
+        },
+        {
+            "name": "COL86",
+            "type": "string"
+        },
+        {
+            "name": "last_change_date",
+            "type": "date",
+            "comment": "Дата изменения"
+        },
+        {
+            "name": "end_contract_date",
+            "type": "date",
+            "comment": "Дата окончания контракта"
+        },
+        {
+            "name": "tariff",
+            "type": "string",
+            "comment": "Тариф"
+        },
+        {
+            "name": "dealer",
+            "type": "string",
+            "comment": "Дилер"
+        }
+    ]
 }

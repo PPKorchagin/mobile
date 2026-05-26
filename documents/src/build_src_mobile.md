@@ -29,13 +29,12 @@
 
 ## Параметры запуска
 
-Вызов: `run_mobile_all(bs_parquet_path, person_config_path, cdr/sms/gprs/location configs, params)` ([`cli.py`](../../src/mobile/cli.py)).
+Вызов: `run_mobile_all(bs_parquet_path, params, compression)` ([`cli.py`](../../src/mobile/cli.py)).
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
 | `bs_parquet_path` | string (path) | Да | `data/src/bs.parquet` | Справочник БС |
-| `person_config_path` | string (path) | Да | `src/mobile/schema/src/person.json` | Layout person для пула |
-| `cdr_config_path` … `location_config_path` | string (path) | Да | `src/mobile/schema/src/{cdr,sms,gprs,location}.json` | Схемы и layout витрин |
+| `compression` | string | Да | `snappy` | Сжатие Parquet |
 | `params` | `BuildSrcMobileParams` | Да | `default_mobile_params()` | Период, операторы, seed |
 
 Флагов CLI **нет**.
@@ -73,8 +72,8 @@ uv run mobile build-src-mobile
 | Свойство | Значение |
 |----------|----------|
 | Формат | Parquet (один файл на витрину × оператор × день) |
-| Сжатие | `snappy` |
-| Поля | Контракт в соответствующем JSON → `fields` (десятки колонок на витрину) |
+| Сжатие | `snappy` (`DEFAULT_PARQUET_COMPRESSION`) |
+| Поля | `SRC_CDR_FIELDS`, `SRC_SMS_FIELDS`, … в [`schema_fields.py`](../../src/mobile/pipelines/src/schema_fields.py); контракт — JSON в `schema/src/` |
 
 Примечания из JSON: колонки nullable; между витринами возможны перекрёстные типы событий (см. `notes` в схемах).
 
@@ -105,7 +104,7 @@ uv run mobile build-src-mobile
 
 ### Шаг 0. Предзагрузка (главный процесс)
 
-1. `person_config_path` обязателен; иначе `ValueError`.
+1. Пул person: `build_person_pool_by_operator_month_slices` с layout из `project_paths`.
 2. `task_dates = calendar_dates_inclusive(start_date, end_date)`.
 3. **`build_person_pool_by_operator_month_slices`:**
    - `load_src_person_latest_success_by_month` — для каждого `(year, month)` в периоде последний каталог с `_SUCCESS`, чтение `person.parquet` с колонками `PERSON_SNAPSHOT_COLUMNS`;
@@ -171,7 +170,7 @@ uv run mobile build-src-mobile
 | Ошибка | Причина |
 |--------|---------|
 | `FileNotFoundError` | Нет `bs.parquet` или person parquet за месяц |
-| `ValueError` | Нет `person_config_path`; пустой период; нет `subject` при `region_subjects` |
+| `ValueError` | Пустой период; нет `subject` при `region_subjects` |
 | pandas / pyarrow | Запись parquet |
 
 ---

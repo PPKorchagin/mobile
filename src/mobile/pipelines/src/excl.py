@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import random
 import time
@@ -11,10 +10,22 @@ from typing import Any
 import pandas as pd
 
 from mobile.command_timing import append_command_metrics
-from mobile.project_paths import PROJECT_ROOT
+from mobile.pipelines.src.schema_fields import SRC_IMEI_FIELDS, SRC_IMSI_FIELDS, SRC_MSISDN_FIELDS
+from mobile.project_paths import (
+    DEFAULT_SRC_EXCL_IMEI_OUTPUT,
+    DEFAULT_SRC_EXCL_IMSI_OUTPUT,
+    DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
+    PROJECT_ROOT,
+    SRC_PERSON_LAYOUT_TEMPLATE,
+    SRC_PERSON_SUCCESS_FLAG,
+)
 
 
 logger = logging.getLogger(__name__)
+
+SRC_EXCL_IMSI_TABLE = "src_imsi"
+SRC_EXCL_IMEI_TABLE = "src_imei"
+SRC_EXCL_MSISDN_TABLE = "src_msisdn"
 
 
 @dataclass(frozen=True)
@@ -31,20 +42,19 @@ class BuildSrcExclParams:
         return min(target, int(eligible_triple_count))
 
 
-def run_from_config(
-    src_person_config_path: str | Path,
-    src_imsi_config_path: str | Path,
-    src_imei_config_path: str | Path,
-    src_msisdn_config_path: str | Path,
+def run(
+    *,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
+    imsi_output_path: str | Path = DEFAULT_SRC_EXCL_IMSI_OUTPUT,
+    imei_output_path: str | Path = DEFAULT_SRC_EXCL_IMEI_OUTPUT,
+    msisdn_output_path: str | Path = DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
+    compression: str,
     params: BuildSrcExclParams,
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    src_person_cfg = _read_json(src_person_config_path)
-    imsi_cfg = _read_json(src_imsi_config_path)
-    imei_cfg = _read_json(src_imei_config_path)
-    msisdn_cfg = _read_json(src_msisdn_config_path)
 
-    src_day_dir = _resolve_latest_success_day_dir(src_person_cfg)
+    src_day_dir = _resolve_latest_success_day_dir(person_layout_template, person_success_flag)
     if src_day_dir is None:
         raise FileNotFoundError("No src_person day directory with _SUCCESS found")
 
@@ -70,9 +80,24 @@ def run_from_config(
         "sample_size": int(len(triples)),
         "seed": int(params.seed),
     }
-    stats["src_imsi"] = _write_single_column(triples[["imsi"]].rename(columns={"imsi": "value"}), imsi_cfg)
-    stats["src_imei"] = _write_single_column(triples[["imei"]].rename(columns={"imei": "value"}), imei_cfg)
-    stats["src_msisdn"] = _write_single_column(triples[["msisdn"]].rename(columns={"msisdn": "value"}), msisdn_cfg)
+    stats["src_imsi"] = _write_single_column(
+        triples[["imsi"]].rename(columns={"imsi": "value"}),
+        SRC_IMSI_FIELDS,
+        imsi_output_path,
+        compression,
+    )
+    stats["src_imei"] = _write_single_column(
+        triples[["imei"]].rename(columns={"imei": "value"}),
+        SRC_IMEI_FIELDS,
+        imei_output_path,
+        compression,
+    )
+    stats["src_msisdn"] = _write_single_column(
+        triples[["msisdn"]].rename(columns={"msisdn": "value"}),
+        SRC_MSISDN_FIELDS,
+        msisdn_output_path,
+        compression,
+    )
     stats["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-src-excl", metrics=stats)
     logger.info("build-src-excl completed: %s", stats)
@@ -101,26 +126,26 @@ def _sample_triples(eligible: pd.DataFrame, sample_size: int, seed: int) -> pd.D
     return eligible.loc[idx].reset_index(drop=True)
 
 
-def _write_single_column(data: pd.DataFrame, cfg: dict[str, Any]) -> dict[str, Any]:
-    fields = cfg.get("fields", [])
+def _write_single_column(
+    data: pd.DataFrame,
+    fields: list[dict[str, Any]],
+    output_path: str | Path,
+    compression: str,
+) -> dict[str, Any]:
     target_col = fields[0]["name"] if fields else "value"
     frame = data.rename(columns={"value": target_col}).copy()
     frame = _coerce_types(frame, fields)
 
-    readiness = cfg.get("readiness", {})
-    layout = str(readiness.get("s3_layout", ""))
-    output_path = Path(layout) if Path(layout).is_absolute() else PROJECT_ROOT / layout
-    compression = readiness.get("parquet_compression", "snappy")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(output_path, compression=compression, index=False)
-    return {"output_path": str(output_path), "row_count": int(len(frame))}
+    out = Path(output_path)
+    if not out.is_absolute():
+        out = PROJECT_ROOT / out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(out, compression=compression, index=False)
+    return {"output_path": str(out), "row_count": int(len(frame))}
 
 
-def _resolve_latest_success_day_dir(src_person_cfg: dict[str, Any]) -> Path | None:
-    readiness = src_person_cfg.get("readiness", {})
-    layout = str(readiness.get("s3_layout", ""))
-    success_flag = str(readiness.get("success_flag", "_SUCCESS"))
-    root = _resolve_person_layout_root(layout)
+def _resolve_latest_success_day_dir(layout_template: str, success_flag: str) -> Path | None:
+    root = _resolve_person_layout_root(layout_template)
     day_dirs = sorted(root.glob("load_year=*/load_month=*/load_day=*"))
     success_dirs = [p for p in day_dirs if (p / success_flag).exists()]
     if not success_dirs:
@@ -162,10 +187,3 @@ def _norm_numeric_str(series: pd.Series | None) -> pd.Series:
         return pd.Series(dtype="string")
     numeric = pd.to_numeric(series, errors="coerce").astype("Int64")
     return numeric.astype("string")
-
-
-def _read_json(path: str | Path) -> dict[str, Any]:
-    file = Path(path)
-    if not file.exists():
-        raise FileNotFoundError(f"Config file not found: {file}")
-    return json.loads(file.read_text(encoding="utf-8"))

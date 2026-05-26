@@ -22,10 +22,13 @@ from tqdm import tqdm
 
 from mobile.cli_defaults import OPERATORS, stable_seed
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import PROJECT_ROOT
+from mobile.pipelines.src.schema_fields import SRC_PERSON_FIELDS
+from mobile.project_paths import PROJECT_ROOT, SRC_PERSON_LAYOUT_TEMPLATE, SRC_PERSON_SUCCESS_FLAG
 
 
 logger = logging.getLogger(__name__)
+
+SRC_PERSON_TABLE = "person"
 ACTUALLY_TO_OPEN = pd.Timestamp("2261-12-31 23:59:59")
 DEFAULT_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS = 7
 PERSON_CHUNK_SIZE = 250_000
@@ -64,21 +67,16 @@ class BuildSrcPersonParams:
             raise ValueError("extra_random_full_snapshot_days must be >= 0")
 
 
-def run_from_config(config_path: str | Path, params: BuildSrcPersonParams) -> dict[str, Any]:
+def run(
+    *,
+    output_layout: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    compression: str,
+    success_flag: str = SRC_PERSON_SUCCESS_FLAG,
+    params: BuildSrcPersonParams,
+) -> dict[str, Any]:
     perf_metrics: dict[str, Any] = {}
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-
-    with timed_stage("read_config_sec", perf_metrics):
-        with config_file.open("r", encoding="utf-8") as file:
-            config = json.load(file)
-
-    fields = config["fields"]
-    readiness = config["readiness"]
-    out_template = str(readiness["s3_layout"])
-    compression = readiness.get("parquet_compression", "snappy")
-    success_flag = str(readiness.get("success_flag", "_SUCCESS"))
+    fields = SRC_PERSON_FIELDS
+    out_template = output_layout
     fake = Faker("ru_RU")
     fake.seed_instance(stable_seed("faker_pool", params.seed))
     faker_pool = _build_faker_pool(fake, random.Random(stable_seed("faker_pool_py", params.seed)))

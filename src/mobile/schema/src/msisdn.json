@@ -1,15 +1,11 @@
 {
-  "table": "src_msisdn",
-  "description": "Список MSISDN для исключения из обработки",
-  "readiness": {
-    "s3_layout": "data/src/excl/src_msisdn.parquet",
-    "parquet_compression": "snappy"
-  },
-  "fields": [
-    {
-      "name": "value",
-      "type": "string",
-      "comment": "MSISDN для исключения"
-    }
-  ]
+    "table": "src_msisdn",
+    "description": "Список MSISDN для исключения из обработки",
+    "fields": [
+        {
+            "name": "value",
+            "type": "string",
+            "comment": "MSISDN для исключения"
+        }
+    ]
 }

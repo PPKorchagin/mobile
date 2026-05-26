@@ -28,14 +28,16 @@
 
 ## Параметры запуска
 
-Вызов: `excl.run_from_config(person_config, imsi_config, imei_config, msisdn_config, params)` ([`cli.py`](../../src/mobile/cli.py)).
+Вызов: `excl.run(person_layout_template, person_success_flag, imsi/imei/msisdn_output_path, compression, params)` ([`cli.py`](../../src/mobile/cli.py)).
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
-| `src_person_config_path` | string (path) | Да | `src/mobile/schema/src/person.json` | Layout и `success_flag` источника |
-| `src_imsi_config_path` | string (path) | Да | `src/mobile/schema/src/imsi.json` | Выход IMSI |
-| `src_imei_config_path` | string (path) | Да | `src/mobile/schema/src/imei.json` | Выход IMEI |
-| `src_msisdn_config_path` | string (path) | Да | `src/mobile/schema/src/msisdn.json` | Выход MSISDN |
+| `person_layout_template` | string | Да | `data/src/person/load_year={YYYY}/...` | Поиск последнего `_SUCCESS` |
+| `person_success_flag` | string | Да | `_SUCCESS` | Маркер полного среза person |
+| `imsi_output_path` | string (path) | Да | `data/src/excl/src_imsi.parquet` | Выход IMSI |
+| `imei_output_path` | string (path) | Да | `data/src/excl/src_imei.parquet` | Выход IMEI |
+| `msisdn_output_path` | string (path) | Да | `data/src/excl/src_msisdn.parquet` | Выход MSISDN |
+| `compression` | string | Да | `snappy` | Сжатие Parquet |
 | `params` | `BuildSrcExclParams` | Да | `default_excl_params(...)` | Доля АБ и seed |
 
 | Переменная CLI | Тип | По умолчанию | Описание |
@@ -87,7 +89,7 @@ uv run mobile build-src-excl --excl-pct-of-ab 0.5
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
 | 1 | `src_person` | Последний `data/src/person/.../load_day=*/` с `_SUCCESS` | `person.parquet` |
-| 2 | Layout person | из `person.json` → `readiness.s3_layout`, `success_flag` | Поиск среза |
+| 2 | Layout person | `SRC_PERSON_LAYOUT_TEMPLATE`, `SRC_PERSON_SUCCESS_FLAG` | Поиск среза |
 
 **Предусловие:** выполнен `build-src-person` (есть каталог с `_SUCCESS`).
 
@@ -95,7 +97,7 @@ uv run mobile build-src-excl --excl-pct-of-ab 0.5
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_from_config(person_cfg, imsi_cfg, imei_cfg, msisdn_cfg, params)` в [`excl.py`](../../src/mobile/pipelines/src/excl.py).
+Точка входа: `run(...)` в [`excl.py`](../../src/mobile/pipelines/src/excl.py).
 
 ### Шаг 0. Чтение конфигов
 
@@ -103,7 +105,7 @@ uv run mobile build-src-excl --excl-pct-of-ab 0.5
 
 ### Шаг 1. Поиск среза person (`_resolve_latest_success_day_dir`)
 
-1. Из `person.json` → `readiness.s3_layout`, `success_flag` (default `_SUCCESS`).
+1. `person_layout_template` и `person_success_flag` — аргументы job (дефолты в `project_paths`).
 2. `_resolve_person_layout_root(layout)`: корень до первого сегмента с `{placeholder}` (например `data/src/person`).
 3. `glob("load_year=*/load_month=*/load_day=*")`, отфильтровать каталоги, где есть файл `success_flag`.
 4. Взять **последний** по сортировке пути (`success_dirs[-1]`). Если пусто → `FileNotFoundError("No src_person day directory with _SUCCESS found")`.
@@ -139,7 +141,7 @@ sample_size = min(target, eligible_triple_count)
 
 1. DataFrame одной колонки `value` (переименование в имя из `fields[0].name`, обычно `value`).
 2. `_coerce_types` по схеме JSON (`string` / `long` / `int`).
-3. `output_path = PROJECT_ROOT / readiness.s3_layout` (или абсолютный путь).
+3. `output_path` — аргумент job (`DEFAULT_SRC_EXCL_*_OUTPUT` в `project_paths`).
 4. `mkdir(parents=True)`; `to_parquet(..., compression=snappy, index=False)` — перезапись.
 
 ### Шаг 6. Метрики

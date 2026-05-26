@@ -30,7 +30,22 @@ from tqdm import tqdm
 
 from mobile.cli_defaults import OPERATORS
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import DEFAULT_TIME_ZONES_RAW_PATH, PROJECT_ROOT
+from mobile.pipelines.src.schema_fields import (
+    SRC_CDR_FIELDS,
+    SRC_GPRS_FIELDS,
+    SRC_LOCATION_FIELDS,
+    SRC_SMS_FIELDS,
+)
+from mobile.project_paths import (
+    DEFAULT_TIME_ZONES_RAW_PATH,
+    PROJECT_ROOT,
+    SRC_CDR_LAYOUT_TEMPLATE,
+    SRC_GPRS_LAYOUT_TEMPLATE,
+    SRC_LOCATION_LAYOUT_TEMPLATE,
+    SRC_PERSON_LAYOUT_TEMPLATE,
+    SRC_PERSON_SUCCESS_FLAG,
+    SRC_SMS_LAYOUT_TEMPLATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1904,22 +1919,18 @@ def build_person_pool_by_operator_month(
 
 def load_src_person_for_oss_day(
     *,
-    person_config_path: str | Path,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     day: date,
     columns: list[str],
 ) -> pd.DataFrame:
     """Person slice for OSS day: prefer ``load_day=DD`` parquet, else latest monthly ``_SUCCESS``."""
-    person_cfg = Path(person_config_path)
-    with person_cfg.open("r", encoding="utf-8") as file:
-        person_config: dict[str, Any] = json.load(file)
-    readiness = person_config.get("readiness", {})
-    layout_template = str(readiness.get("s3_layout", ""))
-    success_flag = str(readiness.get("success_flag", "_SUCCESS"))
-    day_path = resolve_person_snapshot_path(layout_template, day)
+    day_path = resolve_person_snapshot_path(person_layout_template, day)
     if day_path.exists():
         return pd.read_parquet(day_path, columns=columns)
     monthly = load_src_person_latest_success_by_month(
-        person_config_path=person_config_path,
+        person_layout_template=person_layout_template,
+        person_success_flag=person_success_flag,
         task_dates=[day],
         columns=columns,
     )
@@ -1931,7 +1942,8 @@ def load_src_person_for_oss_day(
 
 def build_person_pool_by_operator_month_slices(
     *,
-    person_config_path: str | Path,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     operators: list[str],
     task_dates: Iterable[date],
     columns: list[str],
@@ -1941,7 +1953,8 @@ def build_person_pool_by_operator_month_slices(
     if not task_dates_list:
         return {}
     person_by_month = load_src_person_latest_success_by_month(
-        person_config_path=person_config_path,
+        person_layout_template=person_layout_template,
+        person_success_flag=person_success_flag,
         task_dates=task_dates_list,
         columns=columns,
     )
@@ -1956,7 +1969,8 @@ def build_person_pool_by_operator_month_slices(
 
 def build_person_pool_by_operator_day(
     *,
-    person_config_path: str | Path,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     operators: list[str],
     task_dates: Iterable[date],
     columns: list[str],
@@ -1969,20 +1983,16 @@ def build_person_pool_by_operator_day(
     if not task_dates_list:
         return {}
 
-    person_cfg = Path(person_config_path)
-    with person_cfg.open("r", encoding="utf-8") as file:
-        person_config: dict[str, Any] = json.load(file)
-    layout_template = str(person_config.get("readiness", {}).get("s3_layout", ""))
-
     person_by_month = load_src_person_latest_success_by_month(
-        person_config_path=person_config_path,
+        person_layout_template=person_layout_template,
+        person_success_flag=person_success_flag,
         task_dates=task_dates_list,
         columns=columns,
     )
 
     pool: dict[tuple[str, date], pd.DataFrame] = {}
     for day in task_dates_list:
-        day_path = resolve_person_snapshot_path(layout_template, day)
+        day_path = resolve_person_snapshot_path(person_layout_template, day)
         if day_path.exists():
             day_frame = pd.read_parquet(day_path, columns=columns)
             day_frame = person_interval_overlaps_day(day_frame, day)
@@ -2198,24 +2208,17 @@ def resolve_latest_success_person_day_dir_for_month(
 
 def load_src_person_latest_success_by_month(
     *,
-    person_config_path: str | Path,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     task_dates: Iterable[date],
     columns: list[str],
 ) -> dict[tuple[int, int], pd.DataFrame]:
     """
     For each calendar month present in ``task_dates``, load ``person.parquet`` from the latest
-    day directory with ``readiness.success_flag`` (aligned with ``person.json`` selection_rule).
+    day directory with ``person_success_flag`` (full snapshot days from build-src-person).
     """
-    person_cfg = Path(person_config_path)
-    if not person_cfg.exists():
-        raise FileNotFoundError(f"Person config not found: {person_cfg}")
-    with person_cfg.open("r", encoding="utf-8") as file:
-        person_config: dict[str, Any] = json.load(file)
-    readiness = person_config.get("readiness", {})
-    layout_template = str(readiness.get("s3_layout", ""))
-    if not layout_template:
-        raise ValueError("person.json readiness.s3_layout is empty")
-    success_flag = str(readiness.get("success_flag", "_SUCCESS"))
+    layout_template = person_layout_template
+    success_flag = person_success_flag
 
     months = sorted({(d.year, d.month) for d in task_dates})
     out: dict[tuple[int, int], pd.DataFrame] = {}
@@ -2253,18 +2256,19 @@ def calendar_dates_inclusive(start: date, end: date) -> list[date]:
     return out
 
 
-def _load_mobile_vitrine_fields_and_output(config_path: str | Path) -> tuple[list[dict[str, Any]], str, str]:
-    path = Path(config_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Mobile vitrine config not found: {path}")
-    with path.open("r", encoding="utf-8") as file:
-        config: dict[str, Any] = json.load(file)
-    readiness = config["readiness"]
-    return (
-        config["fields"],
-        str(readiness["s3_layout"]),
-        str(readiness.get("parquet_compression", "snappy")),
-    )
+def _mobile_vitrine_spec(
+    vitrine: Literal["cdr", "sms", "gprs", "location"],
+    *,
+    compression: str,
+) -> tuple[list[dict[str, Any]], str, str]:
+    specs: dict[str, tuple[list[dict[str, Any]], str]] = {
+        "cdr": (SRC_CDR_FIELDS, SRC_CDR_LAYOUT_TEMPLATE),
+        "sms": (SRC_SMS_FIELDS, SRC_SMS_LAYOUT_TEMPLATE),
+        "gprs": (SRC_GPRS_FIELDS, SRC_GPRS_LAYOUT_TEMPLATE),
+        "location": (SRC_LOCATION_FIELDS, SRC_LOCATION_LAYOUT_TEMPLATE),
+    }
+    fields, layout = specs[vitrine]
+    return fields, layout, compression
 
 
 def _estimate_mobile_oss_subscriber_chunks(
@@ -2331,10 +2335,11 @@ def _run_mobile_oss_for_one_operator(payload: dict[str, Any]) -> dict[str, Any]:
         calendar_days,
     )
 
-    fields_cdr, out_cdr, comp_cdr = _load_mobile_vitrine_fields_and_output(str(payload["cdr_config_path"]))
-    fields_sms, out_sms, comp_sms = _load_mobile_vitrine_fields_and_output(str(payload["sms_config_path"]))
-    fields_gprs, out_gprs, comp_gprs = _load_mobile_vitrine_fields_and_output(str(payload["gprs_config_path"]))
-    fields_loc, out_loc, comp_loc = _load_mobile_vitrine_fields_and_output(str(payload["location_config_path"]))
+    compression = str(payload["compression"])
+    fields_cdr, out_cdr, comp_cdr = _mobile_vitrine_spec("cdr", compression=compression)
+    fields_sms, out_sms, comp_sms = _mobile_vitrine_spec("sms", compression=compression)
+    fields_gprs, out_gprs, comp_gprs = _mobile_vitrine_spec("gprs", compression=compression)
+    fields_loc, out_loc, comp_loc = _mobile_vitrine_spec("location", compression=compression)
 
     agg: dict[str, int] = {"cdr": 0, "sms": 0, "gprs": 0, "location": 0}
 
@@ -2603,21 +2608,18 @@ def _run_mobile_oss_for_one_operator(payload: dict[str, Any]) -> dict[str, Any]:
 def run_mobile_oss_all(
     *,
     bs_parquet_path: str | Path,
-    person_config_path: str | Path | None,
     params: BuildSrcMobileOssParams,
-    cdr_config_path: str | Path,
-    sms_config_path: str | Path,
-    gprs_config_path: str | Path,
-    location_config_path: str | Path,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     module_parallelism: int = 4,
 ) -> dict[str, Any]:
     """
     Generate CDR, SMS, GPRS, and location vitrines.
 
-    IMSI/IMEI/MSISDN pools come from ``src_person`` snapshots (via ``person_config_path``;
-    latest ``_SUCCESS`` slice per month). Cell geometry uses ``src_bs`` parquet at ``bs_parquet_path``
-    (typically ``readiness.s3_layout`` from ``src/bs.json``), optionally restricted to
-    ``params.region_subjects`` on the ``subject`` column.
+    IMSI/IMEI/MSISDN pools come from ``src_person`` snapshots (``person_layout_template``;
+    latest ``person_success_flag`` slice per month). Cell geometry uses ``src_bs`` at
+    ``bs_parquet_path``, optionally restricted to ``params.region_subjects``.
 
     Work is scheduled as **one OS process per operator** (``ProcessPoolExecutor``). Each process walks
     ``calendar_days`` sequentially, builds ``SubscriberDayState`` in chunks of
@@ -2626,13 +2628,11 @@ def run_mobile_oss_all(
 
     ``module_parallelism`` is ignored for pool sizing (always ``len(operators)`` processes).
     """
-    if person_config_path is None:
-        raise ValueError("person_config_path is required (use src_person layout from person.json).")
-
     task_dates = calendar_dates_inclusive(params.start_date, params.end_date)
     t_pre = time.perf_counter()
     person_pool = build_person_pool_by_operator_month_slices(
-        person_config_path=person_config_path,
+        person_layout_template=person_layout_template,
+        person_success_flag=person_success_flag,
         operators=params.operators,
         task_dates=task_dates,
         columns=PERSON_SNAPSHOT_COLUMNS,
@@ -2716,10 +2716,7 @@ def run_mobile_oss_all(
                     "bs_op_path": str(bs_stage.resolve()),
                     "person_pool_dir": person_stage,
                     "params": params,
-                    "cdr_config_path": str(Path(cdr_config_path).resolve()),
-                    "sms_config_path": str(Path(sms_config_path).resolve()),
-                    "gprs_config_path": str(Path(gprs_config_path).resolve()),
-                    "location_config_path": str(Path(location_config_path).resolve()),
+                    "compression": compression,
                 }
             )
 
@@ -2795,29 +2792,19 @@ from mobile.command_timing import append_command_metrics, timed_stage
 logger = logging.getLogger(__name__)
 
 
-def run_cdr_from_config(
-    config_path: str | Path,
+def run_cdr(
+    *,
     bs_parquet_path: str | Path,
     params: BuildSrcMobileOssParams,
-    person_config_path: str | Path | None = None,
-    *,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     person_by_month: dict[tuple[int, int], pd.DataFrame] | None = None,
     person_pool_by_op_month: dict[tuple[str, int, int], pd.DataFrame] | None = None,
     bs_by_operator: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     perf_metrics: dict[str, Any] = {}
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-
-    with timed_stage("read_config_sec", perf_metrics):
-        with config_file.open("r", encoding="utf-8") as file:
-            config = json.load(file)
-
-    fields = config["fields"]
-    readiness = config["readiness"]
-    out_template = str(readiness["s3_layout"])
-    compression = readiness.get("parquet_compression", "snappy")
+    fields, out_template, compression = _mobile_vitrine_spec("cdr", compression=compression)
 
     if bs_by_operator is not None:
         missing_ops = [op for op in params.operators if op not in bs_by_operator]
@@ -2839,15 +2826,16 @@ def run_cdr_from_config(
     person_pool_by_month: dict[tuple[str, int, int], pd.DataFrame] | None = None
     if person_pool_by_op_month is not None:
         person_pool_by_month = person_pool_by_op_month
-    elif person_config_path is not None:
+    elif effective_person_by_month is not None:
+        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
+    else:
         person_pool_by_day = build_person_pool_by_operator_day(
-            person_config_path=person_config_path,
+            person_layout_template=person_layout_template,
+            person_success_flag=person_success_flag,
             operators=params.operators,
             task_dates=task_dates,
             columns=PERSON_SNAPSHOT_COLUMNS,
         )
-    elif effective_person_by_month is not None:
-        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
 
     spatial_by_operator: dict[str, BsSpatialContext | None] = {
         op: _build_bs_spatial_context(bs_prep[op]) for op in params.operators
@@ -3329,29 +3317,19 @@ from mobile.command_timing import append_command_metrics, timed_stage
 logger = logging.getLogger(__name__)
 
 
-def run_sms_from_config(
-    config_path: str | Path,
+def run_sms(
+    *,
     bs_parquet_path: str | Path,
     params: BuildSrcMobileOssParams,
-    person_config_path: str | Path | None = None,
-    *,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     person_by_month: dict[tuple[int, int], pd.DataFrame] | None = None,
     person_pool_by_op_month: dict[tuple[str, int, int], pd.DataFrame] | None = None,
     bs_by_operator: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     perf_metrics: dict[str, Any] = {}
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-
-    with timed_stage("read_config_sec", perf_metrics):
-        with config_file.open("r", encoding="utf-8") as file:
-            config = json.load(file)
-
-    fields = config["fields"]
-    readiness = config["readiness"]
-    out_template = str(readiness["s3_layout"])
-    compression = readiness.get("parquet_compression", "snappy")
+    fields, out_template, compression = _mobile_vitrine_spec("sms", compression=compression)
 
     if bs_by_operator is not None:
         missing_ops = [op for op in params.operators if op not in bs_by_operator]
@@ -3373,15 +3351,16 @@ def run_sms_from_config(
     person_pool_by_month: dict[tuple[str, int, int], pd.DataFrame] | None = None
     if person_pool_by_op_month is not None:
         person_pool_by_month = person_pool_by_op_month
-    elif person_config_path is not None:
+    elif effective_person_by_month is not None:
+        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
+    else:
         person_pool_by_day = build_person_pool_by_operator_day(
-            person_config_path=person_config_path,
+            person_layout_template=person_layout_template,
+            person_success_flag=person_success_flag,
             operators=params.operators,
             task_dates=task_dates,
             columns=PERSON_SNAPSHOT_COLUMNS,
         )
-    elif effective_person_by_month is not None:
-        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
 
     spatial_by_operator: dict[str, BsSpatialContext | None] = {
         op: _build_bs_spatial_context(bs_prep[op]) for op in params.operators
@@ -3818,29 +3797,19 @@ from mobile.command_timing import append_command_metrics, timed_stage
 logger = logging.getLogger(__name__)
 
 
-def run_gprs_from_config(
-    config_path: str | Path,
+def run_gprs(
+    *,
     bs_parquet_path: str | Path,
     params: BuildSrcMobileOssParams,
-    person_config_path: str | Path | None = None,
-    *,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     person_by_month: dict[tuple[int, int], pd.DataFrame] | None = None,
     person_pool_by_op_month: dict[tuple[str, int, int], pd.DataFrame] | None = None,
     bs_by_operator: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     perf_metrics: dict[str, Any] = {}
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-
-    with timed_stage("read_config_sec", perf_metrics):
-        with config_file.open("r", encoding="utf-8") as file:
-            config = json.load(file)
-
-    fields = config["fields"]
-    readiness = config["readiness"]
-    out_template = str(readiness["s3_layout"])
-    compression = readiness.get("parquet_compression", "snappy")
+    fields, out_template, compression = _mobile_vitrine_spec("gprs", compression=compression)
 
     if bs_by_operator is not None:
         missing_ops = [op for op in params.operators if op not in bs_by_operator]
@@ -3862,15 +3831,16 @@ def run_gprs_from_config(
     person_pool_by_month: dict[tuple[str, int, int], pd.DataFrame] | None = None
     if person_pool_by_op_month is not None:
         person_pool_by_month = person_pool_by_op_month
-    elif person_config_path is not None:
+    elif effective_person_by_month is not None:
+        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
+    else:
         person_pool_by_day = build_person_pool_by_operator_day(
-            person_config_path=person_config_path,
+            person_layout_template=person_layout_template,
+            person_success_flag=person_success_flag,
             operators=params.operators,
             task_dates=task_dates,
             columns=PERSON_SNAPSHOT_COLUMNS,
         )
-    elif effective_person_by_month is not None:
-        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
 
     spatial_by_operator: dict[str, BsSpatialContext | None] = {
         op: _build_bs_spatial_context(bs_prep[op]) for op in params.operators
@@ -4358,27 +4328,19 @@ from mobile.command_timing import append_command_metrics, timed_stage
 logger = logging.getLogger(__name__)
 
 
-def run_location_from_config(
-    config_path: str | Path,
+def run_location(
+    *,
     bs_parquet_path: str | Path,
     params: BuildSrcMobileOssParams,
-    person_config_path: str | Path | None = None,
-    *,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
     person_by_month: dict[tuple[int, int], pd.DataFrame] | None = None,
     person_pool_by_op_month: dict[tuple[str, int, int], pd.DataFrame] | None = None,
     bs_by_operator: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     perf_metrics: dict[str, Any] = {}
-    config_file = Path(config_path)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-    with timed_stage("read_config_sec", perf_metrics):
-        with config_file.open("r", encoding="utf-8") as file:
-            config = json.load(file)
-    fields = config["fields"]
-    readiness = config["readiness"]
-    out_template = str(readiness["s3_layout"])
-    compression = readiness.get("parquet_compression", "snappy")
+    fields, out_template, compression = _mobile_vitrine_spec("location", compression=compression)
     if bs_by_operator is not None:
         missing_ops = [op for op in params.operators if op not in bs_by_operator]
         if missing_ops:
@@ -4399,15 +4361,16 @@ def run_location_from_config(
     person_pool_by_month: dict[tuple[str, int, int], pd.DataFrame] | None = None
     if person_pool_by_op_month is not None:
         person_pool_by_month = person_pool_by_op_month
-    elif person_config_path is not None:
+    elif effective_person_by_month is not None:
+        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
+    else:
         person_pool_by_day = build_person_pool_by_operator_day(
-            person_config_path=person_config_path,
+            person_layout_template=person_layout_template,
+            person_success_flag=person_success_flag,
             operators=params.operators,
             task_dates=task_dates,
             columns=PERSON_SNAPSHOT_COLUMNS,
         )
-    elif effective_person_by_month is not None:
-        person_pool_by_month = build_person_pool_by_operator_month(effective_person_by_month, params.operators)
 
     spatial_by_operator: dict[str, BsSpatialContext | None] = {
         op: _build_bs_spatial_context(bs_prep[op]) for op in params.operators
@@ -4842,21 +4805,17 @@ BuildSrcMobileParams = BuildSrcMobileOssParams
 def run_mobile_all(
     *,
     bs_parquet_path: str | Path,
-    person_config_path: str | Path,
     params: BuildSrcMobileParams,
-    cdr_config_path: str | Path,
-    sms_config_path: str | Path,
-    gprs_config_path: str | Path,
-    location_config_path: str | Path,
+    compression: str,
+    person_layout_template: str = SRC_PERSON_LAYOUT_TEMPLATE,
+    person_success_flag: str = SRC_PERSON_SUCCESS_FLAG,
 ) -> dict[str, Any]:
     return run_mobile_oss_all(
         bs_parquet_path=bs_parquet_path,
-        person_config_path=person_config_path,
         params=params,
-        cdr_config_path=cdr_config_path,
-        sms_config_path=sms_config_path,
-        gprs_config_path=gprs_config_path,
-        location_config_path=location_config_path,
+        compression=compression,
+        person_layout_template=person_layout_template,
+        person_success_flag=person_success_flag,
     )
 
 

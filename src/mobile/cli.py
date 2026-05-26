@@ -26,14 +26,6 @@ from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
-    DEFAULT_SRC_CDR_CONFIG_PATH,
-    DEFAULT_SRC_GPRS_CONFIG_PATH,
-    DEFAULT_SRC_IMEI_CONFIG_PATH,
-    DEFAULT_SRC_IMSI_CONFIG_PATH,
-    DEFAULT_SRC_LOCATION_CONFIG_PATH,
-    DEFAULT_SRC_MSISDN_CONFIG_PATH,
-    DEFAULT_SRC_PERSON_CONFIG_PATH,
-    DEFAULT_SRC_SMS_CONFIG_PATH,
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
@@ -179,21 +171,18 @@ def _run_command(
     excl_pct_of_ab: float | None = None,
 ) -> None:
     if command == "build-src-person":
-        logger.info("Starting %s (config=%s)", command, DEFAULT_SRC_PERSON_CONFIG_PATH)
-        person.run_from_config(
-            DEFAULT_SRC_PERSON_CONFIG_PATH,
-            default_person_params(target_per_operator),
+        logger.info("Starting %s", command)
+        person.run(
+            compression=DEFAULT_PARQUET_COMPRESSION,
+            params=default_person_params(target_per_operator),
         )
         logger.info("%s completed successfully", command)
         return
     if command == "build-src-excl":
         logger.info("Starting %s", command)
-        excl.run_from_config(
-            DEFAULT_SRC_PERSON_CONFIG_PATH,
-            DEFAULT_SRC_IMSI_CONFIG_PATH,
-            DEFAULT_SRC_IMEI_CONFIG_PATH,
-            DEFAULT_SRC_MSISDN_CONFIG_PATH,
-            default_excl_params(pct_of_ab=excl_pct_of_ab),
+        excl.run(
+            compression=DEFAULT_PARQUET_COMPRESSION,
+            params=default_excl_params(pct_of_ab=excl_pct_of_ab),
         )
         logger.info("%s completed successfully", command)
         return
@@ -201,12 +190,8 @@ def _run_command(
         logger.info("Starting %s", command)
         src_mobile.run_mobile_all(
             bs_parquet_path=DEFAULT_BS_LAYOUT,
-            person_config_path=DEFAULT_SRC_PERSON_CONFIG_PATH,
             params=default_mobile_params(),
-            cdr_config_path=DEFAULT_SRC_CDR_CONFIG_PATH,
-            sms_config_path=DEFAULT_SRC_SMS_CONFIG_PATH,
-            gprs_config_path=DEFAULT_SRC_GPRS_CONFIG_PATH,
-            location_config_path=DEFAULT_SRC_LOCATION_CONFIG_PATH,
+            compression=DEFAULT_PARQUET_COMPRESSION,
         )
         logger.info("%s completed successfully", command)
         return

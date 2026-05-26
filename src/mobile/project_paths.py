@@ -15,20 +15,22 @@ DEFAULT_STG_TIME_ZONES_CSV_PATH = _RAW_DATA / "time_zones.csv"
 DEFAULT_STG_TIME_ZONES_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "time_zones.parquet"
 DEFAULT_STG_TAC_CSV_PATH = _RAW_DATA / "tacdb_v001.csv"
 DEFAULT_STG_TAC_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "tac.parquet"
-DEFAULT_SRC_BS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "bs.json"
-DEFAULT_SRC_PERSON_CONFIG_PATH = _SCHEMA_ROOT / "src" / "person.json"
-DEFAULT_SRC_IMSI_CONFIG_PATH = _SCHEMA_ROOT / "src" / "imsi.json"
-DEFAULT_SRC_IMEI_CONFIG_PATH = _SCHEMA_ROOT / "src" / "imei.json"
-DEFAULT_SRC_MSISDN_CONFIG_PATH = _SCHEMA_ROOT / "src" / "msisdn.json"
 
 DEFAULT_BS_PROFILE_PATH = _RAW_DATA / "build_bs_profile_from_opencellid.json"
 DEFAULT_BS_LAYOUT = PROJECT_ROOT / "data" / "src" / "bs.parquet"
 DEFAULT_TIME_ZONES_RAW_PATH = DEFAULT_STG_TIME_ZONES_CSV_PATH
 
-DEFAULT_SRC_CDR_CONFIG_PATH = _SCHEMA_ROOT / "src" / "cdr.json"
-DEFAULT_SRC_SMS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "sms.json"
-DEFAULT_SRC_GPRS_CONFIG_PATH = _SCHEMA_ROOT / "src" / "gprs.json"
-DEFAULT_SRC_LOCATION_CONFIG_PATH = _SCHEMA_ROOT / "src" / "location.json"
+SRC_PERSON_LAYOUT_TEMPLATE = "data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}"
+SRC_PERSON_SUCCESS_FLAG = "_SUCCESS"
+
+DEFAULT_SRC_EXCL_IMSI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_imsi.parquet"
+DEFAULT_SRC_EXCL_IMEI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_imei.parquet"
+DEFAULT_SRC_EXCL_MSISDN_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_msisdn.parquet"
+
+SRC_CDR_LAYOUT_TEMPLATE = "data/src/mobile/operator/cdr/{name_operator}/10001/{YYYY}/{MM}/{DD}"
+SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/operator/sms/{name_operator}/10002/{YYYY}/{MM}/{DD}"
+SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
+SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
 
 _NB = Path(__file__).resolve().parent / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"
