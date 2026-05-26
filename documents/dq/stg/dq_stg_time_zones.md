@@ -79,15 +79,11 @@ uv run mobile dq-stg-time-zones
 
 ### Шаг 3. Предметные проверки
 
-| Check | Условие |
-|-------|---------|
-| `code_quality` | **warning** — дубли `code` или NaN после `to_numeric` |
-| `timezone_range` | **warning** — значения вне [-12, 14]; метрики min/max и `distribution` |
-| `geometry_quality` | **warning** — ошибки WKT (`_collect_wkt_metrics` для колонки `geometry`) |
+См. раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 
-`summary`; тег логов `DQ_STG_TIME_ZONES`.
+`summary`; тег логов `DQ_STG_TIME_ZONES`. Формат строки: `{"tag":"DQ_STG_TIME_ZONES","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -98,10 +94,46 @@ uv run mobile dq-stg-time-zones
 
 ---
 
+## Проверки
+
+Статусы: **ok** / **warning** / **failed** (`nulls.*`, `cardinality.*` — всегда **ok**).
+
+### Наличие и схема
+
+| Check | Статус при сбое | Смысл |
+|-------|-----------------|--------|
+| `dataset_presence` | **failed** | Нет parquet |
+| `dataset_basic` | **ok** | `row_count`, `column_count`, `parquet_path` |
+| `schema_columns` | **failed** | Нет колонок из `STG_TIME_ZONES_FIELDS` (`code`, `name`, `timezone`, `geometry`) |
+
+### По каждому полю схемы
+
+| Check | Статус | Метрики |
+|-------|--------|---------|
+| `nulls.{field}` | **ok** | `null_count`, `null_ratio` |
+| `cardinality.{field}` | **ok** | `nunique` |
+
+### Предметные checks
+
+| Check | Статус при сбое | Смысл / метрики |
+|-------|-----------------|-----------------|
+| `code_quality` | **warning** | Дубли `code` или NaN после `to_numeric`; `duplicate_code_count`, `invalid_code_count` |
+| `timezone_range` | **warning** | `timezone` вне [-12, 14]; `invalid_timezone_count`, `timezone_min`, `timezone_max`, **`distribution`** — доли по значениям timezone (%) |
+| `geometry_quality` | **warning** | WKT в `geometry`: `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count`, `geom_type_counts`, `valid_geometry_count` (допустимы `POLYGON`, `MULTIPOLYGON`) |
+
+### Итог
+
+| Check | Смысл |
+|-------|--------|
+| `summary` | `total_checks`, `warning_checks`, `failed_checks` |
+
+---
+
 ## Ссылки
 
 | Артефакт | Путь |
 |----------|------|
+| Обзор DQ | [`../README.md`](../README.md) |
 | Схема | [`time_zones.json`](../../../src/mobile/schema/stg/time_zones.json) |
 | ETL build | [`pipelines/stg/time_zones.py`](../../../src/mobile/pipelines/stg/time_zones.py) |
 | DQ | [`pipelines/dq/stg/time_zones.py`](../../../src/mobile/pipelines/dq/stg/time_zones.py) |

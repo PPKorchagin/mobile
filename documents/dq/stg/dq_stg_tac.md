@@ -76,17 +76,11 @@ uv run mobile dq-stg-tac
 
 ### Шаг 3. Предметные проверки
 
-| Check | Условие |
-|-------|---------|
-| `tac_integrity` | **failed** — TAC не `^\d{8}$` или дубликаты |
-| `m2m_coverage` | **warning** — 0 строк M2M или доля &lt; 5% |
-| `m2m_equipment_type_consistency` | **failed** — `is_m2m` ≠ `(equipment_type ∈ m2m_types)` |
-| `allocation_date_format` | **warning** — не парсится как `%Y-%m-%d` |
-| `manufacturer_quality` | **warning** — пустой или `-` |
+См. раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 
-`summary`; тег `DQ_STG_TAC`.
+`summary`; тег `DQ_STG_TAC`. Формат: `{"tag":"DQ_STG_TAC","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -97,10 +91,48 @@ uv run mobile dq-stg-tac
 
 ---
 
+## Проверки
+
+Статусы: **ok** / **warning** / **failed**. Порог M2M: `_MIN_M2M_RATIO = 0.05` в [`pipelines/dq/stg/tac.py`](../../../src/mobile/pipelines/dq/stg/tac.py).
+
+### Наличие и схема
+
+| Check | Статус при сбое | Смысл |
+|-------|-----------------|--------|
+| `dataset_presence` | **failed** | Нет parquet |
+| `dataset_basic` | **ok** | `row_count`, `column_count`, `parquet_path` |
+| `schema_columns` | **failed** | Нет колонок из `STG_TAC_FIELDS` (12 полей, см. [`tac.json`](../../../src/mobile/schema/stg/tac.json)) |
+
+### По каждому полю схемы
+
+| Check | Статус | Метрики |
+|-------|--------|---------|
+| `nulls.{field}` | **ok** | `null_count`, `null_ratio` |
+| `cardinality.{field}` | **ok** | `nunique` (для всех полей **кроме** `is_m2m`) |
+
+### Предметные checks
+
+| Check | Статус при сбое | Смысл / метрики |
+|-------|-----------------|-----------------|
+| `tac_integrity` | **failed** | TAC не `^\d{8}$` или дубликаты; `invalid_tac_count`, `duplicate_tac_count` |
+| `m2m_coverage` | **warning** | 0 строк M2M или доля M2M ниже 5%; `m2m_row_count`, `m2m_ratio`, `non_m2m_row_count` |
+| `m2m_equipment_type_consistency` | **failed** | Флаг `is_m2m` не согласован с `equipment_type ∈ M2M_EQUIPMENT_TYPES`; `mismatch_count`, **`equipment_type_counts`** (top-20), `configured_m2m_types` |
+| `allocation_date_format` | **warning** | Дата не `%Y-%m-%d`; `invalid_date_count`, `min_date`, `max_date` |
+| `manufacturer_quality` | **warning** | Пустой или `-` в `manufacturer`; `empty_manufacturer_count` |
+
+### Итог
+
+| Check | Смысл |
+|-------|--------|
+| `summary` | `total_checks`, `warning_checks`, `failed_checks` |
+
+---
+
 ## Ссылки
 
 | Артефакт | Путь |
 |----------|------|
+| Обзор DQ | [`../README.md`](../README.md) |
 | Схема | [`tac.json`](../../../src/mobile/schema/stg/tac.json) |
 | ETL build | [`pipelines/stg/tac.py`](../../../src/mobile/pipelines/stg/tac.py) |
 | DQ | [`pipelines/dq/stg/tac.py`](../../../src/mobile/pipelines/dq/stg/tac.py) |

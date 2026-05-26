@@ -43,14 +43,14 @@ uv run mobile nb-perf-metrics
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |
-| `dq-stg-oktmo` | DQ `data/stg/oktmo.parquet` (логи `DQ_STG_OKTMO`) |
-| `dq-stg-time-zones` | DQ `data/stg/time_zones.parquet` |
-| `dq-stg-tac` | DQ `data/stg/tac.parquet` |
+| `dq-stg-oktmo` | DQ `data/stg/oktmo.parquet` — схема, иерархия, WKT ([checks](documents/dq/stg/dq_stg_oktmo.md#проверки)) |
+| `dq-stg-time-zones` | DQ `data/stg/time_zones.parquet` — timezone, geometry ([checks](documents/dq/stg/dq_stg_time_zones.md#проверки)) |
+| `dq-stg-tac` | DQ `data/stg/tac.parquet` — TAC, M2M ([checks](documents/dq/stg/dq_stg_tac.md#проверки)) |
 | `build-src-bs` | ОКТМО + профиль → `data/src/bs.parquet` |
 | `build-src-person` | Суточные срезы → `data/src/person/...` |
 | `build-src-excl` | Списки IMSI/IMEI/MSISDN из последнего full snapshot person |
 | `build-src-mobile` | CDR / SMS / GPRS / location по дням и операторам |
-| `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни периода × оба ЦОД (логи `DQ_SRC_MOBILE`) |
+| `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
@@ -81,6 +81,7 @@ uv run mobile nb-perf-metrics
 
 Документация:
 
+- [`documents/dq/README.md`](documents/dq/README.md) — обзор DQ-команд и ссылки на перечни checks
 - [`documents/stg/build_stg_day.md`](documents/stg/build_stg_day.md)
 - [`documents/stg/build_stg_oktmo.md`](documents/stg/build_stg_oktmo.md)
 - [`documents/stg/build_stg_time_zones.md`](documents/stg/build_stg_time_zones.md)

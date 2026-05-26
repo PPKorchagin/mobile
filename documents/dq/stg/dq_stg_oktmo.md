@@ -96,18 +96,7 @@ uv run mobile dq-stg-oktmo
 
 ### Шаг 3. Предметные проверки
 
-
-| Check                 | Условие warning/failed                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| `level_distribution`  | **warning** — `level` не в {1, 2}                                                        |
-| `code_quality`        | **warning** — дубли или нечисловой `code`                                                |
-| `parent_code_quality` | **warning** — нечисловой `parent_code`                                                   |
-| `hierarchy_integrity` | **warning** — level1 с parent, level2 без parent, разрывы parent↔child                   |
-| `name_quality`        | **warning** — пустые/мусорные `name`                                                     |
-| `wkt_geometry`        | **warning** — parse/topology/empty/unsupported type (`POLYGON`/`MULTIPOLYGON` допустимы) |
-
-
-WKT: построчно `shapely.wkt.loads` в `_collect_wkt_metrics`.
+См. раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 
@@ -126,11 +115,52 @@ WKT: построчно `shapely.wkt.loads` в `_collect_wkt_metrics`.
 
 ---
 
+## Проверки
+
+Статусы: **ok** / **warning** / **failed** (кроме метрик `nulls.*` и `cardinality.*` — всегда **ok**).
+
+### Наличие и схема
+
+| Check | Статус при сбое | Смысл |
+|-------|-----------------|--------|
+| `dataset_presence` | **failed** | Parquet по `parquet_path` не найден; дальнейшие checks не выполняются |
+| `dataset_basic` | **ok** | `row_count`, `column_count`, `parquet_path` |
+| `schema_columns` | **failed** | Отсутствуют колонки из `STG_OKTMO_FIELDS` (`WKT`, `level`, `parent_code`, `code`, `name`) |
+
+### По каждому полю схемы
+
+Для каждого присутствующего поля из `STG_OKTMO_FIELDS`:
+
+| Check | Статус | Метрики |
+|-------|--------|---------|
+| `nulls.{field}` | **ok** | `null_count`, `null_ratio` |
+| `cardinality.{field}` | **ok** | `nunique` |
+
+### Предметные checks
+
+| Check | Статус при сбое | Смысл / метрики |
+|-------|-----------------|-----------------|
+| `level_distribution` | **warning** | `level` не в {1, 2}; `level_counts`, `invalid_level_count` |
+| `code_quality` | **warning** | Дубли `code` или нечисловой `code`; `duplicate_code_count`, `non_numeric_code_count` |
+| `parent_code_quality` | **warning** | Нечисловой `parent_code`; `non_numeric_parent_code_count` |
+| `hierarchy_integrity` | **warning** | level1 с parent, level2 без parent, child без parent в справочнике, parent без children; счётчики по уровням |
+| `name_quality` | **warning** | Пустые / `-` / `null` в `name`; `invalid_name_count` |
+| `wkt_geometry` | **warning** | WKT (`shapely.wkt.loads` построчно): `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count` (допустимы `POLYGON`, `MULTIPOLYGON`), `geom_type_counts`, `valid_geometry_count` |
+
+### Итог
+
+| Check | Смысл |
+|-------|--------|
+| `summary` | `total_checks`, `warning_checks`, `failed_checks` |
+
+---
+
 ## Ссылки
 
 
 | Артефакт | Путь |
 |----------|------|
+| Обзор DQ | [`../README.md`](../README.md) |
 | Схема | [`oktmo.json`](../../../src/mobile/schema/stg/oktmo.json) |
 | ETL build | [`pipelines/stg/oktmo.py`](../../../src/mobile/pipelines/stg/oktmo.py) |
 | DQ | [`pipelines/dq/stg/oktmo.py`](../../../src/mobile/pipelines/dq/stg/oktmo.py) |

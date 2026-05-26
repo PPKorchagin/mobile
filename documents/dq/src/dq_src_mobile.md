@@ -216,6 +216,7 @@ CLI не завершается с ненулевым exit code при failed ch
 
 | Артефакт | Путь |
 |----------|------|
+| Обзор DQ | [`../README.md`](../README.md) |
 | DQ pipeline | [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
 | STG gate | константы и `_emit_stg_field_checks` в [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
 | Поля SRC (DQ) | `SRC_*_FIELDS` в [`pipelines/dq/src/mobile.py`](../../../src/mobile/pipelines/dq/src/mobile.py) |
