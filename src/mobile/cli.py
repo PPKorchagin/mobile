@@ -28,6 +28,7 @@ from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import move_event as stg_move_event
+from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
 from mobile.pipelines.dq.stg import event as dq_stg_event
@@ -41,6 +42,7 @@ from mobile.project_paths import (
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
     DEFAULT_STG_EVENT_DDS_ROOT,
+    STG_BS_LAYOUT_TEMPLATE,
     STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
     STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
     DEFAULT_STG_TAC_OUTPUT_PATH,
@@ -122,6 +124,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-stg-event",
     "build-stg-msisdn-imsi",
     "build-stg-msisdn-imei",
+    "build-stg-bs",
     *tuple(_DQ_COMMANDS),
     *tuple(_NB_COMMANDS),
 )
@@ -209,6 +212,30 @@ def run_build_stg_binding(
             lambda d=day: runner(report_date=d, event_dds_path=dds, output_path=out),
         )
     logger.info("%s completed successfully", command)
+
+
+def run_build_stg_bs(
+    *,
+    src_bs_path: str | None,
+    oktmo_path: str | None,
+    time_zones_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-bs: полный src_bs со SCD-историей; без параметра даты."""
+    bs = Path(src_bs_path) if src_bs_path else None
+    oktmo = Path(oktmo_path) if oktmo_path else None
+    tz = Path(time_zones_path) if time_zones_path else None
+    out = Path(output_path) if output_path else None
+
+    run_timed_command(
+        "build-stg-bs",
+        lambda: stg_bs.run_build(
+            src_bs_path=bs,
+            oktmo_path=oktmo,
+            time_zones_path=tz,
+            output_path=out,
+        ),
+    )
 
 
 def run_build_move_event(*, report_date: date | None) -> None:
@@ -606,7 +633,25 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event: день (без флага — цикл)",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* — день",
+    )
+    parser.add_argument(
+        "--src-bs-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
+    )
+    parser.add_argument(
+        "--oktmo-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-bs: справочник ОКТМО (по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH})",
+    )
+    parser.add_argument(
+        "--time-zones-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-bs: справочник часовых поясов (по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})",
     )
     parser.add_argument(
         "--mobile-root",
@@ -628,10 +673,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-msisdn-imsi: выходной parquet (по умолчанию "
-            f"{STG_MSISDN_IMSI_LAYOUT_TEMPLATE}); "
-            "build-stg-msisdn-imei: "
-            f"{STG_MSISDN_IMEI_LAYOUT_TEMPLATE}"
+            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs: выходной parquet "
+            f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
+            f"{STG_BS_LAYOUT_TEMPLATE})"
         ),
     )
     return parser
@@ -700,6 +744,13 @@ def main() -> None:
                 event_dds_path=args.event_dds_path,
                 output_path=args.output_path,
                 runner=stg_msisdn_imei.run_build,
+            )
+        elif args.command == "build-stg-bs":
+            run_build_stg_bs(
+                src_bs_path=args.src_bs_path,
+                oktmo_path=args.oktmo_path,
+                time_zones_path=args.time_zones_path,
+                output_path=args.output_path,
             )
         else:
             run_timed_command(

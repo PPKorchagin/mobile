@@ -33,6 +33,7 @@ uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
 uv run mobile dq-stg-event --dc central --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imei --report-date 2025-01-01
+uv run mobile build-stg-bs
 uv run mobile nb-perf-metrics
 ```
 
@@ -62,6 +63,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
 | `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
 | `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
+| `build-stg-bs` | Полный `src_bs` + SCD-merge → `stg_bs` ([doc](documents/stg/build_stg_bs.md)) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
@@ -70,13 +72,19 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
-Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event` (с `--dc` обязателен).
+Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `build-stg-msisdn-*`, `build-move-event`.
 
-Флаг **`--dc`** — для `dq-src-mobile` / `build-stg-event` / `dq-stg-event`: `central` или `far-east` (worker). Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
+Флаг **`--src-bs-path PATH`** — для `build-stg-bs`: входной `src_bs` (по умолчанию `data/src/bs.parquet`).
+
+Флаг **`--oktmo-path PATH`** — для `build-stg-bs`: справочник ОКТМО (по умолчанию `data/stg/oktmo.parquet`).
+
+Флаг **`--time-zones-path PATH`** — для `build-stg-bs`: справочник часовых поясов (по умолчанию `data/stg/time_zones.parquet`).
 
 Флаг **`--event-dds-path PATH`** — для `dq-stg-event` / `build-stg-msisdn-*`: корень `data/stg/event_dds`, каталог `YYYY-MM-DD` или файл `{dc}.parquet`.
 
-Флаг **`--output-path PATH`** — для `build-stg-msisdn-imsi` / `build-stg-msisdn-imei`: выходной Parquet (по умолчанию `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` или `data/stg/msisdn_imei/…`).
+Флаг **`--output-path PATH`** — для `build-stg-msisdn-*` / `build-stg-bs`: выходной Parquet.
+
+Флаг **`--dc`** — для `dq-src-mobile` / `build-stg-event` / `dq-stg-event`: `central` или `far-east`. Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
@@ -93,6 +101,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
 | `build-stg-msisdn-imsi` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
 | `build-stg-msisdn-imei` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
+| `build-stg-bs` | `--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path` | `data/src/bs.parquet`, `data/stg/oktmo.parquet`, `data/stg/time_zones.parquet` | `data/stg/bs.parquet` |
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
 | `build-src-excl` | — | последний `person.parquet` с `_SUCCESS` | `data/src/excl/src_*.parquet` |
@@ -109,6 +118,7 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_move_event.md`](documents/stg/build_move_event.md)
 - [`documents/stg/build_stg_msisdn_imsi.md`](documents/stg/build_stg_msisdn_imsi.md)
 - [`documents/stg/build_stg_msisdn_imei.md`](documents/stg/build_stg_msisdn_imei.md)
+- [`documents/stg/build_stg_bs.md`](documents/stg/build_stg_bs.md)
 - [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
 - [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
@@ -130,6 +140,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/event.py` — `run_dq()`
 - `src/mobile/pipelines/stg/msisdn_imsi.py` — `run_build()`
 - `src/mobile/pipelines/stg/msisdn_imei.py` — `run_build()`
+- `src/mobile/pipelines/stg/bs.py` — `run_build()`
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`

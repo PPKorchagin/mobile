@@ -35,6 +35,7 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-move-event",
         "build-stg-msisdn-imsi",
         "build-stg-msisdn-imei",
+        "build-stg-bs",
     }
 )
 
