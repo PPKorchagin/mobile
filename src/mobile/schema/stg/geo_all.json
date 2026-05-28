@@ -1,0 +1,20 @@
+{
+    "table": "stg_geo_all",
+    "description": "Дневная гео-витрина событий из event_dds, обогащенная координатами и ОКТМО по stg_bs без дозаполнения IMSI/IMEI",
+    "fields": [
+        { "name": "msisdn", "type": "long", "comment": "MSISDN из event_dds" },
+        { "name": "imsi", "type": "long", "comment": "IMSI из event_dds (без binding-fill)" },
+        { "name": "imei", "type": "long", "comment": "IMEI из event_dds (без binding-fill)" },
+        { "name": "start_time_utc", "type": "timestamp", "comment": "UTC время события = event_timestamp - utc_offset" },
+        { "name": "end_time_utc", "type": "timestamp", "comment": "Конец интервала (в текущей версии null)" },
+        { "name": "utc_offset", "type": "int", "comment": "Сдвиг к UTC в часах (как stg_bs.timezone)" },
+        { "name": "lat", "type": "float", "comment": "Широта БС из stg_bs" },
+        { "name": "lon", "type": "float", "comment": "Долгота БС из stg_bs" },
+        { "name": "bs_type", "type": "string", "comment": "Тип БС из stg_bs" },
+        { "name": "cgi", "type": "long", "comment": "CGI: mcc×10¹³ + mnc×10¹¹ + lac×10⁶ + cell" },
+        { "name": "event_count", "type": "int", "comment": "Число исходных событий в группе из event_dds" },
+        { "name": "source_event_type", "type": "string", "comment": "Тип события: cdr/sms/gprs/location" },
+        { "name": "oktmo_code_1", "type": "string", "comment": "ОКТМО уровня 1 из stg_bs" },
+        { "name": "oktmo_code_2", "type": "string", "comment": "ОКТМО уровня 2 из stg_bs" }
+    ]
+}

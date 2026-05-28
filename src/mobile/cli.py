@@ -28,6 +28,7 @@ from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
+from mobile.pipelines.stg import geo_all as stg_geo_all
 from mobile.pipelines.stg import move_event as stg_move_event
 from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
@@ -127,6 +128,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-src-mobile",
     "dq-src-bs",
     "build-stg-event",
+    "build-stg-geo-all",
     "build-move-event",
     "dq-stg-event",
     "build-stg-msisdn-imsi",
@@ -242,6 +244,25 @@ def run_build_stg_bs(
             time_zones_path=tz,
             output_path=out,
         ),
+    )
+
+
+def run_build_stg_geo_all(
+    *,
+    report_date: date | None,
+    event_dds_path: str | None,
+    stg_bs_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-geo-all: дневная geo-витрина из event_dds + stg_bs без binding-fill."""
+    if report_date is None:
+        raise SystemExit("build-stg-geo-all: --report-date is required")
+    dds = Path(event_dds_path) if event_dds_path else None
+    bs = Path(stg_bs_path) if stg_bs_path else None
+    out = Path(output_path) if output_path else None
+    run_timed_command(
+        "build-stg-geo-all",
+        lambda: stg_geo_all.run_build(report_date=report_date, event_dds_path=dds, stg_bs_path=bs, output_path=out),
     )
 
 
@@ -652,7 +673,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all — день",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -673,6 +694,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"build-stg-bs: справочник часовых поясов (по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})",
     )
     parser.add_argument(
+        "--stg-bs-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-geo-all: входной stg_bs parquet (по умолчанию {stg_bs_output_path()})",
+    )
+    parser.add_argument(
         "--mobile-root",
         default=None,
         metavar="PATH",
@@ -683,7 +710,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-event / build-stg-msisdn-*: корень event_dds или каталог/файл дня "
+            f"dq-stg-event / build-stg-msisdn-* / build-stg-geo-all: корень event_dds или каталог/файл дня "
             f"(по умолчанию {DEFAULT_STG_EVENT_DDS_ROOT})"
         ),
     )
@@ -692,9 +719,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs: выходной parquet "
+            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all: выходной parquet "
             f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
-            f"{STG_BS_LAYOUT_TEMPLATE})"
+            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet)"
         ),
     )
     return parser
@@ -742,6 +769,13 @@ def main() -> None:
                     report_date=args.report_date,
                     mobile_root=args.mobile_root,
                 ),
+            )
+        elif args.command == "build-stg-geo-all":
+            run_build_stg_geo_all(
+                report_date=args.report_date,
+                event_dds_path=args.event_dds_path,
+                stg_bs_path=args.stg_bs_path,
+                output_path=args.output_path,
             )
         elif args.command == "dq-stg-event":
             run_timed_command(

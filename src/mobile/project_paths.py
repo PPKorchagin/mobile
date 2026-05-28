@@ -40,9 +40,11 @@ STG_EVENT_LAYOUT_TEMPLATE = "data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.
 STG_EVENT_DDS_LAYOUT_TEMPLATE = "data/stg/event_dds/{report_date}/{source_id}.parquet"
 STG_MSISDN_IMSI_LAYOUT_TEMPLATE = "data/stg/msisdn_imsi/{report_date}.parquet"
 STG_MSISDN_IMEI_LAYOUT_TEMPLATE = "data/stg/msisdn_imei/{report_date}.parquet"
+STG_GEO_ALL_LAYOUT_TEMPLATE = "data/stg/geo_all/{report_date}.parquet"
 STG_BS_LAYOUT_TEMPLATE = "data/stg/bs.parquet"
 DEFAULT_STG_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
 DEFAULT_STG_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
+DEFAULT_STG_GEO_ALL_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "geo_all"
 DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imsi.json"
 DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imei.json"
 DEFAULT_SRC_BS_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "bs.json"
@@ -285,3 +287,8 @@ def stg_msisdn_imei_output_path(day: date) -> Path:
 def stg_bs_output_path() -> Path:
     """``data/stg/bs.parquet``."""
     return PROJECT_ROOT / STG_BS_LAYOUT_TEMPLATE
+
+
+def stg_geo_all_output_path(day: date) -> Path:
+    """``data/stg/geo_all/{YYYY-MM-DD}.parquet``."""
+    return PROJECT_ROOT / STG_GEO_ALL_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
