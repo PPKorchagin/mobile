@@ -29,6 +29,7 @@ from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import geo_all as stg_geo_all
+from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
 from mobile.pipelines.stg import move_event as stg_move_event
 from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
@@ -42,6 +43,7 @@ from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
+    DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
@@ -131,6 +133,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-src-bs",
     "build-stg-event",
     "build-stg-geo-all",
+    "build-stg-geo-intervals",
     "build-move-event",
     "dq-stg-event",
     "dq-stg-geo-all",
@@ -266,6 +269,39 @@ def run_build_stg_geo_all(
     run_timed_command(
         "build-stg-geo-all",
         lambda: stg_geo_all.run_build(report_date=report_date, event_dds_path=dds, stg_bs_path=bs, output_path=out),
+    )
+
+
+def run_build_stg_geo_intervals(
+    *,
+    report_date: date | None,
+    stg_geo_all_path: str | None,
+    stg_bs_path: str | None,
+    time_zones_path: str | None,
+    stg_msisdn_imsi_path: str | None,
+    stg_msisdn_imei_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-geo-intervals: интервалы пребывания из stg_geo_all."""
+    if report_date is None:
+        raise SystemExit("build-stg-geo-intervals: --report-date is required")
+    geo_all = Path(stg_geo_all_path) if stg_geo_all_path else None
+    bs = Path(stg_bs_path) if stg_bs_path else None
+    tz = Path(time_zones_path) if time_zones_path else None
+    imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
+    imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
+    out = Path(output_path) if output_path else None
+    run_timed_command(
+        "build-stg-geo-intervals",
+        lambda: stg_geo_intervals.run_build(
+            report_date=report_date,
+            stg_geo_all_path=geo_all,
+            stg_bs_path=bs,
+            time_zones_path=tz,
+            stg_msisdn_imsi_path=imsi,
+            stg_msisdn_imei_path=imei,
+            output_path=out,
+        ),
     )
 
 
@@ -691,7 +727,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / dq-stg-geo-all — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / dq-stg-geo-all — день",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -709,19 +745,31 @@ def _build_parser() -> argparse.ArgumentParser:
         "--time-zones-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-bs: справочник часовых поясов (по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})",
+        help=f"build-stg-bs / build-stg-geo-intervals: справочник часовых поясов (по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})",
     )
     parser.add_argument(
         "--stg-bs-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-all: входной stg_bs parquet (по умолчанию {stg_bs_output_path()})",
+        help=f"build-stg-geo-all / build-stg-geo-intervals: входной stg_bs parquet (по умолчанию {stg_bs_output_path()})",
     )
     parser.add_argument(
         "--stg-geo-all-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei / dq-stg-geo-all: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+    )
+    parser.add_argument(
+        "--stg-msisdn-imsi-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-geo-intervals: входной stg_msisdn_imsi parquet (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})",
+    )
+    parser.add_argument(
+        "--stg-msisdn-imei-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-geo-intervals: входной stg_msisdn_imei parquet (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})",
     )
     parser.add_argument(
         "--mobile-root",
@@ -743,9 +791,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all: выходной parquet "
+            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals: выходной parquet "
             f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
-            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet)"
+            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet)"
         ),
     )
     return parser
@@ -799,6 +847,16 @@ def main() -> None:
                 report_date=args.report_date,
                 event_dds_path=args.event_dds_path,
                 stg_bs_path=args.stg_bs_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-stg-geo-intervals":
+            run_build_stg_geo_intervals(
+                report_date=args.report_date,
+                stg_geo_all_path=args.stg_geo_all_path,
+                stg_bs_path=args.stg_bs_path,
+                time_zones_path=args.time_zones_path,
+                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
                 output_path=args.output_path,
             )
         elif args.command == "dq-stg-event":
