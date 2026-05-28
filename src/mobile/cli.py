@@ -34,6 +34,7 @@ from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
 from mobile.pipelines.dq.stg import event as dq_stg_event
+from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
 from mobile.pipelines.dq.stg import bs as dq_stg_bs, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
@@ -132,6 +133,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-geo-all",
     "build-move-event",
     "dq-stg-event",
+    "dq-stg-geo-all",
     "build-stg-msisdn-imsi",
     "build-stg-msisdn-imei",
     "build-stg-bs",
@@ -431,6 +433,21 @@ def run_dq_stg_event(
     logger.info("dq-stg-event completed successfully")
 
 
+def run_dq_stg_geo_all(
+    *,
+    report_date: date | None,
+    stg_geo_all_path: str | None,
+) -> None:
+    """DQ ``stg_geo_all`` за день (read-only проверки)."""
+    if report_date is None:
+        raise SystemExit("dq-stg-geo-all: --report-date is required")
+    path = Path(stg_geo_all_path) if stg_geo_all_path else None
+    run_timed_command(
+        "dq-stg-geo-all",
+        lambda: dq_stg_geo_all.run_dq(report_date=report_date, stg_geo_all_path=path),
+    )
+
+
 def run_dq_src_mobile(
     *,
     datacenter: str | None,
@@ -674,7 +691,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / dq-stg-geo-all — день",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -704,7 +721,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-geo-all-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei / dq-stg-geo-all: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
     )
     parser.add_argument(
         "--mobile-root",
@@ -792,6 +809,11 @@ def main() -> None:
                     report_date=args.report_date,
                     event_dds_path=args.event_dds_path,
                 ),
+            )
+        elif args.command == "dq-stg-geo-all":
+            run_dq_stg_geo_all(
+                report_date=args.report_date,
+                stg_geo_all_path=args.stg_geo_all_path,
             )
         elif args.command == "build-stg-msisdn-imsi":
             run_build_stg_binding(
