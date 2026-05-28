@@ -21,6 +21,7 @@ uv run mobile build-stg-tac
 uv run mobile dq-stg-oktmo
 uv run mobile dq-stg-time-zones
 uv run mobile dq-stg-tac
+uv run mobile dq-stg-bs
 uv run mobile build-src-bs
 uv run mobile build-src-person
 uv run mobile build-src-excl
@@ -53,6 +54,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-oktmo` | DQ `data/stg/oktmo.parquet` — схема, иерархия, WKT ([checks](documents/dq/stg/dq_stg_oktmo.md#проверки)) |
 | `dq-stg-time-zones` | DQ `data/stg/time_zones.parquet` — timezone, geometry ([checks](documents/dq/stg/dq_stg_time_zones.md#проверки)) |
 | `dq-stg-tac` | DQ `data/stg/tac.parquet` — TAC, M2M ([checks](documents/dq/stg/dq_stg_tac.md#проверки)) |
+| `dq-stg-bs` | DQ `data/stg/bs.parquet` — ключи, интервалы, координаты, геометрия ([checks](documents/dq/stg/dq_stg_bs.md#проверки)) |
 | `build-src-bs` | ОКТМО + профиль → `data/src/bs.parquet` |
 | `build-src-person` | Суточные срезы → `data/src/person/...` |
 | `build-src-excl` | Списки IMSI/IMEI/MSISDN из последнего full snapshot person |
@@ -95,6 +97,7 @@ uv run mobile nb-perf-metrics
 | `dq-stg-oktmo` | — | `data/stg/oktmo.parquet` | логи + `command_timing.jsonl` |
 | `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
 | `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
+| `dq-stg-bs` | — | `data/stg/bs.parquet` | логи + timing |
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-move-event` | `--report-date` | `data/stg/event/.../events.parquet` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` |
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
@@ -122,6 +125,7 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
 - [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
+- [`documents/dq/stg/dq_stg_bs.md`](documents/dq/stg/dq_stg_bs.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
 - [`documents/dq/stg/dq_stg_event.md`](documents/dq/stg/dq_stg_event.md)
 - [`documents/src/build_src_bs.md`](documents/src/build_src_bs.md)
@@ -144,6 +148,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/bs.py` — `run_dq()`
 - `src/mobile/pipelines/dq/src/mobile.py` — `run_dq(dc, report_date, cdr_path, …)`
 - `src/mobile/pipelines/src/bs.py` — `run()`
 - `src/mobile/pipelines/src/person.py` — `run()`

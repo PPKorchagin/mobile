@@ -32,7 +32,7 @@ from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
 from mobile.pipelines.dq.stg import event as dq_stg_event
-from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.dq.stg import bs as dq_stg_bs, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
@@ -52,6 +52,7 @@ from mobile.project_paths import (
     mobile_datacenter_root,
     mobile_mart_paths,
     resolve_oktmo_layout,
+    stg_bs_output_path,
     stg_event_dds_output_path,
 )
 
@@ -105,6 +106,10 @@ _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
     "dq-stg-tac": (
         lambda: dq_tac.run_dq(DEFAULT_STG_TAC_OUTPUT_PATH),
         str(DEFAULT_STG_TAC_OUTPUT_PATH),
+    ),
+    "dq-stg-bs": (
+        lambda: dq_stg_bs.run_dq(stg_bs_output_path()),
+        str(stg_bs_output_path()),
     ),
 }
 
