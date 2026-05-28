@@ -10,7 +10,7 @@
 
 | # | Задача | Результат |
 |---|--------|-----------|
-| 1 | Прочитать `event_dds` за `report_date` (все ЦОД) | DataFrame событий |
+| 1 | Прочитать `stg_geo_all` за `report_date` | DataFrame событий |
 | 2 | Нормализовать MSISDN и IMEI, отфильтровать валидные пары | События с `msisdn`, `imei`, `event_ts` |
 | 3 | Построить интервалы по смене IMEI на MSISDN | `valid_from` / `valid_to` |
 | 4 | Записать витрину в Parquet | Файл `output_path` |
@@ -35,16 +35,17 @@
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
 | `report_date` | date | Да* | — | Отчётный день |
-| `event_dds_path` | string (path) | Нет | `data/stg/event_dds` | Корень DDS, каталог дня или файл |
+| `stg_geo_all_path` | string (path) | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной `stg_geo_all` parquet или каталог `data/stg/geo_all` |
 | `output_path` | string (path) | Нет | `data/stg/msisdn_imei/{report_date}.parquet` | Выходной Parquet (перезапись) |
 
 \* Без `--report-date` — цикл дней из [`cli_defaults.py`](../../src/mobile/cli_defaults.py).
 
-**Предусловие:** `build-move-event` за ту же `report_date`.
+**Предусловие:** `build-stg-geo-all` за ту же `report_date`.
 
 ```bash
 uv run mobile build-stg-msisdn-imei --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imei --report-date 2025-01-01 \
+  --stg-geo-all-path data/stg/geo_all \
   --output-path data/stg/msisdn_imei/2025-01-01.parquet
 ```
 
@@ -74,7 +75,7 @@ uv run mobile build-stg-msisdn-imei --report-date 2025-01-01 \
 | `msisdn` | Только цифры; RU 10→`7…`, `8XXXXXXXXXX`→`7…`; иностранные 7–15 цифр |
 | `imei` | 14–16 цифр |
 
-Время интервалов — локальное из `event_timestamp` (как в `event_dds`).
+Время интервалов — UTC из `stg_geo_all.start_time_utc`.
 
 ---
 
@@ -91,4 +92,4 @@ uv run mobile build-stg-msisdn-imei --report-date 2025-01-01 \
 | Схема | [`src/mobile/schema/stg/msisdn_imei.json`](../../src/mobile/schema/stg/msisdn_imei.json) |
 | ETL | [`src/mobile/pipelines/stg/msisdn_imei.py`](../../src/mobile/pipelines/stg/msisdn_imei.py) |
 | MSISDN–IMSI | [`build_stg_msisdn_imsi.md`](./build_stg_msisdn_imsi.md) |
-| event_dds | [`build_move_event.md`](./build_move_event.md) |
+| stg_geo_all | [`build_stg_geo_all.md`](./build_stg_geo_all.md) |

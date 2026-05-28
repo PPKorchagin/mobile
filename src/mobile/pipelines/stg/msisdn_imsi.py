@@ -1,4 +1,4 @@
-"""Сборка ``stg_msisdn_imsi``: интервалы MSISDN–IMSI из ``event_dds`` за отчётный день."""
+"""Сборка ``stg_msisdn_imsi``: интервалы MSISDN–IMSI из ``stg_geo_all`` за отчётный день."""
 
 from __future__ import annotations
 
@@ -13,12 +13,11 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.pipelines.stg.event_dds_reader import parse_event_timestamps, read_event_dds_for_report_date
 from mobile.pipelines.stg.subscriber_ids import normalize_imsi, normalize_msisdn
 from mobile.project_paths import (
-    DEFAULT_STG_EVENT_DDS_ROOT,
     DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH,
     resolve_project_path,
+    stg_geo_all_output_path,
     stg_msisdn_imsi_output_path,
 )
 
@@ -50,7 +49,7 @@ _load_schema_contract(DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH)
 def run_build(
     report_date: date,
     *,
-    event_dds_path: str | Path | None = None,
+    stg_geo_all_path: str | Path | None = None,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Собрать ``stg_msisdn_imsi`` за ``report_date``."""
@@ -62,7 +61,7 @@ def run_build(
     return _run_build(
         command="build-stg-msisdn-imsi",
         report_date=report_date,
-        event_dds_path=event_dds_path,
+        stg_geo_all_path=stg_geo_all_path,
         output_path=out,
         value_col=_PAIR_VALUE_COL,
         normalize_value=normalize_imsi,
@@ -73,7 +72,7 @@ def _run_build(
     *,
     command: str,
     report_date: date,
-    event_dds_path: str | Path | None,
+    stg_geo_all_path: str | Path | None,
     output_path: Path,
     value_col: str,
     normalize_value: Callable[[pd.Series | None], pd.Series],
@@ -83,9 +82,10 @@ def _run_build(
     day_start = datetime.combine(report_date, datetime.min.time())
     day_end = datetime.combine(report_date, datetime.max.time())
     field_names = [f["name"] for f in STG_MSISDN_IMSI_FIELDS]
+    source_path = _resolve_geo_all_source_path(report_date, stg_geo_all_path)
 
     with timed_stage("read_events_sec", perf):
-        raw = read_event_dds_for_report_date(report_date, event_dds_path)
+        raw = _read_geo_all(report_date, source_path)
 
     with timed_stage("prepare_events_sec", perf):
         events = _prepare_pair_events(raw, value_col=value_col, normalize_value=normalize_value)
@@ -107,9 +107,9 @@ def _run_build(
         "command": command,
         "table": STG_MSISDN_IMSI_TABLE,
         "report_date": report_date.isoformat(),
-        "event_dds_path": str(resolve_project_path(event_dds_path or DEFAULT_STG_EVENT_DDS_ROOT)),
+        "stg_geo_all_path": str(source_path),
         "output_path": str(output_path),
-        "event_rows_read": int(len(raw)),
+        "geo_rows_read": int(len(raw)),
         "event_rows_with_pair": int(len(events)),
         "interval_rows": int(len(result)),
         "distinct_msisdn": int(result["msisdn"].nunique()) if not result.empty else 0,
@@ -130,11 +130,31 @@ def _prepare_pair_events(
         return pd.DataFrame(columns=["msisdn", value_col, "event_ts"])
 
     work = raw.copy()
-    work["event_ts"] = parse_event_timestamps(work["event_timestamp"])
+    work["event_ts"] = pd.to_datetime(work.get("start_time_utc"), errors="coerce")
     work["msisdn"] = normalize_msisdn(work.get("msisdn"))
     work[value_col] = normalize_value(work.get(value_col))
     work = work[work["msisdn"].notna() & work[value_col].notna() & work["event_ts"].notna()]
     return work[["msisdn", value_col, "event_ts"]].reset_index(drop=True)
+
+
+def _resolve_geo_all_source_path(report_date: date, source_path: str | Path | None) -> Path:
+    if source_path is None:
+        return stg_geo_all_output_path(report_date)
+    resolved = resolve_project_path(source_path)
+    if resolved.is_dir():
+        return resolved / f"{report_date.isoformat()}.parquet"
+    return resolved
+
+
+def _read_geo_all(report_date: date, source_path: Path) -> pd.DataFrame:
+    if not source_path.exists():
+        logger.warning("build-stg-msisdn-imsi: stg_geo_all not found for %s at %s", report_date, source_path)
+        return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
+    try:
+        return pd.read_parquet(source_path, columns=["msisdn", "imsi", "start_time_utc"])
+    except Exception:
+        logger.exception("build-stg-msisdn-imsi: failed to read stg_geo_all at %s", source_path)
+        return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
 
 
 def _build_temporal_intervals(

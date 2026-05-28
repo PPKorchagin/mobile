@@ -40,6 +40,7 @@ from mobile.pipelines.stg import oktmo, tac, time_zones
 from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
+    DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
@@ -190,18 +191,18 @@ def run_build_stg_binding(
     command: str,
     *,
     report_date: date | None,
-    event_dds_path: str | None,
+    stg_geo_all_path: str | None,
     output_path: str | None,
     runner: Callable[..., dict],
 ) -> None:
     """build-stg-msisdn-imsi / build-stg-msisdn-imei: один день или цикл DEFAULT_SRC_START_DATE..END."""
-    dds = Path(event_dds_path) if event_dds_path else None
+    geo_all = Path(stg_geo_all_path) if stg_geo_all_path else None
     out = Path(output_path) if output_path else None
 
     if report_date is not None:
         run_timed_command(
             command,
-            lambda: runner(report_date=report_date, event_dds_path=dds, output_path=out),
+            lambda: runner(report_date=report_date, stg_geo_all_path=geo_all, output_path=out),
         )
         return
 
@@ -218,7 +219,7 @@ def run_build_stg_binding(
     for day in days:
         run_timed_command(
             f"{command}-{day.isoformat()}",
-            lambda d=day: runner(report_date=d, event_dds_path=dds, output_path=out),
+            lambda d=day: runner(report_date=d, stg_geo_all_path=geo_all, output_path=out),
         )
     logger.info("%s completed successfully", command)
 
@@ -700,6 +701,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"build-stg-geo-all: входной stg_bs parquet (по умолчанию {stg_bs_output_path()})",
     )
     parser.add_argument(
+        "--stg-geo-all-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+    )
+    parser.add_argument(
         "--mobile-root",
         default=None,
         metavar="PATH",
@@ -710,7 +717,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-event / build-stg-msisdn-* / build-stg-geo-all: корень event_dds или каталог/файл дня "
+            f"dq-stg-event / build-stg-geo-all: корень event_dds или каталог/файл дня "
             f"(по умолчанию {DEFAULT_STG_EVENT_DDS_ROOT})"
         ),
     )
@@ -790,7 +797,7 @@ def main() -> None:
             run_build_stg_binding(
                 "build-stg-msisdn-imsi",
                 report_date=args.report_date,
-                event_dds_path=args.event_dds_path,
+                stg_geo_all_path=args.stg_geo_all_path,
                 output_path=args.output_path,
                 runner=stg_msisdn_imsi.run_build,
             )
@@ -798,7 +805,7 @@ def main() -> None:
             run_build_stg_binding(
                 "build-stg-msisdn-imei",
                 report_date=args.report_date,
-                event_dds_path=args.event_dds_path,
+                stg_geo_all_path=args.stg_geo_all_path,
                 output_path=args.output_path,
                 runner=stg_msisdn_imei.run_build,
             )

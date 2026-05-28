@@ -67,8 +67,8 @@ uv run mobile nb-perf-metrics
 | `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
 | `dq-src-bs` | DQ всей витрины `src_bs`: распределения, кросс-распределения, контрактные проверки ([checks](documents/dq/src/dq_src_bs.md#проверки), логи `DQ_SRC_BS`) |
 | `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
-| `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
-| `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
+| `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
+| `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
 | `build-stg-bs` | Полный `src_bs` + SCD-merge → `stg_bs` ([doc](documents/stg/build_stg_bs.md)) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
 
@@ -86,7 +86,9 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--time-zones-path PATH`** — для `build-stg-bs`: справочник часовых поясов (по умолчанию `data/stg/time_zones.parquet`).
 
-Флаг **`--event-dds-path PATH`** — для `dq-stg-event` / `build-stg-msisdn-*`: корень `data/stg/event_dds`, каталог `YYYY-MM-DD` или файл `{dc}.parquet`.
+Флаг **`--event-dds-path PATH`** — для `dq-stg-event` / `build-stg-geo-all`: корень `data/stg/event_dds`, каталог `YYYY-MM-DD` или файл `{dc}.parquet`.
+
+Флаг **`--stg-geo-all-path PATH`** — для `build-stg-msisdn-*`: входной `stg_geo_all` parquet или каталог `data/stg/geo_all`.
 
 Флаг **`--output-path PATH`** — для `build-stg-msisdn-*` / `build-stg-bs` / `build-stg-geo-all`: выходной Parquet.
 
@@ -108,8 +110,8 @@ uv run mobile nb-perf-metrics
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
 | `dq-src-bs` | `--src-bs-path` | `data/src/bs.parquet` | логи `DQ_SRC_BS` + timing |
 | `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
-| `build-stg-msisdn-imsi` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
-| `build-stg-msisdn-imei` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
+| `build-stg-msisdn-imsi` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
+| `build-stg-msisdn-imei` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
 | `build-stg-bs` | `--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path` | `data/src/bs.parquet`, `data/stg/oktmo.parquet`, `data/stg/time_zones.parquet` | `data/stg/bs.parquet` |
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |

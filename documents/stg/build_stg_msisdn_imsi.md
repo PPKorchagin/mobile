@@ -10,14 +10,14 @@
 
 | # | Задача | Результат |
 |---|--------|-----------|
-| 1 | Прочитать `event_dds` за `report_date` (все ЦОД) | DataFrame событий |
+| 1 | Прочитать `stg_geo_all` за `report_date` | DataFrame событий |
 | 2 | Нормализовать MSISDN и IMSI, отфильтровать валидные пары | События с `msisdn`, `imsi`, `event_ts` |
 | 3 | Построить интервалы по смене IMSI на MSISDN | `valid_from` / `valid_to` |
 | 4 | Записать витрину в Parquet | Файл `output_path` |
 
 **Бизнес-назначение:** для любого момента внутри суток знать, какой IMSI был привязан к MSISDN по фактическим событиям (без синтетических разрывов).
 
-**В scope задач:** чтение DDS, нормализация идентификаторов, построение интервалов, запись Parquet. Объединение с историей за другие дни **не входит** — один файл на `report_date`.
+**В scope задач:** чтение `stg_geo_all`, нормализация идентификаторов, построение интервалов, запись Parquet. Объединение с историей за другие дни **не входит** — один файл на `report_date`.
 
 ---
 
@@ -35,7 +35,7 @@
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
 | `report_date` | date | Да* | — | Отчётный день (сутки по локальному `event_timestamp`) |
-| `event_dds_path` | string (path) | Нет | `data/stg/event_dds` | Корень DDS, каталог `YYYY-MM-DD` или один `.parquet` |
+| `stg_geo_all_path` | string (path) | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной `stg_geo_all` parquet или каталог `data/stg/geo_all` |
 | `output_path` | string (path) | Нет | `data/stg/msisdn_imsi/{report_date}.parquet` | Выходной Parquet (перезапись) |
 
 \* Без `--report-date` в CLI — цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)); на каждый день отдельный timed-run и свой `output_path` по шаблону.
@@ -50,14 +50,14 @@
 | `STG_MSISDN_IMSI_FIELDS` | порядок и типы колонок |
 | `DEFAULT_PARQUET_COMPRESSION` | `snappy` ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
 
-**Предусловие:** `build-move-event` за ту же `report_date` (файлы в `data/stg/event_dds/{YYYY-MM-DD}/`).
+**Предусловие:** `build-stg-geo-all` за ту же `report_date` (файл `data/stg/geo_all/{YYYY-MM-DD}.parquet`).
 
 Локальный запуск:
 
 ```bash
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
-  --event-dds-path data/stg/event_dds \
+  --stg-geo-all-path data/stg/geo_all \
   --output-path data/stg/msisdn_imsi/2025-01-01.parquet
 ```
 
@@ -93,10 +93,10 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 
 | Атрибут | Значение |
 |---------|----------|
-| Слой | `event_dds` после [`build-move-event`](./build_move_event.md) |
-| Путь | `data/stg/event_dds/{YYYY-MM-DD}/{central\|far-east}.parquet` (параметр `event_dds_path`) |
-| Чтение | [`event_dds_reader.read_event_dds_for_report_date`](../../src/mobile/pipelines/stg/event_dds_reader.py) — все файлы дня |
-| Колонки | `event_timestamp`, `msisdn`, `imsi` (остальные не используются) |
+| Слой | `stg_geo_all` после [`build-stg-geo-all`](./build_stg_geo_all.md) |
+| Путь | `data/stg/geo_all/{YYYY-MM-DD}.parquet` (или каталог через `stg_geo_all_path`) |
+| Чтение | Прямой `pd.read_parquet(...)` |
+| Колонки | `start_time_utc`, `msisdn`, `imsi` |
 
 ---
 
@@ -109,11 +109,11 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 
 ### Шаг 1. Чтение источника
 
-`read_event_dds_for_report_date(report_date, event_dds_path)` → объединение Parquet всех ЦОД за день.
+Чтение `stg_geo_all` за `report_date` из `stg_geo_all_path` (файл или каталог).
 
 ### Шаг 2. Подготовка событий
 
-1. `event_ts` ← парсинг `event_timestamp` ([`parse_event_timestamps`](../../src/mobile/pipelines/stg/event_dds_reader.py)).
+1. `event_ts` ← `start_time_utc`.
 2. `msisdn` ← [`normalize_msisdn`](../../src/mobile/pipelines/stg/subscriber_ids.py).
 3. `imsi` ← [`normalize_imsi`](../../src/mobile/pipelines/stg/subscriber_ids.py).
 4. Оставить строки, где все три поля не null.
@@ -135,7 +135,7 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 
 | Ошибка | Причина |
 |--------|---------|
-| `FileNotFoundError` | Нет файлов `event_dds` за день |
+| Пустой вход | Нет `stg_geo_all` за день или файл не читается |
 | Пустой выход | Нет валидных пар MSISDN–IMSI за день |
 
 ---
@@ -147,7 +147,6 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 | Схема витрины | [`src/mobile/schema/stg/msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json) |
 | ETL | [`src/mobile/pipelines/stg/msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py) |
 | Нормализация ID | [`src/mobile/pipelines/stg/subscriber_ids.py`](../../src/mobile/pipelines/stg/subscriber_ids.py) |
-| Чтение DDS | [`src/mobile/pipelines/stg/event_dds_reader.py`](../../src/mobile/pipelines/stg/event_dds_reader.py) |
 | Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | MSISDN–IMEI | [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md) |
-| event_dds | [`build_move_event.md`](./build_move_event.md) |
+| stg_geo_all | [`build_stg_geo_all.md`](./build_stg_geo_all.md) |
