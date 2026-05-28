@@ -21,6 +21,13 @@
 
 ---
 
+## TODO
+
+1. Добавить динамические пороги для `warning/failed` по историческим baseline.
+2. Расширить распределения по `utc_offset` и `event_count` bucket-профилем.
+
+---
+
 ## Параметры запуска
 
 Вызов: `run_dq(report_date, stg_geo_all_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-geo-all`).
@@ -42,22 +49,47 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 ---
 
+## Структура проверяемой витрины
+
+| Свойство | Значение |
+|----------|----------|
+| Путь по умолчанию | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
+| Формат | Parquet |
+| Контракт полей | [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
+| Проверяемый слой | Дневной STG geo-срез |
+
+---
+
+## Источники
+
+| # | Источник | Путь | Назначение |
+|---|----------|------|------------|
+| 1 | `stg_geo_all` parquet | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Вход для DQ-профиля и gate-checks |
+
+---
+
 ## Алгоритм обработки данных
 
 ### Шаг 0. Инициализация
 
 1. Определить путь к parquet (`stg_geo_all_output_path(report_date)` или `--stg-geo-all-path`).
 2. Если передан каталог, взять файл `{report_date}.parquet`.
+3. Инициализировать счетчики `total/warning/failed` и правила gate-статусов.
 
 ### Шаг 1. Наличие набора
 
-Если файл отсутствует → `dataset_presence` = `failed`, сразу `summary`.
+1. Проверить существование файла.
+2. Если файл отсутствует:
+   - записать `dataset_presence=failed`,
+   - сформировать `summary`,
+   - вернуть статус без дальнейших шагов.
 
 ### Шаг 2. Базовый профиль
 
 1. `dataset_basic`: число строк/колонок, путь.
 2. `schema_columns`: обязательные поля витрины.
 3. Для каждого поля контракта: `nulls.<field>` и `cardinality.<field>`.
+4. На этом шаге формируется базовый профиль распределения заполненности набора.
 
 ### Шаг 3. Gate-проверки
 
@@ -66,12 +98,26 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 3. `temporal_order`: `end_time_utc >= start_time_utc` (если `end_time_utc` не null).
 4. `event_count_valid`: `event_count >= 1`.
 5. `source_event_type_vocab`: допустимые значения `cdr/sms/gprs/location`.
-6. `utc_offset_range`: разумный диапазон `[-12, 14]`.
-7. `duplicate_event_key`: дубликаты по ключу `msisdn + start_time_utc + source_event_type + cgi`.
+6. `distribution.source_event_type`: операционный профиль типов событий.
+7. `utc_offset_range`: разумный диапазон `[-12, 14]`.
+8. `duplicate_event_key`: дубликаты по ключу `msisdn + start_time_utc + source_event_type + cgi`.
 
 ### Шаг 4. Итог
 
-`summary` с `total_checks`, `warning_checks`, `failed_checks`.
+1. Сформировать `summary` с `total_checks`, `warning_checks`, `failed_checks`.
+2. Вернуть общий статус:
+   - `failed` при наличии failed-checks,
+   - `warning` при отсутствии failed и наличии warning,
+   - `ok` при полном прохождении checks.
+
+### Типовые ошибки
+
+| Ошибка/ситуация | Поведение |
+|-----------------|-----------|
+| Нет parquet за `report_date` | `dataset_presence=failed` |
+| Неполный контракт колонок | `schema_columns=failed` |
+| Неожиданные типы `source_event_type` | `source_event_type_vocab=failed` |
+| Координаты вне диапазонов | `coords_range=warning` |
 
 ---
 
