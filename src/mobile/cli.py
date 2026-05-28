@@ -25,6 +25,7 @@ from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
+from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import move_event as stg_move_event
@@ -124,6 +125,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-src-excl",
     "build-src-mobile",
     "dq-src-mobile",
+    "dq-src-bs",
     "build-stg-event",
     "build-move-event",
     "dq-stg-event",
@@ -465,6 +467,18 @@ def run_dq_src_mobile(
     logger.info("dq-src-mobile completed successfully")
 
 
+def run_dq_src_bs(
+    *,
+    src_bs_path: str | None,
+) -> None:
+    """DQ полной витрины src_bs с акцентом на распределения."""
+    parquet_path = Path(src_bs_path) if src_bs_path else DEFAULT_BS_LAYOUT
+    run_timed_command(
+        "dq-src-bs",
+        lambda: dq_src_bs.run_dq(parquet_path=parquet_path),
+    )
+
+
 def build_stg_day(*, day: date | None = None) -> None:
     params = default_build_stg_day_params(day)
     logger.info(
@@ -644,7 +658,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--src-bs-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
+        help=f"build-stg-bs / dq-src-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
     )
     parser.add_argument(
         "--oktmo-path",
@@ -713,6 +727,10 @@ def main() -> None:
                     report_date=args.report_date,
                     mobile_root=args.mobile_root,
                 ),
+            )
+        elif args.command == "dq-src-bs":
+            run_dq_src_bs(
+                src_bs_path=args.src_bs_path,
             )
         elif args.command == "build-move-event":
             run_build_move_event(report_date=args.report_date)

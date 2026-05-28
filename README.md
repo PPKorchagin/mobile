@@ -30,6 +30,7 @@ uv run mobile build-stg-event
 uv run mobile build-stg-event --dc central --report-date 2025-01-01
 uv run mobile build-move-event --report-date 2025-01-01
 uv run mobile dq-src-mobile
+uv run mobile dq-src-bs
 uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
 uv run mobile dq-stg-event --dc central --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01
@@ -62,6 +63,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | CDR/SMS/GPRS/location → `data/stg/event/.../events.parquet` ([doc](documents/stg/build_stg_event.md)); фильтр по `Started`, сортировка по абоненту, сжатие 5m |
 | `build-move-event` | `stg/event/{dc}` → `stg/event_dds/{date}/{dc}.parquet` ([doc](documents/stg/build_move_event.md)) |
 | `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
+| `dq-src-bs` | DQ всей витрины `src_bs`: распределения, кросс-распределения, контрактные проверки ([checks](documents/dq/src/dq_src_bs.md#проверки), логи `DQ_SRC_BS`) |
 | `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
 | `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
 | `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `event_dds` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
@@ -76,7 +78,7 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `build-stg-msisdn-*`, `build-move-event`.
 
-Флаг **`--src-bs-path PATH`** — для `build-stg-bs`: входной `src_bs` (по умолчанию `data/src/bs.parquet`).
+Флаг **`--src-bs-path PATH`** — для `build-stg-bs` / `dq-src-bs`: входной `src_bs` (по умолчанию `data/src/bs.parquet`).
 
 Флаг **`--oktmo-path PATH`** — для `build-stg-bs`: справочник ОКТМО (по умолчанию `data/stg/oktmo.parquet`).
 
@@ -101,6 +103,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-move-event` | `--report-date` | `data/stg/event/.../events.parquet` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` |
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
+| `dq-src-bs` | `--src-bs-path` | `data/src/bs.parquet` | логи `DQ_SRC_BS` + timing |
 | `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
 | `build-stg-msisdn-imsi` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
 | `build-stg-msisdn-imei` | `--report-date`, `--event-dds-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
@@ -127,6 +130,7 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
 - [`documents/dq/stg/dq_stg_bs.md`](documents/dq/stg/dq_stg_bs.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
+- [`documents/dq/src/dq_src_bs.md`](documents/dq/src/dq_src_bs.md)
 - [`documents/dq/stg/dq_stg_event.md`](documents/dq/stg/dq_stg_event.md)
 - [`documents/src/build_src_bs.md`](documents/src/build_src_bs.md)
 - [`documents/src/build_src_person.md`](documents/src/build_src_person.md)
@@ -150,6 +154,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/bs.py` — `run_dq()`
 - `src/mobile/pipelines/dq/src/mobile.py` — `run_dq(dc, report_date, cdr_path, …)`
+- `src/mobile/pipelines/dq/src/bs.py` — `run_dq(parquet_path)`
 - `src/mobile/pipelines/src/bs.py` — `run()`
 - `src/mobile/pipelines/src/person.py` — `run()`
 - `src/mobile/pipelines/src/excl.py` — `run()`
