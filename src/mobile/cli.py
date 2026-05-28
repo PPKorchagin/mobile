@@ -35,6 +35,7 @@ from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
 from mobile.pipelines.dq.stg import event as dq_stg_event
+from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
 from mobile.pipelines.dq.stg import bs as dq_stg_bs, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
@@ -137,6 +138,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-move-event",
     "dq-stg-event",
     "dq-stg-geo-all",
+    "dq-stg-geo-intervals",
     "build-stg-msisdn-imsi",
     "build-stg-msisdn-imei",
     "build-stg-bs",
@@ -484,6 +486,21 @@ def run_dq_stg_geo_all(
     )
 
 
+def run_dq_stg_geo_intervals(
+    *,
+    report_date: date | None,
+    stg_geo_intervals_path: str | None,
+) -> None:
+    """DQ ``stg_geo_intervals`` за день (read-only проверки)."""
+    if report_date is None:
+        raise SystemExit("dq-stg-geo-intervals: --report-date is required")
+    path = Path(stg_geo_intervals_path) if stg_geo_intervals_path else None
+    run_timed_command(
+        "dq-stg-geo-intervals",
+        lambda: dq_stg_geo_intervals.run_dq(report_date=report_date, stg_geo_intervals_path=path),
+    )
+
+
 def run_dq_src_mobile(
     *,
     datacenter: str | None,
@@ -727,7 +744,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / dq-stg-geo-all — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / dq-stg-geo-all / dq-stg-geo-intervals — день",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -758,6 +775,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+    )
+    parser.add_argument(
+        "--stg-geo-intervals-path",
+        default=None,
+        metavar="PATH",
+        help=f"dq-stg-geo-intervals: входной stg_geo_intervals parquet или каталог (по умолчанию {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT})",
     )
     parser.add_argument(
         "--stg-msisdn-imsi-path",
@@ -872,6 +895,11 @@ def main() -> None:
             run_dq_stg_geo_all(
                 report_date=args.report_date,
                 stg_geo_all_path=args.stg_geo_all_path,
+            )
+        elif args.command == "dq-stg-geo-intervals":
+            run_dq_stg_geo_intervals(
+                report_date=args.report_date,
+                stg_geo_intervals_path=args.stg_geo_intervals_path,
             )
         elif args.command == "build-stg-msisdn-imsi":
             run_build_stg_binding(

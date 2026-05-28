@@ -36,6 +36,7 @@ uv run mobile dq-src-bs
 uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
 uv run mobile dq-stg-event --dc central --report-date 2025-01-01
 uv run mobile dq-stg-geo-all --report-date 2025-01-01
+uv run mobile dq-stg-geo-intervals --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01
 uv run mobile build-stg-msisdn-imei --report-date 2025-01-01
 uv run mobile build-stg-bs
@@ -71,6 +72,7 @@ uv run mobile nb-perf-metrics
 | `dq-src-bs` | DQ всей витрины `src_bs`: распределения, кросс-распределения, контрактные проверки ([checks](documents/dq/src/dq_src_bs.md#проверки), логи `DQ_SRC_BS`) |
 | `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
 | `dq-stg-geo-all` | DQ `stg_geo_all` за день (`schema/nulls/ranges/distribution`) ([checks](documents/dq/stg/dq_stg_geo_all.md#проверки), логи `DQ_STG_GEO_ALL`) |
+| `dq-stg-geo-intervals` | DQ `stg_geo_intervals` за день (`schema/nulls/ranges/cgi_list/key`) ([checks](documents/dq/stg/dq_stg_geo_intervals.md#проверки), логи `DQ_STG_GEO_INTERVALS`) |
 | `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
 | `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
 | `build-stg-bs` | Полный `src_bs` + SCD-merge → `stg_bs` ([doc](documents/stg/build_stg_bs.md)) |
@@ -82,7 +84,7 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
-Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `dq-stg-geo-all`, `build-stg-msisdn-*`, `build-stg-geo-intervals`, `build-move-event`.
+Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `dq-stg-geo-all`, `dq-stg-geo-intervals`, `build-stg-msisdn-*`, `build-stg-geo-intervals`, `build-move-event`.
 
 Флаг **`--src-bs-path PATH`** — для `build-stg-bs` / `dq-src-bs`: входной `src_bs` (по умолчанию `data/src/bs.parquet`).
 
@@ -93,6 +95,8 @@ uv run mobile nb-perf-metrics
 Флаг **`--event-dds-path PATH`** — для `dq-stg-event` / `build-stg-geo-all`: корень `data/stg/event_dds`, каталог `YYYY-MM-DD` или файл `{dc}.parquet`.
 
 Флаг **`--stg-geo-all-path PATH`** — для `build-stg-msisdn-*` / `build-stg-geo-intervals` / `dq-stg-geo-all`: входной `stg_geo_all` parquet или каталог `data/stg/geo_all`.
+
+Флаг **`--stg-geo-intervals-path PATH`** — для `dq-stg-geo-intervals`: входной `stg_geo_intervals` parquet или каталог `data/stg/geo_intervals`.
 
 Флаг **`--stg-msisdn-imsi-path PATH`** — для `build-stg-geo-intervals`: входной `stg_msisdn_imsi` parquet (fill `imsi`).
 
@@ -120,6 +124,7 @@ uv run mobile nb-perf-metrics
 | `dq-src-bs` | `--src-bs-path` | `data/src/bs.parquet` | логи `DQ_SRC_BS` + timing |
 | `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
 | `dq-stg-geo-all` | `--report-date`, `--stg-geo-all-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | логи `DQ_STG_GEO_ALL` + timing |
+| `dq-stg-geo-intervals` | `--report-date`, `--stg-geo-intervals-path` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` | логи `DQ_STG_GEO_INTERVALS` + timing |
 | `build-stg-msisdn-imsi` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
 | `build-stg-msisdn-imei` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
 | `build-stg-bs` | `--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path` | `data/src/bs.parquet`, `data/stg/oktmo.parquet`, `data/stg/time_zones.parquet` | `data/stg/bs.parquet` |
@@ -147,6 +152,7 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
 - [`documents/dq/stg/dq_stg_bs.md`](documents/dq/stg/dq_stg_bs.md)
 - [`documents/dq/stg/dq_stg_geo_all.md`](documents/dq/stg/dq_stg_geo_all.md)
+- [`documents/dq/stg/dq_stg_geo_intervals.md`](documents/dq/stg/dq_stg_geo_intervals.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
 - [`documents/dq/src/dq_src_bs.md`](documents/dq/src/dq_src_bs.md)
 - [`documents/dq/stg/dq_stg_event.md`](documents/dq/stg/dq_stg_event.md)
@@ -174,6 +180,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/bs.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/geo_all.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/geo_intervals.py` — `run_dq()`
 - `src/mobile/pipelines/dq/src/mobile.py` — `run_dq(dc, report_date, cdr_path, …)`
 - `src/mobile/pipelines/dq/src/bs.py` — `run_dq(parquet_path)`
 - `src/mobile/pipelines/src/bs.py` — `run()`
