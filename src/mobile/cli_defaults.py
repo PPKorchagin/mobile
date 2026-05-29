@@ -9,7 +9,7 @@ from functools import lru_cache
 
 import pandas as pd
 
-from mobile.project_paths import DEFAULT_BS_PROFILE_PATH, stg_load_day_paths
+from mobile.project_paths import DEFAULT_BS_PROFILE_PATH
 
 OPEN_BS_DATE_OFF = pd.Timestamp("2999-12-31 23:59:59")
 
@@ -29,8 +29,6 @@ DEFAULT_REGION_SUBJECTS: tuple[str, ...] = (
 DEFAULT_BS_SEED = 20250407
 DEFAULT_PARQUET_COMPRESSION = "snappy"
 
-DEFAULT_STG_DAY = date(2025, 1, 1)
-
 DEFAULT_SRC_START_DATE = date(2024, 12, 25)
 DEFAULT_SRC_END_DATE = date(2025, 2, 5)
 
@@ -38,18 +36,6 @@ DEFAULT_SRC_PERSON_TARGET_PER_OPERATOR = 50_000
 DEFAULT_SRC_PERSON_EXTRA_FULL_SNAPSHOT_RANDOM_DAYS = 7
 DEFAULT_SRC_EXCL_PCT_OF_AB = 0.7
 DEFAULT_SRC_MOBILE_MOVEMENT_RATIO = 0.22
-
-
-def default_build_stg_day_params(day: date | None = None):
-    from mobile.pipelines.stg.day import BuildStgDayParams
-
-    resolved_day = day if day is not None else DEFAULT_STG_DAY
-    paths = stg_load_day_paths(resolved_day)
-    return BuildStgDayParams(
-        day=resolved_day,
-        compression=DEFAULT_PARQUET_COMPRESSION,
-        **paths,
-    )
 
 
 def default_max_workers(*, reserve_cores: int = 2, cap: int = 8) -> int:

@@ -250,26 +250,6 @@ DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
 
-def stg_load_day_root(day: date) -> Path:
-    """Каталог среза STG за календарный день: ``data/stg/load_day=YYYY-MM-DD/``."""
-    return PROJECT_ROOT / "data" / "stg" / f"load_day={day.isoformat()}"
-
-
-def stg_load_day_paths(day: date) -> dict[str, Path]:
-    """CSV (общие raw) и parquet-выходы в каталоге ``load_day``."""
-    root = stg_load_day_root(day)
-    return {
-        "oktmo_csv_path": DEFAULT_STG_OKTMO_CSV_PATH,
-        "oktmo_output_path": root / "oktmo.parquet",
-        "time_zones_csv_path": DEFAULT_STG_TIME_ZONES_CSV_PATH,
-        "time_zones_output_path": root / "time_zones.parquet",
-        "tac_csv_path": DEFAULT_STG_TAC_CSV_PATH,
-        "tac_output_path": root / "tac.parquet",
-        "oksm_csv_path": DEFAULT_STG_OKSM_CSV_PATH,
-        "oksm_output_path": root / "oksm.parquet",
-    }
-
-
 def resolve_oktmo_layout() -> Path:
     return DEFAULT_STG_OKTMO_OUTPUT_PATH
 

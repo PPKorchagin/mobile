@@ -14,16 +14,14 @@ from mobile.cli_defaults import (
     DEFAULT_PARQUET_COMPRESSION,
     DEFAULT_SRC_END_DATE,
     DEFAULT_SRC_START_DATE,
-    DEFAULT_STG_DAY,
     default_bs_params,
-    default_build_stg_day_params,
     default_excl_params,
     default_mobile_params,
     default_person_params,
 )
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
-from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo, run_nb_stg_time_zones, run_nb_stg_time_zones
+from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo, run_nb_stg_time_zones
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
@@ -42,9 +40,7 @@ from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
 from mobile.pipelines.dq.stg import person as dq_stg_person
 from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
-from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
-from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
@@ -121,7 +117,6 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
 }
 
 CLI_COMMANDS: tuple[str, ...] = (
-    "build-stg-day",
     "build-stg-oktmo",
     "dq-stg-oktmo",
     "build-stg-time-zones",
@@ -720,69 +715,6 @@ def run_dq_src_bs(
     )
 
 
-def build_stg_day(*, day: date | None = None) -> None:
-    params = default_build_stg_day_params(day)
-    logger.info(
-        "Starting build-stg-day: day=%s steps=%s",
-        params.day.isoformat(),
-        ", ".join(BUILD_STG_DAY_STEPS),
-    )
-    for step in BUILD_STG_DAY_STEPS:
-        run_timed_command(
-            step,
-            lambda s=step, p=params: _run_build_stg_day_step(s, p),
-        )
-    logger.info("build-stg-day completed successfully")
-
-
-def _run_build_stg_day_step(step: str, params: stg_day.BuildStgDayParams) -> None:
-    if step == "build-stg-oktmo":
-        oktmo.run(
-            csv_path=params.oktmo_csv_path,
-            output_path=params.oktmo_output_path,
-        )
-        return
-    if step == "dq-stg-oktmo":
-        dq_oktmo.run_dq(oktmo_path=params.oktmo_output_path)
-        return
-    if step == "nb-stg-oktmo":
-        run_nb_stg_oktmo()
-        return
-    if step == "build-stg-time-zones":
-        time_zones.run(
-            csv_path=params.time_zones_csv_path,
-            output_path=params.time_zones_output_path,
-        )
-        return
-    if step == "dq-stg-time-zones":
-        dq_time_zones.run_dq(time_zones_path=params.time_zones_output_path)
-        return
-    if step == "nb-stg-time-zones":
-        run_nb_stg_time_zones()
-        return
-    if step == "build-stg-tac":
-        tac.run(
-            csv_path=params.tac_csv_path,
-            output_path=params.tac_output_path,
-            compression=params.compression,
-        )
-        return
-    if step == "dq-stg-tac":
-        dq_tac.run_dq(params.tac_output_path)
-        return
-    if step == "build-stg-oksm":
-        oksm.run(
-            csv_path=params.oksm_csv_path,
-            output_path=params.oksm_output_path,
-            compression=params.compression,
-        )
-        return
-    if step == "dq-stg-oksm":
-        dq_oksm.run_dq(params.oksm_output_path)
-        return
-    raise ValueError(f"Unknown build-stg-day step: {step}")
-
-
 def _run_build(command: str) -> None:
     fn, config_path = _BUILD_COMMANDS[command]
     logger.info("Starting %s (config=%s)", command, config_path)
@@ -844,35 +776,6 @@ def _run_command(
     raise ValueError(f"Unknown command: {command}")
 
 
-BUILD_STEPS: tuple[str, ...] = (
-    "build-stg-oktmo",
-    "build-stg-time-zones",
-    *tuple(_BUILD_COMMANDS),
-    "build-src-person",
-    "build-src-excl",
-    "build-src-mobile",
-)
-BUILD_SRC_STEPS: tuple[str, ...] = BUILD_STEPS + ("nb-perf-metrics",)
-
-
-def build_src(
-    *,
-    target_per_operator: int | None = None,
-    excl_pct_of_ab: float | None = None,
-) -> None:
-    logger.info("Starting build-src: %s", ", ".join(BUILD_SRC_STEPS))
-    for command in BUILD_SRC_STEPS:
-        run_timed_command(
-            command,
-            lambda cmd=command: _run_command(
-                cmd,
-                target_per_operator=target_per_operator,
-                excl_pct_of_ab=excl_pct_of_ab,
-            ),
-        )
-    logger.info("build-src completed successfully")
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mobile",
@@ -880,29 +783,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "command",
-        choices=sorted({*CLI_COMMANDS, "build-src"}),
-        help="Шаг пайплайна, build-stg-day или build-src",
-    )
-    parser.add_argument(
-        "--day",
-        type=_parse_day,
-        default=None,
-        metavar="YYYY-MM-DD",
-        help=f"build-stg-day: календарный срез STG (по умолчанию {DEFAULT_STG_DAY.isoformat()})",
+        choices=sorted(CLI_COMMANDS),
+        help="Шаг пайплайна",
     )
     parser.add_argument(
         "--target-per-operator",
         type=int,
         default=None,
         metavar="N",
-        help="build-src-person / build-src: абонентов на оператора в полный день (по умолчанию 50000)",
+        help="build-src-person: абонентов на оператора в полный день (по умолчанию 50000)",
     )
     parser.add_argument(
         "--excl-pct-of-ab",
         type=float,
         default=None,
         metavar="PCT",
-        help="build-src-excl / build-src: %% строк АБ в списках исключений (по умолчанию 0.7)",
+        help="build-src-excl: %% строк АБ в списках исключений (по умолчанию 0.7)",
     )
     parser.add_argument(
         "--dc",
@@ -1047,20 +943,7 @@ def main() -> None:
 
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
-        if args.command == "build-stg-day":
-            run_timed_command(
-                "build-stg-day",
-                lambda: build_stg_day(day=args.day),
-            )
-        elif args.command == "build-src":
-            run_timed_command(
-                "build-src",
-                lambda: build_src(
-                    target_per_operator=args.target_per_operator,
-                    excl_pct_of_ab=args.excl_pct_of_ab,
-                ),
-            )
-        elif args.command == "dq-src-mobile":
+        if args.command == "dq-src-mobile":
             run_timed_command(
                 "dq-src-mobile",
                 lambda: run_dq_src_mobile(
