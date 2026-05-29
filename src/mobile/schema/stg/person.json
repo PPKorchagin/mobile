@@ -1,0 +1,17 @@
+{
+    "table": "stg_person",
+    "description": "Месячный профиль физлиц: src_person + binding-fill + person_id, gender, age, citizenship",
+    "fields": [
+        { "name": "report_date", "type": "date", "comment": "1-е число отчетного месяца (YYYY-MM-01)" },
+        { "name": "person_id", "type": "string", "comment": "prs_ + SHA256(person_cluster_key)[:24]; кластер ID+bio+bindings" },
+        { "name": "msisdn", "type": "string", "comment": "Нормализованный MSISDN" },
+        { "name": "imsi", "type": "string", "comment": "Нормализованный IMSI" },
+        { "name": "imei", "type": "string", "comment": "Нормализованный IMEI" },
+        { "name": "gender", "type": "string", "comment": "M / F / U" },
+        { "name": "age", "type": "string", "comment": "Возраст на начало месяца или U" },
+        { "name": "citizenship", "type": "string", "comment": "Код страны или U" },
+        { "name": "operator_id", "type": "long", "comment": "operator_Id из src_person" },
+        { "name": "actually_from", "type": "timestamp", "comment": "Начало интервала актуальности" },
+        { "name": "actually_to", "type": "timestamp", "comment": "Конец интервала актуальности" }
+    ]
+}

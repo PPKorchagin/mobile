@@ -30,6 +30,7 @@ from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import geo_all as stg_geo_all
 from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
+from mobile.pipelines.stg import person as stg_person
 from mobile.pipelines.stg import move_event as stg_move_event
 from mobile.pipelines.stg import bs as stg_bs
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
@@ -135,6 +136,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-event",
     "build-stg-geo-all",
     "build-stg-geo-intervals",
+    "build-stg-person",
     "build-move-event",
     "dq-stg-event",
     "dq-stg-geo-all",
@@ -302,6 +304,38 @@ def run_build_stg_geo_intervals(
             time_zones_path=tz,
             stg_msisdn_imsi_path=imsi,
             stg_msisdn_imei_path=imei,
+            output_path=out,
+        ),
+    )
+
+
+def run_build_stg_person(
+    *,
+    report_date: date | None,
+    src_person_path: str | None,
+    stg_msisdn_imsi_path: str | None,
+    stg_msisdn_imei_path: str | None,
+    stg_tac_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
+    if report_date is None:
+        raise SystemExit("build-stg-person: --report-date is required")
+    if report_date.day != 1:
+        raise SystemExit(f"build-stg-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+    src = Path(src_person_path) if src_person_path else None
+    imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
+    imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
+    tac = Path(stg_tac_path) if stg_tac_path else None
+    out = Path(output_path) if output_path else None
+    run_timed_command(
+        "build-stg-person",
+        lambda: stg_person.run_build(
+            report_date=report_date,
+            src_person_path=src,
+            stg_msisdn_imsi_path=imsi,
+            stg_msisdn_imei_path=imei,
+            stg_tac_path=tac,
             output_path=out,
         ),
     )
@@ -744,7 +778,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / dq-stg-geo-all / dq-stg-geo-intervals — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -786,19 +820,31 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-msisdn-imsi-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-intervals: входной stg_msisdn_imsi parquet (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})",
+        help=f"build-stg-geo-intervals / build-stg-person: входной stg_msisdn_imsi parquet (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})",
     )
     parser.add_argument(
         "--stg-msisdn-imei-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-intervals: входной stg_msisdn_imei parquet (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})",
+        help=f"build-stg-geo-intervals / build-stg-person: входной stg_msisdn_imei parquet (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})",
     )
     parser.add_argument(
         "--mobile-root",
         default=None,
         metavar="PATH",
         help="dq-src-mobile / build-stg-event: корень витрин ЦОД (по умолчанию data/src/mobile/{dc})",
+    )
+    parser.add_argument(
+        "--src-person-path",
+        default=None,
+        metavar="PATH",
+        help="build-stg-person: входной src_person parquet или корень layout (по умолчанию data/src/person)",
+    )
+    parser.add_argument(
+        "--stg-tac-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-person: справочник stg_tac для исключения M2M (по умолчанию {DEFAULT_STG_TAC_OUTPUT_PATH})",
     )
     parser.add_argument(
         "--event-dds-path",
@@ -814,9 +860,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals: выходной parquet "
+            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
             f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
-            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet)"
+            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
     )
     return parser
@@ -880,6 +926,15 @@ def main() -> None:
                 time_zones_path=args.time_zones_path,
                 stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
                 stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-stg-person":
+            run_build_stg_person(
+                report_date=args.report_date,
+                src_person_path=args.src_person_path,
+                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+                stg_tac_path=args.stg_tac_path,
                 output_path=args.output_path,
             )
         elif args.command == "dq-stg-event":

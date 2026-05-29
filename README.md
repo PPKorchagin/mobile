@@ -30,6 +30,7 @@ uv run mobile build-stg-event
 uv run mobile build-stg-event --dc central --report-date 2025-01-01
 uv run mobile build-stg-geo-all --report-date 2025-01-01
 uv run mobile build-stg-geo-intervals --report-date 2025-01-01
+uv run mobile build-stg-person --report-date 2025-01-01
 uv run mobile build-move-event --report-date 2025-01-01
 uv run mobile dq-src-mobile
 uv run mobile dq-src-bs
@@ -67,6 +68,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | CDR/SMS/GPRS/location → `data/stg/event/.../events.parquet` ([doc](documents/stg/build_stg_event.md)); фильтр по `Started`, сортировка по абоненту, сжатие 5m |
 | `build-stg-geo-all` | `event_dds` + `stg_bs` → `data/stg/geo_all/{YYYY-MM-DD}.parquet` (без fill через `msisdn-imsi`/`msisdn-imei`) ([doc](documents/stg/build_stg_geo_all.md)) |
 | `build-stg-geo-intervals` | `stg_geo_all` + `stg_bs` + `stg_time_zones` + fill из `stg_msisdn_*` → `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` ([doc](documents/stg/build_stg_geo_intervals.md)) |
+| `build-stg-person` | `src_person` + `stg_tac` (M2M) + `stg_msisdn_*` → `stg_person` за месяц ([doc](documents/stg/build_stg_person.md)) |
 | `build-move-event` | `stg/event/{dc}` → `stg/event_dds/{date}/{dc}.parquet` ([doc](documents/stg/build_move_event.md)) |
 | `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
 | `dq-src-bs` | DQ всей витрины `src_bs`: распределения, кросс-распределения, контрактные проверки ([checks](documents/dq/src/dq_src_bs.md#проверки), логи `DQ_SRC_BS`) |
@@ -84,9 +86,13 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--excl-pct-of-ab PCT`** — для `build-src-excl` и `build-src` (по умолчанию `0.7` — доля строк АБ в исключениях).
 
-Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `dq-stg-geo-all`, `dq-stg-geo-intervals`, `build-stg-msisdn-*`, `build-stg-geo-intervals`, `build-move-event`.
+Флаг **`--report-date YYYY-MM-DD`** — для `dq-src-mobile`, `build-stg-event`, `dq-stg-event`, `dq-stg-geo-all`, `dq-stg-geo-intervals`, `build-stg-msisdn-*`, `build-stg-geo-intervals`, `build-move-event`. Для `build-stg-person` — строго **1-е число месяца** (`2025-01-01`).
 
 Флаг **`--src-bs-path PATH`** — для `build-stg-bs` / `dq-src-bs`: входной `src_bs` (по умолчанию `data/src/bs.parquet`).
+
+Флаг **`--src-person-path PATH`** — для `build-stg-person`: входной `src_person` parquet, дневной каталог или корень layout (по умолчанию `data/src/person`).
+
+Флаг **`--stg-tac-path PATH`** — для `build-stg-person`: справочник TAC для исключения M2M SIM (по умолчанию `data/stg/tac.parquet`; нужен `build-stg-tac`).
 
 Флаг **`--oktmo-path PATH`** — для `build-stg-bs`: справочник ОКТМО (по умолчанию `data/stg/oktmo.parquet`).
 
@@ -102,7 +108,7 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--stg-msisdn-imei-path PATH`** — для `build-stg-geo-intervals`: входной `stg_msisdn_imei` parquet (fill `imei`).
 
-Флаг **`--output-path PATH`** — для `build-stg-msisdn-*` / `build-stg-bs` / `build-stg-geo-all` / `build-stg-geo-intervals`: выходной Parquet.
+Флаг **`--output-path PATH`** — для `build-stg-msisdn-*` / `build-stg-bs` / `build-stg-geo-all` / `build-stg-geo-intervals` / `build-stg-person`: выходной Parquet.
 
 Флаг **`--dc`** — для `dq-src-mobile` / `build-stg-event` / `dq-stg-event`: `central` или `far-east`. Без `--dc` — оркестратор по дням и ЦОД. Опционально **`--mobile-root`**.
 
@@ -119,6 +125,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-stg-geo-all` | `--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet`, `data/stg/bs.parquet` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
 | `build-stg-geo-intervals` | `--report-date`, `--stg-geo-all-path`, `--stg-bs-path`, `--time-zones-path`, `--stg-msisdn-imsi-path`, `--stg-msisdn-imei-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet`, `data/stg/bs.parquet`, `data/stg/time_zones.parquet`, `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet`, `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` |
+| `build-stg-person` | `--report-date` (1-е число месяца), `--src-person-path`, `--stg-tac-path`, `--stg-msisdn-imsi-path`, `--stg-msisdn-imei-path`, `--output-path` | последний `data/src/person/.../person.parquet` месяца, `data/stg/tac.parquet`, `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | `data/stg/person/{YYYY-MM-01}.parquet` |
 | `build-move-event` | `--report-date` | `data/stg/event/.../events.parquet` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` |
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
 | `dq-src-bs` | `--src-bs-path` | `data/src/bs.parquet` | логи `DQ_SRC_BS` + timing |
@@ -143,6 +150,7 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_stg_event.md`](documents/stg/build_stg_event.md)
 - [`documents/stg/build_stg_geo_all.md`](documents/stg/build_stg_geo_all.md)
 - [`documents/stg/build_stg_geo_intervals.md`](documents/stg/build_stg_geo_intervals.md)
+- [`documents/stg/build_stg_person.md`](documents/stg/build_stg_person.md)
 - [`documents/stg/build_move_event.md`](documents/stg/build_move_event.md)
 - [`documents/stg/build_stg_msisdn_imsi.md`](documents/stg/build_stg_msisdn_imsi.md)
 - [`documents/stg/build_stg_msisdn_imei.md`](documents/stg/build_stg_msisdn_imei.md)
@@ -170,6 +178,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/stg/event.py` — `run_build()`
 - `src/mobile/pipelines/stg/geo_all.py` — `run_build()`
 - `src/mobile/pipelines/stg/geo_intervals.py` — `run_build()`
+- `src/mobile/pipelines/stg/person.py` — `run_build()`
 - `src/mobile/pipelines/stg/move_event.py` — `run_move()`
 - `src/mobile/pipelines/dq/stg/event.py` — `run_dq()`
 - `src/mobile/pipelines/stg/msisdn_imsi.py` — `run_build()`
