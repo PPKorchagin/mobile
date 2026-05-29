@@ -1,6 +1,6 @@
 # build-stg-day
 
-**Срез:** STG за календарный день · **Команда:** `build-stg-day` · **Режим:** build + DQ трёх справочников в каталог `load_day={YYYY-MM-DD}`.
+**Срез:** STG за календарный день · **Команда:** `build-stg-day` · **Режим:** build + DQ четырёх справочников в каталог `load_day={YYYY-MM-DD}`.
 
 Референс: [`pipelines/stg/day.py`](../../../src/mobile/pipelines/stg/day.py), [`project_paths.py`](../../../src/mobile/project_paths.py) → `stg_load_day_paths`.
 
@@ -11,7 +11,7 @@
 | # | Задача | Результат |
 |---|--------|-----------|
 | 1 | Собрать `BuildStgDayParams` (дата + пути CSV/parquet) | Параметры цепочки |
-| 2 | Выполнить 6 шагов по порядку | Parquet в `data/stg/load_day=…/` + логи DQ |
+| 2 | Выполнить 8 шагов по порядку | Parquet в `data/stg/load_day=…/` + логи DQ |
 | 3 | Записать метрики каждого шага | `command_timing.jsonl` |
 
 **Шаги (строго по порядку):**
@@ -22,6 +22,8 @@
 4. `dq-stg-time-zones`
 5. `build-stg-tac`
 6. `dq-stg-tac`
+7. `build-stg-oksm`
+8. `dq-stg-oksm`
 
 **В scope:** те же ETL/DQ, что у одиночных команд; отличие — каталог выхода привязан к `day`.
 
@@ -46,6 +48,8 @@
 | `time_zones_output_path` | path | Да | `data/stg/load_day={day}/time_zones.parquet` | Выход + DQ |
 | `tac_csv_path` | path | Да | `src/mobile/raw_data/tacdb_v001.csv` | Вход TAC |
 | `tac_output_path` | path | Да | `data/stg/load_day={day}/tac.parquet` | Выход + DQ |
+| `oksm_csv_path` | path | Да | `src/mobile/raw_data/oksm_v001.csv` | Вход ОКСМ |
+| `oksm_output_path` | path | Да | `data/stg/load_day={day}/oksm.parquet` | Выход + DQ |
 | `compression` | string | Да | `snappy` | Parquet |
 
 | Переменная CLI | Тип | По умолчанию | Описание |

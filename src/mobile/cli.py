@@ -40,9 +40,9 @@ from mobile.pipelines.stg import msisdn_operator as stg_msisdn_operator
 from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
-from mobile.pipelines.dq.stg import bs as dq_stg_bs, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
-from mobile.pipelines.stg import oktmo, tac, time_zones
+from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 from mobile.pipelines.stg.day import BUILD_STG_DAY_STEPS
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
@@ -50,6 +50,8 @@ from mobile.project_paths import (
     DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_STG_OKTMO_CSV_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
+    DEFAULT_STG_OKSM_CSV_PATH,
+    DEFAULT_STG_OKSM_OUTPUT_PATH,
     DEFAULT_STG_TAC_CSV_PATH,
     DEFAULT_STG_EVENT_DDS_ROOT,
     STG_BS_LAYOUT_TEMPLATE,
@@ -93,6 +95,14 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
         ),
         str(DEFAULT_STG_TAC_CSV_PATH),
     ),
+    "build-stg-oksm": (
+        lambda compression=DEFAULT_PARQUET_COMPRESSION: oksm.run(
+            csv_path=DEFAULT_STG_OKSM_CSV_PATH,
+            output_path=DEFAULT_STG_OKSM_OUTPUT_PATH,
+            compression=compression,
+        ),
+        str(DEFAULT_STG_OKSM_CSV_PATH),
+    ),
     "build-src-bs": (
         lambda compression=DEFAULT_PARQUET_COMPRESSION: bs.run(
             oktmo_parquet_path=resolve_oktmo_layout(),
@@ -116,6 +126,10 @@ _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
     "dq-stg-tac": (
         lambda: dq_tac.run_dq(DEFAULT_STG_TAC_OUTPUT_PATH),
         str(DEFAULT_STG_TAC_OUTPUT_PATH),
+    ),
+    "dq-stg-oksm": (
+        lambda: dq_oksm.run_dq(DEFAULT_STG_OKSM_OUTPUT_PATH),
+        str(DEFAULT_STG_OKSM_OUTPUT_PATH),
     ),
     "dq-stg-bs": (
         lambda: dq_stg_bs.run_dq(stg_bs_output_path()),
@@ -689,6 +703,16 @@ def _run_build_stg_day_step(step: str, params: stg_day.BuildStgDayParams) -> Non
         return
     if step == "dq-stg-tac":
         dq_tac.run_dq(params.tac_output_path)
+        return
+    if step == "build-stg-oksm":
+        oksm.run(
+            csv_path=params.oksm_csv_path,
+            output_path=params.oksm_output_path,
+            compression=params.compression,
+        )
+        return
+    if step == "dq-stg-oksm":
+        dq_oksm.run_dq(params.oksm_output_path)
         return
     raise ValueError(f"Unknown build-stg-day step: {step}")
 

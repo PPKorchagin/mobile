@@ -8,8 +8,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from mobile.pipelines.dq.stg import oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
-from mobile.pipelines.stg import oktmo, tac, time_zones
+from mobile.pipelines.dq.stg import oktmo as dq_oktmo, oksm as dq_oksm, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,8 @@ BUILD_STG_DAY_STEPS: tuple[str, ...] = (
     "dq-stg-time-zones",
     "build-stg-tac",
     "dq-stg-tac",
+    "build-stg-oksm",
+    "dq-stg-oksm",
 )
 
 
@@ -34,17 +36,20 @@ class BuildStgDayParams:
     time_zones_output_path: Path
     tac_csv_path: Path
     tac_output_path: Path
+    oksm_csv_path: Path
+    oksm_output_path: Path
     compression: str
 
 
 def run(params: BuildStgDayParams) -> dict[str, Any]:
     """build → dq для oktmo, time_zones, tac с путями из ``params``."""
     logger.info(
-        "build-stg-day start: day=%s oktmo_out=%s time_zones_out=%s tac_out=%s",
+        "build-stg-day start: day=%s oktmo_out=%s time_zones_out=%s tac_out=%s oksm_out=%s",
         params.day.isoformat(),
         params.oktmo_output_path,
         params.time_zones_output_path,
         params.tac_output_path,
+        params.oksm_output_path,
     )
     results: dict[str, Any] = {"day": params.day.isoformat(), "steps": {}}
 
@@ -68,6 +73,13 @@ def run(params: BuildStgDayParams) -> dict[str, Any]:
         compression=params.compression,
     )
     results["steps"]["dq-stg-tac"] = dq_tac.run_dq(params.tac_output_path)
+
+    results["steps"]["build-stg-oksm"] = oksm.run(
+        csv_path=params.oksm_csv_path,
+        output_path=params.oksm_output_path,
+        compression=params.compression,
+    )
+    results["steps"]["dq-stg-oksm"] = dq_oksm.run_dq(params.oksm_output_path)
 
     logger.info("build-stg-day completed: day=%s", params.day.isoformat())
     return results

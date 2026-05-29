@@ -18,9 +18,11 @@ uv run mobile build-stg-day
 uv run mobile build-stg-oktmo
 uv run mobile build-stg-time-zones
 uv run mobile build-stg-tac
+uv run mobile build-stg-oksm
 uv run mobile dq-stg-oktmo
 uv run mobile dq-stg-time-zones
 uv run mobile dq-stg-tac
+uv run mobile dq-stg-oksm
 uv run mobile dq-stg-bs
 uv run mobile build-src-bs
 uv run mobile build-src-person
@@ -52,14 +54,16 @@ uv run mobile nb-perf-metrics
 
 | Команда | Описание |
 |---------|----------|
-| `build-src` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-src-bs` → `build-src-person` → `build-src-excl` → `build-src-mobile` → `nb-perf-metrics` |
+| `build-src` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-stg-oksm` → `build-src-bs` → … → `nb-perf-metrics` |
 | `build-stg-day` | STG build + DQ за `--day` (по умолчанию `2025-01-01`) → `data/stg/load_day=…/` |
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |
+| `build-stg-oksm` | CSV → `data/stg/oksm.parquet` ([doc](documents/stg/build_stg_oksm.md)) |
 | `dq-stg-oktmo` | DQ `data/stg/oktmo.parquet` — схема, иерархия, WKT ([checks](documents/dq/stg/dq_stg_oktmo.md#проверки)) |
 | `dq-stg-time-zones` | DQ `data/stg/time_zones.parquet` — timezone, geometry ([checks](documents/dq/stg/dq_stg_time_zones.md#проверки)) |
 | `dq-stg-tac` | DQ `data/stg/tac.parquet` — TAC, M2M ([checks](documents/dq/stg/dq_stg_tac.md#проверки)) |
+| `dq-stg-oksm` | DQ `data/stg/oksm.parquet` — коды стран, имена ([checks](documents/dq/stg/dq_stg_oksm.md#проверки)) |
 | `dq-stg-bs` | DQ `data/stg/bs.parquet` — ключи, интервалы, координаты, геометрия ([checks](documents/dq/stg/dq_stg_bs.md#проверки)) |
 | `build-src-bs` | ОКТМО + профиль → `data/src/bs.parquet` |
 | `build-src-person` | Суточные срезы → `data/src/person/...` |
@@ -122,9 +126,11 @@ uv run mobile nb-perf-metrics
 | `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
 | `build-stg-time-zones` | — | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` (snappy) |
 | `build-stg-tac` | — | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` (snappy) |
+| `build-stg-oksm` | — | `src/mobile/raw_data/oksm_v001.csv` | `data/stg/oksm.parquet` (snappy) |
 | `dq-stg-oktmo` | — | `data/stg/oktmo.parquet` | логи + `command_timing.jsonl` |
 | `dq-stg-time-zones` | — | `data/stg/time_zones.parquet` | логи + timing |
 | `dq-stg-tac` | — | `data/stg/tac.parquet` | логи + timing |
+| `dq-stg-oksm` | — | `data/stg/oksm.parquet` | логи + timing |
 | `dq-stg-bs` | — | `data/stg/bs.parquet` | логи + timing |
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-stg-geo-all` | `--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet`, `data/stg/bs.parquet` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |

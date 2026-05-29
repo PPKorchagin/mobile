@@ -1,0 +1,12 @@
+{
+  "table": "stg_oksm",
+  "description": "Справочник ОКСМ (общероссийский классификатор стран мира)",
+  "fields": [
+    { "name": "numeric_code", "type": "string", "comment": "Цифровой код страны (ISO 3166-1 numeric), 3 цифры" },
+    { "name": "name_short", "type": "string", "comment": "Краткое наименование" },
+    { "name": "name_full", "type": "string", "comment": "Полное официальное наименование" },
+    { "name": "alpha2", "type": "string", "comment": "Код альфа-2 (ISO 3166-1 alpha-2)" },
+    { "name": "alpha3", "type": "string", "comment": "Код альфа-3 (ISO 3166-1 alpha-3)" },
+    { "name": "autokey", "type": "string", "comment": "Ключ записи в источнике (classifierOksm_NNN)" }
+  ]
+}

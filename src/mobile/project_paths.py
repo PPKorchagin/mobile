@@ -19,6 +19,8 @@ DEFAULT_STG_TIME_ZONES_CSV_PATH = _RAW_DATA / "time_zones.csv"
 DEFAULT_STG_TIME_ZONES_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "time_zones.parquet"
 DEFAULT_STG_TAC_CSV_PATH = _RAW_DATA / "tacdb_v001.csv"
 DEFAULT_STG_TAC_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "tac.parquet"
+DEFAULT_STG_OKSM_CSV_PATH = _RAW_DATA / "oksm_v001.csv"
+DEFAULT_STG_OKSM_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oksm.parquet"
 
 DEFAULT_BS_PROFILE_PATH = _RAW_DATA / "build_bs_profile_from_opencellid.json"
 DEFAULT_BS_LAYOUT = PROJECT_ROOT / "data" / "src" / "bs.parquet"
@@ -259,6 +261,8 @@ def stg_load_day_paths(day: date) -> dict[str, Path]:
         "time_zones_output_path": root / "time_zones.parquet",
         "tac_csv_path": DEFAULT_STG_TAC_CSV_PATH,
         "tac_output_path": root / "tac.parquet",
+        "oksm_csv_path": DEFAULT_STG_OKSM_CSV_PATH,
+        "oksm_output_path": root / "oksm.parquet",
     }
 
 
