@@ -13,7 +13,11 @@ from branca.colormap import StepColormap
 from IPython.display import display
 from shapely import wkt
 
-from mobile.project_paths import DEFAULT_STG_OKTMO_OUTPUT_PATH, DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+from mobile.project_paths import (
+    DEFAULT_STG_OKTMO_OUTPUT_PATH,
+    DEFAULT_STG_TAC_OUTPUT_PATH,
+    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+)
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
 
@@ -474,6 +478,140 @@ def render_stg_time_zones_dq_overview(latest: pd.DataFrame) -> plt.Figure:
         fig.suptitle("DQ STG TIME ZONES — обзор метрик", fontsize=13, y=1.02)
     fig.tight_layout()
     return fig
+
+
+def m2m_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "m2m_coverage")
+    if not metrics:
+        return pd.DataFrame(columns=["segment", "count"])
+    return pd.DataFrame(
+        [
+            {"segment": "M2M", "count": int(metrics.get("m2m_row_count") or 0)},
+            {"segment": "non-M2M", "count": int(metrics.get("non_m2m_row_count") or 0)},
+        ]
+    )
+
+
+def equipment_type_distribution_frame(latest: pd.DataFrame, *, top_n: int = 12) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "m2m_equipment_type_consistency")
+    counts = metrics.get("equipment_type_counts")
+    if not isinstance(counts, dict):
+        return pd.DataFrame(columns=["equipment_type", "count"])
+    rows = [{"equipment_type": str(key), "count": int(value)} for key, value in counts.items()]
+    return pd.DataFrame(rows).sort_values("count", ascending=False).head(top_n)
+
+
+def tac_integrity_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "tac_integrity")
+    if not metrics:
+        return pd.DataFrame(columns=["metric", "count"])
+    rows: list[dict[str, Any]] = []
+    for key, label in (
+        ("invalid_tac_count", "invalid TAC"),
+        ("duplicate_tac_count", "duplicate TAC"),
+    ):
+        if key in metrics:
+            rows.append({"metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def tac_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    date_metrics = _metrics_for_check(latest, "allocation_date_format")
+    if "invalid_date_count" in date_metrics:
+        rows.append({"metric": "invalid allocation_date", "count": int(date_metrics["invalid_date_count"])})
+    man_metrics = _metrics_for_check(latest, "manufacturer_quality")
+    if "empty_manufacturer_count" in man_metrics:
+        rows.append({"metric": "empty manufacturer", "count": int(man_metrics["empty_manufacturer_count"])})
+    m2m_metrics = _metrics_for_check(latest, "m2m_equipment_type_consistency")
+    if "mismatch_count" in m2m_metrics:
+        rows.append({"metric": "is_m2m mismatch", "count": int(m2m_metrics["mismatch_count"])})
+    return pd.DataFrame(rows)
+
+
+def plot_m2m_coverage(coverage: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+    if coverage.empty:
+        ax.set_title("m2m_coverage — нет данных")
+        ax.axis("off")
+        return fig
+    colors = {"M2M": "#7c3aed", "non-M2M": "#94a3b8"}
+    ax.bar(
+        coverage["segment"],
+        coverage["count"],
+        color=[colors.get(str(segment), "#64748b") for segment in coverage["segment"]],
+        alpha=0.88,
+    )
+    ax.set_ylabel("rows")
+    ax.set_title("M2M vs non-M2M")
+    for index, value in enumerate(coverage["count"]):
+        ax.text(index, value, f"{int(value):,}", ha="center", va="bottom", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def plot_equipment_type_distribution(dist: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 4))
+    else:
+        fig = ax.figure
+    if dist.empty:
+        ax.set_title("equipment_type — нет данных")
+        ax.axis("off")
+        return fig
+    work = dist.sort_values("count", ascending=True)
+    ax.barh(work["equipment_type"].astype(str), work["count"], color="#059669", alpha=0.88)
+    ax.set_xlabel("rows")
+    ax.set_title("Top equipment_type (DQ log)")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_tac_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(null_ratio_frame(latest), ax=axes[0, 2])
+    plot_m2m_coverage(m2m_coverage_frame(latest), ax=axes[1, 0])
+    plot_equipment_type_distribution(equipment_type_distribution_frame(latest), ax=axes[1, 1])
+    integrity = tac_integrity_frame(latest)
+    plot_count_bars(
+        integrity if not integrity.empty else tac_quality_frame(latest),
+        title="TAC integrity / quality",
+        ax=axes[1, 2],
+        color="#8c564b",
+    )
+    if basic:
+        fig.suptitle(
+            f"DQ STG TAC — rows={int(basic.get('row_count') or 0):,}, "
+            f"columns={int(basic.get('column_count') or 0)}",
+            fontsize=13,
+            y=1.02,
+        )
+    else:
+        fig.suptitle("DQ STG TAC — обзор метрик", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def display_tac_parquet_summary(root: Path) -> None:
+    tac_parquet = _resolve_parquet(root, DEFAULT_STG_TAC_OUTPUT_PATH)
+    if not tac_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {tac_parquet}")
+    df = pd.read_parquet(tac_parquet)
+    try:
+        rel = tac_parquet.relative_to(root)
+    except ValueError:
+        rel = tac_parquet
+    print(f"stg_tac rows: {len(df):,} | файл: {rel}")
+    if "is_m2m" in df.columns:
+        display(df.groupby("is_m2m", dropna=False).size().reset_index(name="rows"))
+    if "equipment_type" in df.columns:
+        display(df["equipment_type"].value_counts().head(15).to_frame("rows"))
 
 
 def _collect_centroids(df: pd.DataFrame, wkt_col: str) -> tuple[list[tuple[float, float]], int]:

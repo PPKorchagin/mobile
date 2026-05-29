@@ -9,5 +9,8 @@
 | 4             | build-stg-time-zones | Генерация справочника часовых поясов                 | --csv-path src/mobile/raw_data/time_zones.csv --output-path data/stg/time_zones.parquet | [Документ](documents/stg/build_stg_time_zones.md) |
 | 5             | dq-stg-time-zones    | Проверка качества справочника часовых поясов         | --time-zones-path data/stg/time_zones.parquet                                           | [Документ](documents/dq/stg/dq_stg_time_zones.md) |
 | 6             | nb-stg-time-zones    | Визуализация метрик DQ и карта таймзон               | —                                                                                       | —                                                 |
+| 7             | build-stg-tac        | Генерация справочника TAC                            | --csv-path src/mobile/raw_data/tacdb_v001.csv --output-path data/stg/tac.parquet        | [Документ](documents/stg/build_stg_tac.md)        |
+| 8             | dq-stg-tac           | Проверка качества справочника TAC                    | --tac-path data/stg/tac.parquet                                                         | [Документ](documents/dq/stg/dq_stg_tac.md)        |
+| 9             | nb-stg-tac           | Визуализация метрик DQ и сводка справочника TAC      | —                                                                                       | —                                                 |
 
 
