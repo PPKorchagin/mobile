@@ -12,5 +12,7 @@
 | 7             | build-stg-tac        | Генерация справочника TAC                            | --csv-path src/mobile/raw_data/tacdb_v001.csv --output-path data/stg/tac.parquet        | [Документ](documents/stg/build_stg_tac.md)        |
 | 8             | dq-stg-tac           | Проверка качества справочника TAC                    | --tac-path data/stg/tac.parquet                                                         | [Документ](documents/dq/stg/dq_stg_tac.md)        |
 | 9             | nb-stg-tac           | Визуализация метрик DQ и сводка справочника TAC      | —                                                                                       | —                                                 |
-
+| 10            | build-stg-oksm       | Генерация справочника ОКСМ                           | --csv-path src/mobile/raw_data/oksm_v001.csv --output-path data/stg/oksm.parquet        | [Документ](documents/stg/build_stg_oksm.md)       |
+| 11            | dq-stg-oksm          | Проверка качества справочника ОКСМ                   | --oksm-path data/stg/oksm.parquet                                                       | [Документ](documents/dq/stg/dq_stg_oksm.md)       |
+| 12            | nb-stg-oksm          | Визуализация метрик DQ и сводка справочника ОКСМ     | —                                                                                       | —                                                 |
 

@@ -14,6 +14,7 @@ from IPython.display import display
 from shapely import wkt
 
 from mobile.project_paths import (
+    DEFAULT_STG_OKSM_OUTPUT_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
@@ -612,6 +613,137 @@ def display_tac_parquet_summary(root: Path) -> None:
         display(df.groupby("is_m2m", dropna=False).size().reset_index(name="rows"))
     if "equipment_type" in df.columns:
         display(df["equipment_type"].value_counts().head(15).to_frame("rows"))
+
+
+def oksm_code_integrity_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "numeric_code_integrity")
+    if not metrics:
+        return pd.DataFrame(columns=["metric", "count"])
+    rows: list[dict[str, Any]] = []
+    for key, label in (
+        ("invalid_numeric_code_count", "invalid numeric_code"),
+        ("duplicate_numeric_code_count", "duplicate numeric_code"),
+    ):
+        if key in metrics:
+            rows.append({"metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def oksm_alpha_integrity_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for check, prefix in (("alpha2_integrity", "alpha2"), ("alpha3_integrity", "alpha3")):
+        metrics = _metrics_for_check(latest, check)
+        for key, label in (
+            (f"invalid_{prefix}_count", f"invalid {prefix}"),
+            (f"duplicate_{prefix}_count", f"duplicate {prefix}"),
+        ):
+            if key in metrics:
+                rows.append({"metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def oksm_key_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    name_metrics = _metrics_for_check(latest, "name_quality")
+    for key, label in (
+        ("empty_name_short_count", "empty name_short"),
+        ("empty_name_full_count", "empty name_full"),
+    ):
+        if key in name_metrics:
+            rows.append({"metric": label, "count": int(name_metrics[key])})
+    auto_metrics = _metrics_for_check(latest, "autokey_integrity")
+    for key, label in (
+        ("duplicate_autokey_count", "duplicate autokey"),
+        ("empty_autokey_count", "empty autokey"),
+    ):
+        if key in auto_metrics:
+            rows.append({"metric": label, "count": int(auto_metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def plot_russia_presence(latest: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+    metrics = _metrics_for_check(latest, "russia_presence")
+    if not metrics:
+        ax.set_title("russia_presence — нет данных")
+        ax.axis("off")
+        return fig
+    present = bool(metrics.get("has_numeric_code_643"))
+    labels = ["RU (643) missing", "RU (643) present"]
+    values = [0 if present else 1, 1 if present else 0]
+    colors = ["#ef4444", "#16a34a"]
+    ax.bar(labels, values, color=colors, alpha=0.88)
+    ax.set_ylim(0, 1.2)
+    ax.set_ylabel("flag")
+    ax.set_title("Наличие записи RU (643)")
+    for index, value in enumerate(values):
+        ax.text(index, value, "yes" if value else "no", ha="center", va="bottom", fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_oksm_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(null_ratio_frame(latest), ax=axes[0, 2])
+    plot_count_bars(
+        oksm_code_integrity_frame(latest),
+        title="numeric_code integrity",
+        ax=axes[1, 0],
+        color="#2563eb",
+    )
+    plot_count_bars(
+        oksm_alpha_integrity_frame(latest),
+        title="alpha2 / alpha3 integrity",
+        ax=axes[1, 1],
+        color="#059669",
+    )
+    quality = oksm_key_quality_frame(latest)
+    if quality.empty:
+        plot_russia_presence(latest, ax=axes[1, 2])
+    else:
+        plot_count_bars(
+            quality,
+            title="name / autokey quality",
+            ax=axes[1, 2],
+            color="#8c564b",
+        )
+    if basic:
+        pair_metrics = _metrics_for_check(latest, "alpha_pair_cardinality")
+        pairs = int(pair_metrics.get("distinct_alpha2_alpha3_pairs") or 0)
+        fig.suptitle(
+            f"DQ STG OKSM — rows={int(basic.get('row_count') or 0):,}, "
+            f"alpha pairs={pairs:,}",
+            fontsize=13,
+            y=1.02,
+        )
+    else:
+        fig.suptitle("DQ STG OKSM — обзор метрик", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def display_oksm_parquet_summary(root: Path) -> None:
+    oksm_parquet = _resolve_parquet(root, DEFAULT_STG_OKSM_OUTPUT_PATH)
+    if not oksm_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {oksm_parquet}")
+    df = pd.read_parquet(oksm_parquet)
+    try:
+        rel = oksm_parquet.relative_to(root)
+    except ValueError:
+        rel = oksm_parquet
+    print(f"stg_oksm rows: {len(df):,} | файл: {rel}")
+    cols = [col for col in ("numeric_code", "name_short", "alpha2", "alpha3") if col in df.columns]
+    if cols:
+        display(df[cols].head(20))
+    if "alpha2" in df.columns:
+        print("\n--- sample alpha2 ---")
+        display(df["alpha2"].value_counts().head(15).to_frame("rows"))
 
 
 def _collect_centroids(df: pd.DataFrame, wkt_col: str) -> tuple[list[tuple[float, float]], int]:

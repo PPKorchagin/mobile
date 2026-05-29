@@ -18,6 +18,8 @@ from mobile.project_paths import (
     DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH,
     DEFAULT_NB_STG_TAC_EXECUTED_PATH,
     DEFAULT_NB_STG_TAC_NOTEBOOK_PATH,
+    DEFAULT_NB_STG_OKSM_EXECUTED_PATH,
+    DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH,
     DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH,
     DEFAULT_NB_STG_TIME_ZONES_NOTEBOOK_PATH,
     DEFAULT_NOTEBOOK_KERNEL_NAME,
@@ -103,6 +105,15 @@ def run_nb_stg_tac() -> None:
     run_notebook(
         source_notebook=DEFAULT_NB_STG_TAC_NOTEBOOK_PATH,
         executed_notebook=DEFAULT_NB_STG_TAC_EXECUTED_PATH,
+    )
+
+
+def run_nb_stg_oksm() -> None:
+    if DEFAULT_NB_STG_OKSM_EXECUTED_PATH.exists():
+        DEFAULT_NB_STG_OKSM_EXECUTED_PATH.unlink()
+    run_notebook(
+        source_notebook=DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_STG_OKSM_EXECUTED_PATH,
     )
 
 

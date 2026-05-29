@@ -20,13 +20,21 @@
 
 ---
 
+## TODO
+
+1. Проверить корректность кодов и наименований на соответствие официальному классификатору ОКСМ / ISO 3166.
+2. Автоматизировать получение данных от внешнего поставщика с сохранением историчности и обновлением справочника.
+
+---
+
 ## Параметры запуска
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `csv_path` | string (path) | Да | `src/mobile/raw_data/oksm_v001.csv` | Входной CSV |
-| `output_path` | string (path) | Да | `data/stg/oksm.parquet` | Выходной Parquet (перезапись) |
-| `compression` | string | Да | `snappy` | Сжатие Parquet |
+| Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
+| ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
+| `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oksm_v001.csv`  | Входной CSV (CLI `--csv-path`)         |
+| `output_path` | string (path) | Да             | `data/stg/oksm.parquet`              | Выходной Parquet (CLI `--output-path`) |
+
+Сжатие Parquet — константа `DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py) (по умолчанию `snappy`); в job **не передаётся**.
 
 **Константы ETL** ([`oksm.py`](../../src/mobile/pipelines/stg/oksm.py)):
 
@@ -39,6 +47,7 @@
 
 ```bash
 uv run mobile build-stg-oksm
+uv run mobile build-stg-oksm --csv-path src/mobile/raw_data/oksm_v001.csv --output-path data/stg/oksm.parquet
 ```
 
 ---
@@ -87,23 +96,17 @@ uv run mobile build-stg-oksm
 
 ### Шаг 3. Запись
 
-`to_parquet(output_path, compression=compression, index=False)`.
+`to_parquet(output_path, compression=DEFAULT_PARQUET_COMPRESSION, index=False)`.
 
 ---
 
-## Использование в `build-stg-person`
+## Типовые ошибки
 
-Помимо ETL, модуль [`oksm.py`](../../src/mobile/pipelines/stg/oksm.py) экспортирует **`OksmLookup`** и **`load_lookup(path)`** для поля `stg_person.citizenship`:
-
-| API | Назначение |
-|-----|------------|
-| `load_lookup()` | Чтение `data/stg/oksm.parquet`, построение индексов |
-| `from_alpha2(code)` | `RU` → `643`, `KZ` → `398`, … |
-| `match_text_tokens(text, mapping)` | Подстрока → alpha-2 из `mapping` → `numeric_code` |
-| `match_country_names(text)` | Подстрока из `name_short`/`name_full` → `numeric_code` |
-| `default_russia()` | `643` |
-
-См. [`build_stg_person.md`](./build_stg_person.md) — шаги 2 и 10 (раздел «Определение citizenship»).
+| Ошибка | Причина |
+|--------|---------|
+| `FileNotFoundError` | Нет CSV |
+| `ValueError` | Нет колонки CSV, невалидный `numeric_code` / `alpha2` / `alpha3`, пустые наименования, дубликат `numeric_code` или `autokey` |
+| pandas / pyarrow | Битый CSV, сбой записи |
 
 ---
 

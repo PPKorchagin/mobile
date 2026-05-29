@@ -19,13 +19,13 @@ _ALPHA3_RE = re.compile(r"^[A-Z]{3}$")
 _RUSSIA_NUMERIC_CODE = "643"
 
 
-def run_dq(parquet_path: str | Path) -> dict[str, Any]:
+def run_dq(oksm_path: str | Path) -> dict[str, Any]:
     """DQ витрины ``stg_oksm`` по пути parquet (поля — константы ETL ``stg/oksm.py``)."""
-    resolved = _resolve_parquet_path(parquet_path)
+    resolved = _resolve_oksm_path(oksm_path)
     expected_columns = [field["name"] for field in STG_OKSM_FIELDS]
 
     if not resolved.exists():
-        summary = {"status": "failed", "reason": "parquet_not_found", "parquet_path": str(resolved)}
+        summary = {"status": "failed", "reason": "parquet_not_found", "oksm_path": str(resolved)}
         _emit_log("dataset_presence", "failed", summary)
         _emit_summary(total_checks=1, warnings=0, failed=1)
         return summary
@@ -50,7 +50,7 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
         {
             "row_count": int(len(data)),
             "column_count": int(len(data.columns)),
-            "parquet_path": str(resolved),
+            "oksm_path": str(resolved),
         },
     )
 
@@ -171,14 +171,14 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
     _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
     return {
         "status": "ok",
-        "parquet_path": str(resolved),
+        "oksm_path": str(resolved),
         "total_checks": checks,
         "warning_checks": warnings,
         "failed_checks": failed,
     }
 
 
-def _resolve_parquet_path(path: str | Path) -> Path:
+def _resolve_oksm_path(path: str | Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 

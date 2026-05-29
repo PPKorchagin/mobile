@@ -10,6 +10,7 @@ from typing import Any
 
 import pandas as pd
 
+from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.project_paths import DEFAULT_STG_OKSM_OUTPUT_PATH, PROJECT_ROOT
 
@@ -155,8 +156,8 @@ def run(
     *,
     csv_path: str | Path,
     output_path: str | Path,
-    compression: str,
 ) -> dict[str, Any]:
+    compression = DEFAULT_PARQUET_COMPRESSION
     csv_file = _resolve_path(csv_path)
     parquet_file = _resolve_path(output_path)
 

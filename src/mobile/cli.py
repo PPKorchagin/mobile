@@ -21,7 +21,13 @@ from mobile.cli_defaults import (
 )
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
-from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo, run_nb_stg_tac, run_nb_stg_time_zones
+from mobile.notebook_runner import (
+    run_nb_perf_metrics,
+    run_nb_stg_oksm,
+    run_nb_stg_oktmo,
+    run_nb_stg_tac,
+    run_nb_stg_time_zones,
+)
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
@@ -68,14 +74,6 @@ from mobile.project_paths import (
 logger = logging.getLogger(__name__)
 
 _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
-    "build-stg-oksm": (
-        lambda compression=DEFAULT_PARQUET_COMPRESSION: oksm.run(
-            csv_path=DEFAULT_STG_OKSM_CSV_PATH,
-            output_path=DEFAULT_STG_OKSM_OUTPUT_PATH,
-            compression=compression,
-        ),
-        str(DEFAULT_STG_OKSM_CSV_PATH),
-    ),
     "build-src-bs": (
         lambda compression=DEFAULT_PARQUET_COMPRESSION: bs.run(
             oktmo_parquet_path=resolve_oktmo_layout(),
@@ -88,10 +86,6 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
 }
 
 _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
-    "dq-stg-oksm": (
-        lambda: dq_oksm.run_dq(DEFAULT_STG_OKSM_OUTPUT_PATH),
-        str(DEFAULT_STG_OKSM_OUTPUT_PATH),
-    ),
     "dq-stg-bs": (
         lambda: dq_stg_bs.run_dq(stg_bs_output_path()),
         str(stg_bs_output_path()),
@@ -102,6 +96,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-oktmo": run_nb_stg_oktmo,
     "nb-stg-time-zones": run_nb_stg_time_zones,
     "nb-stg-tac": run_nb_stg_tac,
+    "nb-stg-oksm": run_nb_stg_oksm,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -112,6 +107,8 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-stg-time-zones",
     "build-stg-tac",
     "dq-stg-tac",
+    "build-stg-oksm",
+    "dq-stg-oksm",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -260,6 +257,29 @@ def run_build_stg_tac(
     run_timed_command(
         "build-stg-tac",
         lambda: tac.run(csv_path=csv, output_path=out),
+    )
+
+
+def run_build_stg_oksm(
+    *,
+    csv_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-oksm: CSV ОКСМ → Parquet ``stg_oksm``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_STG_OKSM_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_STG_OKSM_OUTPUT_PATH
+    run_timed_command(
+        "build-stg-oksm",
+        lambda: oksm.run(csv_path=csv, output_path=out),
+    )
+
+
+def run_dq_stg_oksm(*, oksm_path: str | None) -> None:
+    """DQ ``stg_oksm`` (read-only проверки)."""
+    path = Path(oksm_path) if oksm_path else DEFAULT_STG_OKSM_OUTPUT_PATH
+    run_timed_command(
+        "dq-stg-oksm",
+        lambda: dq_oksm.run_dq(oksm_path=path),
     )
 
 
@@ -751,6 +771,9 @@ def _run_command(
     if command == "build-stg-tac":
         run_build_stg_tac(csv_path=None, output_path=None)
         return
+    if command == "build-stg-oksm":
+        run_build_stg_oksm(csv_path=None, output_path=None)
+        return
     if command == "build-src-person":
         logger.info("Starting %s", command)
         person.run(
@@ -840,7 +863,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--csv-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-oktmo / build-stg-time-zones / build-stg-tac: входной CSV (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH}, {DEFAULT_STG_TIME_ZONES_CSV_PATH} или {DEFAULT_STG_TAC_CSV_PATH})",
+        help=f"build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm: входной CSV (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH}, {DEFAULT_STG_TIME_ZONES_CSV_PATH}, {DEFAULT_STG_TAC_CSV_PATH} или {DEFAULT_STG_OKSM_CSV_PATH})",
     )
     parser.add_argument(
         "--oktmo-path",
@@ -867,6 +890,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             f"dq-stg-tac: stg_tac parquet "
             f"(по умолчанию {DEFAULT_STG_TAC_OUTPUT_PATH})"
+        ),
+    )
+    parser.add_argument(
+        "--oksm-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            f"dq-stg-oksm: stg_oksm parquet "
+            f"(по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})"
         ),
     )
     parser.add_argument(
@@ -955,8 +987,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
-            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH}, {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_STG_TAC_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
+            "build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
+            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH}, {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_STG_TAC_OUTPUT_PATH}, {DEFAULT_STG_OKSM_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
             f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
     )
@@ -1014,6 +1046,13 @@ def main() -> None:
             )
         elif args.command == "dq-stg-tac":
             run_dq_stg_tac(tac_path=args.tac_path)
+        elif args.command == "build-stg-oksm":
+            run_build_stg_oksm(
+                csv_path=args.csv_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "dq-stg-oksm":
+            run_dq_stg_oksm(oksm_path=args.oksm_path)
         elif args.command == "build-stg-geo-all":
             run_build_stg_geo_all(
                 report_date=args.report_date,
