@@ -40,6 +40,7 @@ from mobile.pipelines.stg import msisdn_operator as stg_msisdn_operator
 from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
+from mobile.pipelines.dq.stg import person as dq_stg_person
 from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import day as stg_day
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
@@ -160,6 +161,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-stg-event",
     "dq-stg-geo-all",
     "dq-stg-geo-intervals",
+    "dq-stg-person",
     "build-stg-msisdn-imsi",
     "build-stg-msisdn-imei",
     "build-stg-bs",
@@ -591,6 +593,35 @@ def run_dq_stg_geo_intervals(
     )
 
 
+def run_dq_stg_person(
+    *,
+    report_date: date | None,
+    stg_person_path: str | None,
+    stg_person_sim_path: str | None,
+    stg_oksm_path: str | None,
+    stg_person_ledger_path: str | None,
+) -> None:
+    """DQ ``stg_person`` / ``stg_person_sim`` за месяц (read-only проверки)."""
+    if report_date is None:
+        raise SystemExit("dq-stg-person: --report-date is required")
+    if report_date.day != 1:
+        raise SystemExit(f"dq-stg-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+    person_path = Path(stg_person_path) if stg_person_path else None
+    sim_path = Path(stg_person_sim_path) if stg_person_sim_path else None
+    oksm_path = Path(stg_oksm_path) if stg_oksm_path else None
+    ledger_path = Path(stg_person_ledger_path) if stg_person_ledger_path else None
+    run_timed_command(
+        "dq-stg-person",
+        lambda: dq_stg_person.run_dq(
+            report_date=report_date,
+            stg_person_path=person_path,
+            stg_person_sim_path=sim_path,
+            stg_oksm_path=oksm_path,
+            stg_person_ledger_path=ledger_path,
+        ),
+    )
+
+
 def run_dq_src_mobile(
     *,
     datacenter: str | None,
@@ -844,7 +875,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день",
+        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день или YYYY-MM-01 для person",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -916,7 +947,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-oksm-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person: справочник stg_oksm для citizenship (по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})",
+        help=f"build-stg-person / dq-stg-person: справочник stg_oksm (по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})",
+    )
+    parser.add_argument(
+        "--stg-person-path",
+        default=None,
+        metavar="PATH",
+        help="dq-stg-person: входной stg_person parquet (по умолчанию data/stg/person/{YYYY-MM-01}.parquet)",
+    )
+    parser.add_argument(
+        "--stg-person-sim-path",
+        default=None,
+        metavar="PATH",
+        help="dq-stg-person: входной stg_person_sim parquet (по умолчанию data/stg/person_sim/{YYYY-MM-01}.parquet)",
+    )
+    parser.add_argument(
+        "--stg-person-ledger-path",
+        default=None,
+        metavar="PATH",
+        help="dq-stg-person: входной stg_person_id_ledger parquet (по умолчанию data/stg/person_id_ledger/{YYYY-MM-01}.parquet)",
     )
     parser.add_argument(
         "--event-dds-path",
@@ -1044,6 +1093,14 @@ def main() -> None:
             run_dq_stg_geo_intervals(
                 report_date=args.report_date,
                 stg_geo_intervals_path=args.stg_geo_intervals_path,
+            )
+        elif args.command == "dq-stg-person":
+            run_dq_stg_person(
+                report_date=args.report_date,
+                stg_person_path=args.stg_person_path,
+                stg_person_sim_path=args.stg_person_sim_path,
+                stg_oksm_path=args.stg_oksm_path,
+                stg_person_ledger_path=args.stg_person_ledger_path,
             )
         elif args.command == "build-stg-msisdn-imsi":
             run_build_stg_binding(

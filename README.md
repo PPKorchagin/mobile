@@ -33,6 +33,7 @@ uv run mobile build-stg-event --dc central --report-date 2025-01-01
 uv run mobile build-stg-geo-all --report-date 2025-01-01
 uv run mobile build-stg-geo-intervals --report-date 2025-01-01
 uv run mobile build-stg-person --report-date 2025-01-01
+uv run mobile dq-stg-person --report-date 2025-01-01
 uv run mobile build-move-event --report-date 2025-01-01
 uv run mobile dq-src-mobile
 uv run mobile dq-src-bs
@@ -55,7 +56,7 @@ uv run mobile nb-perf-metrics
 | Команда | Описание |
 |---------|----------|
 | `build-src` | `build-stg-oktmo` → `build-stg-time-zones` → `build-stg-tac` → `build-stg-oksm` → `build-src-bs` → … → `nb-perf-metrics` |
-| `build-stg-day` | STG build + DQ за `--day` (по умолчанию `2025-01-01`) → `data/stg/load_day=…/` |
+| `build-stg-day` | STG build + DQ за `--day` (4 справочника: oktmo, time_zones, tac, oksm) → `data/stg/load_day=…/` |
 | `build-stg-oktmo` | CSV → `data/stg/oktmo.parquet` |
 | `build-stg-time-zones` | CSV → `data/stg/time_zones.parquet` |
 | `build-stg-tac` | CSV → `data/stg/tac.parquet` |
@@ -72,7 +73,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | CDR/SMS/GPRS/location → `data/stg/event/.../events.parquet` ([doc](documents/stg/build_stg_event.md)); фильтр по `Started`, сортировка по абоненту, сжатие 5m |
 | `build-stg-geo-all` | `event_dds` + `stg_bs` → `data/stg/geo_all/{YYYY-MM-DD}.parquet` (без fill через `msisdn-imsi`/`msisdn-imei`) ([doc](documents/stg/build_stg_geo_all.md)) |
 | `build-stg-geo-intervals` | `stg_geo_all` + `stg_bs` + `stg_time_zones` + fill из `stg_msisdn_*` → `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` ([doc](documents/stg/build_stg_geo_intervals.md)) |
-| `build-stg-person` | `stg_person` + `stg_person_sim` + ledger ([doc](documents/stg/build_stg_person.md)) |
+| `build-stg-person` | `stg_person` + `stg_person_sim` + ledger; `citizenship` = ОКСМ `numeric_code` ([doc](documents/stg/build_stg_person.md)) |
 | `build-stg-msisdn-operator` | MNP-наблюдения MSISDN↔operator ([doc](documents/stg/build_stg_msisdn_operator.md)) |
 | `build-stg-msisdn-imsi-month` | *(alias)* пересборка месяца из всех `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
 | `build-stg-msisdn-imei-month` | *(alias)* то же для IMSI+IMEI |
@@ -86,7 +87,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-msisdn-imei` | Месячный `stg_msisdn_imei`, ежедневный инкремент ([doc](documents/stg/build_stg_msisdn_imei.md)) |
 | `build-stg-bs` | Полный `src_bs` + SCD-merge → `stg_bs` ([doc](documents/stg/build_stg_bs.md)) |
 | `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` ([doc](documents/nb/nb_perf_metrics.md)) |
-| `dq-stg-person` | *(план)* DQ `stg_person` / `stg_person_sim` ([spec](documents/dq/stg/dq_stg_person.md)) |
+| `dq-stg-person` | DQ `stg_person` / `stg_person_sim` за `--report-date` (YYYY-MM-01) ([checks](documents/dq/stg/dq_stg_person.md)) |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
 
@@ -102,7 +103,9 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--stg-tac-path PATH`** — для `build-stg-person`: справочник TAC для исключения M2M SIM (по умолчанию `data/stg/tac.parquet`; нужен `build-stg-tac`).
 
-Флаг **`--stg-oksm-path PATH`** — для `build-stg-person`: справочник ОКСМ для `citizenship` (по умолчанию `data/stg/oksm.parquet`; нужен `build-stg-oksm`).
+Флаг **`--stg-oksm-path PATH`** — для `build-stg-person` / `dq-stg-person`: справочник ОКСМ (по умолчанию `data/stg/oksm.parquet`; для сборки нужен `build-stg-oksm`).
+
+Флаг **`--stg-person-path`**, **`--stg-person-sim-path`**, **`--stg-person-ledger-path`** — для `dq-stg-person`: входные parquet (по умолчанию `data/stg/person|person_sim|person_id_ledger/{YYYY-MM-01}.parquet`).
 
 Флаг **`--oktmo-path PATH`** — для `build-stg-bs`: справочник ОКТМО (по умолчанию `data/stg/oktmo.parquet`).
 
@@ -124,7 +127,7 @@ uv run mobile nb-perf-metrics
 
 | Команда | Конфиг / источник | Вход | Выход |
 |---------|-------------------|------|-------|
-| `build-stg-day` | — | raw CSV (см. ниже) | `data/stg/load_day={day}/*.parquet` |
+| `build-stg-day` | — | `oktmo_v001.csv`, `time_zones.csv`, `tacdb_v001.csv`, `oksm_v001.csv` | `data/stg/load_day={day}/*.parquet` (4 файла) |
 | `build-stg-oktmo` | — | `src/mobile/raw_data/oktmo_v001.csv` | `data/stg/oktmo.parquet` (snappy) |
 | `build-stg-time-zones` | — | `src/mobile/raw_data/time_zones.csv` | `data/stg/time_zones.parquet` (snappy) |
 | `build-stg-tac` | — | `src/mobile/raw_data/tacdb_v001.csv` | `data/stg/tac.parquet` (snappy) |
@@ -160,6 +163,7 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_stg_oktmo.md`](documents/stg/build_stg_oktmo.md)
 - [`documents/stg/build_stg_time_zones.md`](documents/stg/build_stg_time_zones.md)
 - [`documents/stg/build_stg_tac.md`](documents/stg/build_stg_tac.md)
+- [`documents/stg/build_stg_oksm.md`](documents/stg/build_stg_oksm.md)
 - [`documents/stg/build_stg_event.md`](documents/stg/build_stg_event.md)
 - [`documents/stg/build_stg_geo_all.md`](documents/stg/build_stg_geo_all.md)
 - [`documents/stg/build_stg_geo_intervals.md`](documents/stg/build_stg_geo_intervals.md)
@@ -172,10 +176,11 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_oktmo.md`](documents/dq/stg/dq_stg_oktmo.md)
 - [`documents/dq/stg/dq_stg_time_zones.md`](documents/dq/stg/dq_stg_time_zones.md)
 - [`documents/dq/stg/dq_stg_tac.md`](documents/dq/stg/dq_stg_tac.md)
+- [`documents/dq/stg/dq_stg_oksm.md`](documents/dq/stg/dq_stg_oksm.md)
 - [`documents/dq/stg/dq_stg_bs.md`](documents/dq/stg/dq_stg_bs.md)
 - [`documents/dq/stg/dq_stg_geo_all.md`](documents/dq/stg/dq_stg_geo_all.md)
 - [`documents/dq/stg/dq_stg_geo_intervals.md`](documents/dq/stg/dq_stg_geo_intervals.md)
-- [`documents/dq/stg/dq_stg_person.md`](documents/dq/stg/dq_stg_person.md) *(спецификация, CLI в разработке)*
+- [`documents/dq/stg/dq_stg_person.md`](documents/dq/stg/dq_stg_person.md)
 - [`documents/nb/nb_perf_metrics.md`](documents/nb/nb_perf_metrics.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
 - [`documents/dq/src/dq_src_bs.md`](documents/dq/src/dq_src_bs.md)
@@ -191,6 +196,7 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/stg/oktmo.py` — `run()`
 - `src/mobile/pipelines/stg/time_zones.py` — `run()`
 - `src/mobile/pipelines/stg/tac.py` — `run()`
+- `src/mobile/pipelines/stg/oksm.py` — `run()`, `load_lookup()` / `OksmLookup`
 - `src/mobile/pipelines/stg/event.py` — `run_build()`
 - `src/mobile/pipelines/stg/geo_all.py` — `run_build()`
 - `src/mobile/pipelines/stg/geo_intervals.py` — `run_build()`
@@ -207,9 +213,11 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/dq/stg/oktmo.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/time_zones.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/tac.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/oksm.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/bs.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/geo_all.py` — `run_dq()`
 - `src/mobile/pipelines/dq/stg/geo_intervals.py` — `run_dq()`
+- `src/mobile/pipelines/dq/stg/person.py` — `run_dq()`
 - `src/mobile/pipelines/dq/src/mobile.py` — `run_dq(dc, report_date, cdr_path, …)`
 - `src/mobile/pipelines/dq/src/bs.py` — `run_dq(parquet_path)`
 - `src/mobile/pipelines/src/bs.py` — `run()`

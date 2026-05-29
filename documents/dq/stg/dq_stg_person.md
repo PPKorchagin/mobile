@@ -2,9 +2,7 @@
 
 **Витрины:** `stg_person`, `stg_person_sim` · **Команда:** `dq-stg-person` · **Режим:** read-only DQ (процесс не падает при failed checks).
 
-> **Статус:** спецификация и чек-лист; CLI-команда `dq-stg-person` **ещё не реализована** в `mobile`. Сборка — [`build_stg_person.md`](../../stg/build_stg_person.md).
-
-Референс (план): `src/mobile/pipelines/dq/stg/person.py` (будущий). Схемы: [`person.json`](../../../src/mobile/schema/stg/person.json), [`person_sim.json`](../../../src/mobile/schema/stg/person_sim.json).
+Референс: [`src/mobile/pipelines/dq/stg/person.py`](../../../src/mobile/pipelines/dq/stg/person.py). Сборка — [`build_stg_person.md`](../../stg/build_stg_person.md). Схемы: [`person.json`](../../../src/mobile/schema/stg/person.json), [`person_sim.json`](../../../src/mobile/schema/stg/person_sim.json).
 
 ---
 
@@ -26,26 +24,26 @@
 
 ## TODO
 
-1. Реализовать `pipelines/dq/stg/person.py` и зарегистрировать в CLI.
-2. Проверки ledger: согласованность `person_id` с узлами прошлого месяца.
-3. Пороги warning для `person_confidence=low`.
+1. Сверка ledger с **прошлым** месяцем (стабильность `person_id` между срезами).
+2. Настраиваемый порог `person_confidence=low`.
 
 ---
 
-## Параметры запуска (план)
+## Параметры запуска
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
 | `report_date` | date | Да | — | **`YYYY-MM-01`** |
 | `stg_person_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | Профиль |
 | `stg_person_sim_path` | path | Нет | `data/stg/person_sim/{YYYY-MM-01}.parquet` | Подписки |
+| `stg_oksm_path` | path | Нет | `data/stg/oksm.parquet` | Справочник для проверки `citizenship` |
+| `stg_person_ledger_path` | path | Нет | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | Ledger (если файл есть) |
 
 ```bash
-# после реализации:
 uv run mobile dq-stg-person --report-date 2025-01-01
 ```
 
-Логи (план): тег `DQ_STG_PERSON`. Метрики: `command=dq-stg-person`.
+Логи: тег `DQ_STG_PERSON`. Метрики: `command=dq-stg-person` → `command_timing.jsonl`.
 
 ---
 
@@ -81,13 +79,14 @@ uv run mobile dq-stg-person --report-date 2025-01-01
 |---|----------|------|
 | 1 | `stg_person` | `data/stg/person/{YYYY-MM-01}.parquet` |
 | 2 | `stg_person_sim` | `data/stg/person_sim/{YYYY-MM-01}.parquet` |
-| 3 | (опц.) ledger | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` |
+| 3 | `stg_oksm` | `data/stg/oksm.parquet` | Валидация `citizenship` (кроме `U`) |
+| 4 | (опц.) ledger | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` |
 
 ---
 
-## Алгоритм обработки данных (план)
+## Алгоритм обработки данных
 
-Планируемая точка входа: `run_dq(report_date, …)` в `pipelines/dq/stg/person.py` (ещё не в CLI). Референс логики: `synthetic_data/documents/dq/dq_stg_person.md`.
+Точка входа: `run_dq(report_date, …)` в [`person.py`](../../../src/mobile/pipelines/dq/stg/person.py).
 
 ### Шаг 0. Инициализация
 
@@ -128,7 +127,7 @@ uv run mobile dq-stg-person --report-date 2025-01-01
 
 1. `domain.gender`: значения ⊆ `{M, F, U}`.
 2. `domain.age`: целое 0–120 или `U` (строка).
-3. `domain.citizenship`: непустая строка, допуск `U`.
+3. `domain.citizenship`: непустая строка; значение `U` или `numeric_code` ОКСМ (`^\d{3}$`); опционально — все коды (кроме `U`) ∈ множества `stg_oksm.numeric_code`.
 4. `domain.person_confidence`: ⊆ `{high, medium, low}`.
 5. `domain.sim_count`: `sim_count >= 1`.
 6. `distribution.person_confidence`: если доля `low` > порога (например 30%) → **warning**.

@@ -74,8 +74,9 @@ uv run mobile build-stg-day --day 2025-01-15
 | `data/stg/load_day={YYYY-MM-DD}/oktmo.parquet` | `stg_oktmo` |
 | `data/stg/load_day={YYYY-MM-DD}/time_zones.parquet` | `stg_time_zones` |
 | `data/stg/load_day={YYYY-MM-DD}/tac.parquet` | `stg_tac` |
+| `data/stg/load_day={YYYY-MM-DD}/oksm.parquet` | `stg_oksm` |
 
-Корневые `data/stg/oktmo.parquet` (без `load_day`) **не обновляются** этой командой.
+Корневые `data/stg/*.parquet` (без `load_day`) **не обновляются** этой командой — для продакшн-справочников используйте одиночные `build-stg-*`.
 
 ---
 
@@ -86,6 +87,7 @@ uv run mobile build-stg-day --day 2025-01-15
 | 1 | ОКТМО CSV | `oktmo_csv_path` |
 | 2 | Time zones CSV | `time_zones_csv_path` |
 | 3 | TAC CSV | `tac_csv_path` |
+| 4 | ОКСМ CSV | `oksm_csv_path` |
 
 ---
 
@@ -93,7 +95,7 @@ uv run mobile build-stg-day --day 2025-01-15
 
 ### Шаг 0. Инициализация
 
-`params = default_build_stg_day_params(day)` → `stg_load_day_paths(day)` формирует каталог `data/stg/load_day={iso}/` и шесть путей.
+`params = default_build_stg_day_params(day)` → `stg_load_day_paths(day)` формирует каталог `data/stg/load_day={iso}/` и восемь путей (четыре CSV + четыре parquet).
 
 ### Шаг 1. Build `stg_oktmo`
 
@@ -124,6 +126,14 @@ uv run mobile build-stg-day --day 2025-01-15
 
 1. `dq_stg_tac.run_dq` на выход шага 5.
 
+### Шаг 7. Build `stg_oksm`
+
+1. CSV `oksm_v001.csv` → `load_day={day}/oksm.parquet` — см. [`build_stg_oksm.md`](./build_stg_oksm.md).
+
+### Шаг 8. DQ `stg_oksm`
+
+1. `dq_stg_oksm.run_dq` на выход шага 7.
+
 **Оркестрация:** последовательность зашита в `BUILD_STG_DAY_STEPS` ([`day.py`](../../src/mobile/pipelines/stg/day.py)); каждый шаг пишет отдельную запись в `command_timing.jsonl`.
 
 **Альтернатива:** `stg_day.run(params)` — те же шаги без отдельного `run_timed_command` на каждый (одна метрика на весь день).
@@ -137,6 +147,7 @@ uv run mobile build-stg-day --day 2025-01-15
 | 2 | `dq-stg-oktmo` | [`dq_stg_oktmo.md`](../dq/stg/dq_stg_oktmo.md#проверки) — схема, иерархия ОКТМО, WKT |
 | 4 | `dq-stg-time-zones` | [`dq_stg_time_zones.md`](../dq/stg/dq_stg_time_zones.md#проверки) — timezone, распределение TZ, geometry |
 | 6 | `dq-stg-tac` | [`dq_stg_tac.md`](../dq/stg/dq_stg_tac.md#проверки) — TAC, M2M, даты |
+| 8 | `dq-stg-oksm` | [`dq_stg_oksm.md`](../dq/stg/dq_stg_oksm.md#проверки) — коды стран, имена |
 
 ### Типовые ошибки
 

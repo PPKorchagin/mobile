@@ -14,12 +14,13 @@
 |---|--------|-----------|
 | 1 | Принять `report_date` = 1-е число отчётного месяца | `2025-01-01` |
 | 2 | `src_person` — **последний** `load_day` с `_SUCCESS` (профиль) | `person.parquet` |
-| 3 | `stg_msisdn_operator` — **все** срезы месяца (MNP) | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` |
-| 4 | Месячные binding (ежедневный инкремент) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `msisdn_imei` |
-| 5 | Исключить M2M по `stg_tac` | Без IoT SIM |
-| 6 | Union-find: `bio`, `contract`, `iccid`, ID + bindings + operator | Кластер персоны |
-| 7 | `person_id` + ledger прошлого месяца | Стабильный ID между месяцами |
-| 8 | `stg_person` (1 строка) + `stg_person_sim` (N SIM) + ledger | Профиль, подписки, узлы |
+| 3 | `stg_oksm` → `OksmLookup` | `citizenship` = `numeric_code` или `U` |
+| 4 | `stg_msisdn_operator` — **все** срезы месяца (MNP) | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` |
+| 5 | Месячные binding (ежедневный инкремент) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `msisdn_imei` |
+| 6 | Исключить M2M по `stg_tac` | Без IoT SIM |
+| 7 | Union-find: `bio`, `contract`, `iccid`, ID + bindings + operator | Кластер персоны |
+| 8 | `person_id` + ledger прошлого месяца | Стабильный ID между месяцами |
+| 9 | `stg_person` (1 строка) + `stg_person_sim` (N SIM) + ledger | Профиль, подписки, узлы |
 
 **Бизнес-назначение:** стабильный месячный слой персон (идентификатор + демография + мульти-SIM) для джойнов с geo/event.
 
@@ -35,8 +36,7 @@
 
 ## TODO
 
-1. Реализовать DQ: [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) → `dq-stg-person`.
-2. Профилирование по операторам и `person_confidence` в `command_timing`.
+1. Профилирование по операторам и `person_confidence` в `command_timing`.
 
 ---
 
@@ -139,6 +139,8 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 
 Документация вспомогательных сборок:
 
+- [`build_stg_tac.md`](./build_stg_tac.md)
+- [`build_stg_oksm.md`](./build_stg_oksm.md)
 - [`build_stg_msisdn_operator.md`](./build_stg_msisdn_operator.md)
 - [`build_stg_msisdn_imsi.md`](./build_stg_msisdn_imsi.md)
 - [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md)
@@ -171,14 +173,21 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 2. Метрика `src_load_days` — какие `load_day` участвовали в выборе.
 3. При отсутствии среза — `FileNotFoundError`.
 
-### Шаг 2. Исключение M2M по TAC
+### Шаг 2. Загрузка справочника ОКСМ
+
+1. `stg_oksm_path` (по умолчанию `data/stg/oksm.parquet`, CLI `--stg-oksm-path`).
+2. [`oksm.load_lookup`](../../src/mobile/pipelines/stg/oksm.py) → `OksmLookup` (индексы `alpha2`/`alpha3` → `numeric_code`, токены из `name_short`/`name_full`).
+3. Метрика `load_oksm_sec` в `command_timing.jsonl`.
+4. Если parquet отсутствует — `FileNotFoundError` (нужен `build-stg-oksm`).
+
+### Шаг 3. Исключение M2M по TAC
 
 1. Чтение `stg_tac.parquet` (`tac`, `is_m2m`); множество `m2m_tacs`.
 2. Для каждой строки: `imei_tac = первые 8 цифр IMEI` после нормализации цифр.
 3. Удаление строк, где `imei_tac ∈ m2m_tacs`; счётчик `excluded_m2m_tac_rows`.
 4. Если файла TAC нет или нет колонок — **warning**, фильтр не применяется.
 
-### Шаг 3. Витрина `stg_msisdn_operator` (MNP)
+### Шаг 4. Витрина `stg_msisdn_operator` (MNP)
 
 1. Если `build_operator_vitrine=true`:
    - повторное чтение `src_person` в режиме **`all_snapshots`** (concat всех `load_day` месяца);
@@ -190,19 +199,19 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 3. Если витрина уже есть и `build_operator_vitrine=false` — чтение с диска.
 4. **Рёбра MNP** в графе строятся только как `msisdn`↔`imsi` на интервале operator (не по одному `operator_id`).
 
-### Шаг 4. Месячные binding MSISDN↔IMSI/IMEI
+### Шаг 5. Месячные binding MSISDN↔IMSI/IMEI
 
 1. Пути: `stg_msisdn_imsi_output_path(report_month)` → `…/msisdn_imsi/{YYYY-MM-01}.parquet` (месячный файл).
 2. Если `build_bindings_month=true` и файла нет — `refresh_month_bindings_from_geo`:
    - для каждого дня месяца с `stg_geo_all` вызвать `build-stg-msisdn-imsi` и `build-stg-msisdn-imei` (инкремент в month parquet).
 3. `_read_binding_parquet` — нормализация `msisdn`/`imsi`/`imei`, `valid_from`/`valid_to`.
 
-### Шаг 5. Ledger прошлого месяца
+### Шаг 6. Ledger прошлого месяца
 
 1. `_previous_report_month(report_month)` → 1-е число предыдущего месяца.
 2. `_load_previous_ledger`: чтение `person_id_ledger` прошлого месяца (если есть) — колонки `person_id`, `person_cluster_key`, `node`.
 
-### Шаг 6. Подготовка подписок (`_prepare_subscriptions`)
+### Шаг 7. Подготовка подписок (`_prepare_subscriptions`)
 
 1. **Фильтр ФЛ:** `client_type == 0`.
 2. **Пересечение с месяцем:** `actually_from <= month_end` и `actually_to >= month_start`; `actually_to` без значения → `2999-12-31`.
@@ -217,7 +226,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
    - метрики `binding_fill` (сколько полей дозаполнено).
 5. Отбор строк с полным ключом: `msisdn`, `imsi`, `imei`, `operator_id`, интервалы не null.
 
-### Шаг 7. Кластеризация (`_assign_clusters`, union-find)
+### Шаг 8. Кластеризация (`_assign_clusters`, union-find)
 
 1. Инициализация `UnionFind`.
 2. **Узлы co-occurrence** на каждой строке `src_person`:
@@ -232,7 +241,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
    - приоритет: первый лексикографически `bio:` → `contract:` → `iccid:` → иначе `min(все узлы кластера)`.
 6. Для каждой строки: `roots` = `find()` по всем узлам строки; `person_cluster_key` = canonical корня `min(roots)`; `person_confidence` по типам узлов в кластере.
 
-### Шаг 8. Назначение `person_id` (`assign_person_ids_with_ledger`)
+### Шаг 9. Назначение `person_id` (`assign_person_ids_with_ledger`)
 
 1. Из ledger прошлого месяца: индексы `node → person_id` и `person_cluster_key → person_id`.
 2. Для каждого `person_cluster_key` текущего месяца:
@@ -241,7 +250,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
    - иначе `person_id = prs_` + SHA256(`person_cluster_key`)[:24].
 3. Обновление индексов для всех узлов кластера (для следующих строк того же месяца).
 
-### Шаг 9. Выходные витрины (`_build_outputs`)
+### Шаг 10. Выходные витрины (`_build_outputs`)
 
 1. **`stg_person_sim`:**
    - все строки `work` с `report_date`, `person_id`;
@@ -252,15 +261,30 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
    - `sim_count` = `nunique(imsi|iccid)` по подпискам персоны;
    - `gender` ← `_derive_gender` (по полю/ФИО);
    - `age` ← возраст на `month_start` из `birth_day` или `U`;
-   - `citizenship` ← `_derive_citizenship_from_row` + [`oksm.load_lookup`](../../src/mobile/pipelines/stg/oksm.py) (`numeric_code`) или `U`.
+   - **`citizenship`** — `_derive_citizenship_from_row` + `OksmLookup` (см. ниже); в витрине только **`numeric_code`** (3 цифры) или `U`, не alpha-2.
 3. **`stg_person_id_ledger`:**
    - для каждого `(person_cluster_key, person_id)` — по одной строке на каждый узел графа (`node` = `msisdn:…`, `bio:…`, …);
    - снимок для стабильности ID в следующем месяце.
 
-### Шаг 10. Запись и метрики
+#### Определение `citizenship` (`_derive_citizenship`)
+
+Вход: `dul_department`, `document`, ФИО из primary-строки `src_person` (в `src_person` гражданство **не хранится** — только подсказки в текстах документов/подразделений).
+
+Порядок разрешения (каждый шаг возвращает `numeric_code` через `OksmLookup.from_alpha2` или `match_country_names`):
+
+1. Подстроки в `dul_department` → `_DEPT_MAP` (alpha-2) → ОКСМ (`мвд` → `643`, …).
+2. Подстроки в `document` → `_DOC_MAP` (`паспорт рф`, `казахстан`, …).
+3. Подстроки в объединённом тексте → `_NAME_HINTS` (`kaz`, `uzb`, …).
+4. Совпадение `name_short` / `name_full` из справочника ОКСМ в тексте.
+5. Эвристика русского ФИО (отчество `вич`/`вна`/…): при `мвд`/`паспорт рф` или пустых doc/dept → `default_russia()` (`643`).
+6. Иначе `U`.
+
+Константы `_DEPT_MAP`, `_DOC_MAP`, `_NAME_HINTS` — в [`person.py`](../../src/mobile/pipelines/stg/person.py); значения — ISO alpha-2, итог всегда **цифровой код ОКСМ**.
+
+### Шаг 11. Запись и метрики
 
 1. `to_parquet` для трёх витрин (snappy).
-2. `append_command_metrics`: `elapsed_*_sec`, `stg_rows_written`, `person_sim_rows`, `ledger_rows`, пути входов.
+2. `append_command_metrics`: `elapsed_*_sec` (в т.ч. `load_oksm_sec`), `stg_rows_written`, `person_sim_rows`, `ledger_rows`, пути входов.
 
 ### Типовые ошибки
 
@@ -282,6 +306,6 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 | ETL | [`person.py`](../../src/mobile/pipelines/stg/person.py) |
 | Граф / ID | [`person_identity.py`](../../src/mobile/pipelines/stg/person_identity.py) |
 | Чтение src | [`src_person_month.py`](../../src/mobile/pipelines/stg/src_person_month.py) |
-| DQ (план) | [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) |
+| DQ | [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) |
 | Источник | [`build_src_person.md`](../src/build_src_person.md) |
 | Пути | [`project_paths.py`](../../src/mobile/project_paths.py) |

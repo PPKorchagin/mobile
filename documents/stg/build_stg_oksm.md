@@ -75,7 +75,7 @@ uv run mobile build-stg-oksm
 
 ### Шаг 1. Чтение
 
-`read_csv(csv_path, sep=';', encoding='utf-8-sig')`.
+`read_csv(csv_path, sep=';', encoding='utf-8-sig', keep_default_na=False, na_values=[""])` — иначе alpha2 `NA` (Намибия) читается pandas как null.
 
 ### Шаг 2. Нормализация
 
@@ -91,10 +91,27 @@ uv run mobile build-stg-oksm
 
 ---
 
+## Использование в `build-stg-person`
+
+Помимо ETL, модуль [`oksm.py`](../../src/mobile/pipelines/stg/oksm.py) экспортирует **`OksmLookup`** и **`load_lookup(path)`** для поля `stg_person.citizenship`:
+
+| API | Назначение |
+|-----|------------|
+| `load_lookup()` | Чтение `data/stg/oksm.parquet`, построение индексов |
+| `from_alpha2(code)` | `RU` → `643`, `KZ` → `398`, … |
+| `match_text_tokens(text, mapping)` | Подстрока → alpha-2 из `mapping` → `numeric_code` |
+| `match_country_names(text)` | Подстрока из `name_short`/`name_full` → `numeric_code` |
+| `default_russia()` | `643` |
+
+См. [`build_stg_person.md`](./build_stg_person.md) — шаги 2 и 10 (раздел «Определение citizenship»).
+
+---
+
 ## Ссылки
 
 | Артефакт | Путь |
 |----------|------|
 | Схема | [`src/mobile/schema/stg/oksm.json`](../../src/mobile/schema/stg/oksm.json) |
-| ETL | [`src/mobile/pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py) |
+| ETL / lookup | [`src/mobile/pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py) |
 | DQ | [`documents/dq/stg/dq_stg_oksm.md`](../dq/stg/dq_stg_oksm.md) |
+| Потребитель | [`build_stg_person.md`](./build_stg_person.md) |

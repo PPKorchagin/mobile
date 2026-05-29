@@ -157,7 +157,7 @@ uv run mobile build-src-person --target-per-operator 5000
 | Идентичность | `home_operator` = serving; с вероятностью `movement_ratio` — соседний оператор (`_neighbor_operator_vectorized`); с `inter_operator_transition_ratio` — другой оператор для triplet (`_neighbor_operator`) |
 | MSISDN/IMSI/IMEI | `_identity_triplet(home_for_ids, sid)`; ~2% `INVALID_ISDN_PROBABILITY` → `_sample_invalid_isdn_digits`; ~3% `IDENTITY_FIELD_LEAK_PROBABILITY` — imsi/imei в «чужих» `identity_type` |
 | Статусы | `closed_contract_ratio`, `inactive_ratio` → `active_now`; `abonent_status` 0/1 |
-| Тип клиента | `corporate_ratio` → `client_type` 0/1; ФЛ/ЮЛ поля, иностранцы `foreign_subscriber_ratio` → `_assign_citizenship_codes` |
+| Тип клиента | `corporate_ratio` → `client_type` 0/1; ФЛ/ЮЛ поля, иностранцы `foreign_subscriber_ratio` → `_assign_citizenship_codes` (alpha-2 в генераторе; в `stg_person` → `numeric_code` через [`build-stg-person`](../stg/build_stg_person.md)) |
 | identity_type | веса `[0.74, 0.12, 0.06, 0.05, 0.03]` для типов 2/4/5/3/1; условные колонки GSM/data/VoIP/CDMA |
 | Интервалы | `actually_from = day`; `actually_to` = `ACTUALLY_TO_OPEN` если активен, иначе конец дня; договор/услуги согласованы с `closed_contract` |
 | Локация | `abonent_last_location` с весами; `lac`/`cell` только при `== 0` |
