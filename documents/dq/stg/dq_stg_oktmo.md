@@ -25,7 +25,6 @@
 ## TODO
 
 1. При необходимости ужесточить пороги (failed вместо warning).
-2. Связать с notebook-визуализацией DQ (если перенесём nb из geo).
 
 ---
 
@@ -133,7 +132,7 @@ uv run mobile dq-stg-oktmo
 
 ## Проверки
 
-Статусы: **ok** / **warning** / **failed** (кроме метрик `nulls.`* и `cardinality.*` — всегда **ok**).
+Статусы: **ok** / **warning** / **failed** (кроме метрик `nulls.`* и `cardinality.`* — всегда **ok**).
 
 ### Наличие и схема
 

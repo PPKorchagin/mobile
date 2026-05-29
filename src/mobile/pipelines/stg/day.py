@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from mobile.pipelines.dq.stg import oktmo as dq_oktmo, oksm as dq_oksm, tac as dq_tac, time_zones as dq_time_zones
-from mobile.notebook_runner import run_nb_stg_oktmo
+from mobile.notebook_runner import run_nb_stg_oktmo, run_nb_stg_time_zones
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ BUILD_STG_DAY_STEPS: tuple[str, ...] = (
     "nb-stg-oktmo",
     "build-stg-time-zones",
     "dq-stg-time-zones",
+    "nb-stg-time-zones",
     "build-stg-tac",
     "dq-stg-tac",
     "build-stg-oksm",
@@ -67,9 +68,13 @@ def run(params: BuildStgDayParams) -> dict[str, Any]:
     results["steps"]["build-stg-time-zones"] = time_zones.run(
         csv_path=params.time_zones_csv_path,
         output_path=params.time_zones_output_path,
-        compression=params.compression,
     )
-    results["steps"]["dq-stg-time-zones"] = dq_time_zones.run_dq(params.time_zones_output_path)
+    results["steps"]["dq-stg-time-zones"] = dq_time_zones.run_dq(
+        time_zones_path=params.time_zones_output_path,
+    )
+
+    run_nb_stg_time_zones()
+    results["steps"]["nb-stg-time-zones"] = {"status": "ok"}
 
     results["steps"]["build-stg-tac"] = tac.run(
         csv_path=params.tac_csv_path,

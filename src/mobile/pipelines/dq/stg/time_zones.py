@@ -17,13 +17,13 @@ LOG_TAG = "DQ_STG_TIME_ZONES"
 ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
 
 
-def run_dq(parquet_path: str | Path) -> dict[str, Any]:
+def run_dq(time_zones_path: str | Path) -> dict[str, Any]:
     """DQ витрины ``stg_time_zones`` по пути parquet (поля — ``STG_TIME_ZONES_FIELDS`` в ETL)."""
-    resolved = _resolve_parquet_path(parquet_path)
+    resolved = _resolve_time_zones_path(time_zones_path)
     expected_columns = [field["name"] for field in STG_TIME_ZONES_FIELDS]
 
     if not resolved.exists():
-        summary = {"status": "failed", "reason": "parquet_not_found", "parquet_path": str(resolved)}
+        summary = {"status": "failed", "reason": "parquet_not_found", "time_zones_path": str(resolved)}
         _emit_log("dataset_presence", "failed", summary)
         _emit_summary(total_checks=1, warnings=0, failed=1)
         return summary
@@ -48,7 +48,7 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
         {
             "row_count": int(len(data)),
             "column_count": int(len(data.columns)),
-            "parquet_path": str(resolved),
+            "time_zones_path": str(resolved),
         },
     )
 
@@ -120,7 +120,7 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
     _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
     return {
         "status": "ok",
-        "parquet_path": str(resolved),
+        "time_zones_path": str(resolved),
         "total_checks": checks,
         "warning_checks": warnings,
         "failed_checks": failed,
@@ -173,7 +173,7 @@ def _collect_wkt_metrics(values: pd.Series) -> dict[str, Any]:
     }
 
 
-def _resolve_parquet_path(path: str | Path) -> Path:
+def _resolve_time_zones_path(path: str | Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 

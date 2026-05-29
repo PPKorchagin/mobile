@@ -1,4 +1,4 @@
-"""Утилиты DQ-ноутбуков ``src/mobile/pipelines/nb/``: логи и folium-карта ``stg_oktmo``."""
+"""Утилиты DQ-ноутбуков ``src/mobile/pipelines/nb/``: логи, matplotlib и folium-карты STG."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from typing import Any
 import folium
 import matplotlib.pyplot as plt
 import pandas as pd
+from branca.colormap import StepColormap
 from IPython.display import display
 from shapely import wkt
 
-from mobile.project_paths import DEFAULT_STG_OKTMO_OUTPUT_PATH
+from mobile.project_paths import DEFAULT_STG_OKTMO_OUTPUT_PATH, DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
 
@@ -378,6 +379,103 @@ def render_stg_oktmo_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
+def timezone_distribution_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "timezone_range")
+    distribution = metrics.get("distribution")
+    if not isinstance(distribution, dict):
+        return pd.DataFrame(columns=["timezone", "pct"])
+    return pd.DataFrame(
+        [{"timezone": f"UTC+{key}", "pct": float(value)} for key, value in distribution.items()]
+    ).sort_values("pct", ascending=False)
+
+
+def geometry_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "geometry_quality")
+    if not metrics:
+        return pd.DataFrame(columns=["metric", "count"])
+    labels = {
+        "valid_geometry_count": "valid",
+        "parse_error_count": "parse errors",
+        "invalid_topology_count": "invalid topology",
+        "empty_geometry_count": "empty",
+        "unsupported_geom_type_count": "unsupported type",
+    }
+    return pd.DataFrame(
+        [{"metric": labels[key], "count": int(metrics[key])} for key in labels if key in metrics]
+    )
+
+
+def time_zones_code_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "code_quality")
+    if not metrics:
+        return pd.DataFrame(columns=["metric", "count"])
+    rows: list[dict[str, Any]] = []
+    for key, label in (
+        ("duplicate_code_count", "duplicate codes"),
+        ("invalid_code_count", "invalid codes"),
+    ):
+        if key in metrics:
+            rows.append({"metric": label, "count": int(metrics[key])})
+    timezone_metrics = _metrics_for_check(latest, "timezone_range")
+    if "invalid_timezone_count" in timezone_metrics:
+        rows.append(
+            {
+                "metric": "invalid timezone",
+                "count": int(timezone_metrics["invalid_timezone_count"]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def plot_timezone_distribution(dist: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if dist.empty:
+        ax.set_title("timezone_range — нет данных")
+        ax.axis("off")
+        return fig
+    work = dist.sort_values("pct", ascending=True).tail(15)
+    ax.barh(work["timezone"], work["pct"], color="#2563eb", alpha=0.88)
+    ax.set_xlabel("доля, %")
+    ax.set_title("Распределение UTC offset")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_time_zones_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(null_ratio_frame(latest), ax=axes[0, 2])
+    plot_timezone_distribution(timezone_distribution_frame(latest), ax=axes[1, 0])
+    plot_count_bars(
+        geometry_quality_frame(latest),
+        title="Geometry quality",
+        ax=axes[1, 1],
+        color="#17becf",
+    )
+    plot_count_bars(
+        time_zones_code_quality_frame(latest),
+        title="Качество code / timezone",
+        ax=axes[1, 2],
+        color="#8c564b",
+    )
+    if basic:
+        fig.suptitle(
+            f"DQ STG TIME ZONES — rows={int(basic.get('row_count') or 0):,}, "
+            f"columns={int(basic.get('column_count') or 0)}",
+            fontsize=13,
+            y=1.02,
+        )
+    else:
+        fig.suptitle("DQ STG TIME ZONES — обзор метрик", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
 def _collect_centroids(df: pd.DataFrame, wkt_col: str) -> tuple[list[tuple[float, float]], int]:
     pts: list[tuple[float, float]] = []
     bad = 0
@@ -523,5 +621,123 @@ def render_stg_oktmo_folium_map(root: Path) -> folium.Map:
         print(f"level=2 rendered: {l2_ok:,}/{l2_total:,} (bad: {l2_bad:,}, limit: {l2_max:,})")
     if bad_centroids:
         print(f"centroid WKT errors (level=1): {bad_centroids}")
+
+    return m
+
+
+def _resolve_parquet(root: Path, path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return root / path
+
+
+def render_stg_time_zones_folium_map(root: Path) -> folium.Map:
+    tz_parquet = _resolve_parquet(root, DEFAULT_STG_TIME_ZONES_OUTPUT_PATH)
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+
+    tz_df = pd.read_parquet(tz_parquet)
+    if tz_df.empty or "geometry" not in tz_df.columns:
+        raise ValueError(f"Нет данных для карты: {tz_parquet}")
+
+    oktmo_df = pd.read_parquet(oktmo_parquet)
+    oktmo_l1 = oktmo_df.loc[oktmo_df["level"] == 1].copy()
+    if oktmo_l1.empty or "WKT" not in oktmo_l1.columns:
+        raise ValueError(f"Нет ОКТМО level=1 в {oktmo_parquet}")
+
+    try:
+        tz_rel = tz_parquet.relative_to(root)
+    except ValueError:
+        tz_rel = tz_parquet
+    try:
+        oktmo_rel = oktmo_parquet.relative_to(root)
+    except ValueError:
+        oktmo_rel = oktmo_parquet
+
+    print(f"Таймзоны: {len(tz_df):,} | файл: {tz_rel}")
+    print(f"ОКТМО level=1: {len(oktmo_l1):,} | файл: {oktmo_rel}")
+    display(
+        tz_df.groupby("timezone", as_index=False)
+        .agg(regions=("code", "count"))
+        .sort_values("timezone")
+    )
+
+    offsets = sorted(tz_df["timezone"].dropna().astype(int).unique())
+    cmap = plt.get_cmap("Spectral", max(len(offsets), 1))
+    color_by_tz = {offset: plt.matplotlib.colors.to_hex(cmap(index)) for index, offset in enumerate(offsets)}
+
+    oktmo_l1_style = {
+        "color": "#b45309",
+        "weight": 3,
+        "fillColor": "#ffffff",
+        "fillOpacity": 0.0,
+        "dashArray": "6 4",
+    }
+
+    def region_style(tz: int) -> dict[str, Any]:
+        return {
+            "color": "#1f2937",
+            "weight": 1,
+            "fillColor": color_by_tz.get(int(tz), "#9ca3af"),
+            "fillOpacity": 0.55,
+        }
+
+    centroids, bad_geom = _collect_centroids(tz_df, "geometry")
+    oktmo_centroids, bad_oktmo = _collect_centroids(oktmo_l1, "WKT")
+    all_centroids = centroids + oktmo_centroids
+    if not all_centroids:
+        raise ValueError("Не удалось распарсить WKT ни для таймзон, ни для ОКТМО")
+
+    center_lat = sum(lat for lat, _ in all_centroids) / len(all_centroids)
+    center_lon = sum(lon for _, lon in all_centroids) / len(all_centroids)
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=3, tiles="CartoDB positron")
+
+    regions_fg = folium.FeatureGroup(name="Таймзоны (UTC offset)", show=True)
+    for row in tz_df.itertuples(index=False):
+        try:
+            geom = wkt.loads(str(row.geometry))
+        except Exception:
+            bad_geom += 1
+            continue
+        tz = int(row.timezone)
+        folium.GeoJson(
+            data=geom.__geo_interface__,
+            style_function=lambda _, t=tz: region_style(t),
+            tooltip=folium.Tooltip(
+                f"<b>{row.name}</b><br>code={row.code}<br>UTC+{tz}",
+                sticky=True,
+            ),
+        ).add_to(regions_fg)
+    regions_fg.add_to(m)
+
+    oktmo_fg = folium.FeatureGroup(name="ОКТМО level=1 (контуры)", show=True)
+    for row in oktmo_l1.itertuples(index=False):
+        try:
+            geom = wkt.loads(str(row.WKT))
+        except Exception:
+            bad_oktmo += 1
+            continue
+        folium.GeoJson(
+            data=geom.__geo_interface__,
+            style_function=lambda _: oktmo_l1_style,
+            tooltip=folium.Tooltip(
+                f"<b>{row.name}</b><br>ОКТМО {row.code}<br>level=1",
+                sticky=True,
+            ),
+        ).add_to(oktmo_fg)
+    oktmo_fg.add_to(m)
+
+    folium.LayerControl(collapsed=False).add_to(m)
+
+    if offsets:
+        step_colors = [color_by_tz[offset] for offset in offsets]
+        step_index = offsets + [offsets[-1] + 1] if len(offsets) > 1 else [offsets[0], offsets[0] + 1]
+        StepColormap(
+            colors=step_colors,
+            index=step_index,
+            caption="Смещение от UTC, ч",
+        ).add_to(m)
+
+    if bad_geom or bad_oktmo:
+        print(f"Пропущено WKT: таймзоны={bad_geom}, ОКТМО-1={bad_oktmo}")
 
     return m

@@ -11,19 +11,21 @@
 | # | Задача | Результат |
 |---|--------|-----------|
 | 1 | Собрать `BuildStgDayParams` (дата + пути CSV/parquet) | Параметры цепочки |
-| 2 | Выполнить 8 шагов по порядку | Parquet в `data/stg/load_day=…/` + логи DQ |
+| 2 | Выполнить 10 шагов по порядку | Parquet в `data/stg/load_day=…/` + логи DQ + notebooks |
 | 3 | Записать метрики каждого шага | `command_timing.jsonl` |
 
 **Шаги (строго по порядку):**
 
 1. `build-stg-oktmo`
 2. `dq-stg-oktmo`
-3. `build-stg-time-zones`
-4. `dq-stg-time-zones`
-5. `build-stg-tac`
-6. `dq-stg-tac`
-7. `build-stg-oksm`
-8. `dq-stg-oksm`
+3. `nb-stg-oktmo`
+4. `build-stg-time-zones`
+5. `dq-stg-time-zones`
+6. `nb-stg-time-zones`
+7. `build-stg-tac`
+8. `dq-stg-tac`
+9. `build-stg-oksm`
+10. `dq-stg-oksm`
 
 **В scope:** те же ETL/DQ, что у одиночных команд; отличие — каталог выхода привязан к `day`.
 
@@ -110,29 +112,37 @@ uv run mobile build-stg-day --day 2025-01-15
 2. Read-only проверки: схема, иерархия ОКТМО, WKT — [`dq_stg_oktmo.md`](../dq/stg/dq_stg_oktmo.md).
 3. Процесс **не падает** при failed checks; статус в логах.
 
-### Шаг 3. Build `stg_time_zones`
+### Шаг 3. Notebook `nb-stg-oktmo`
 
-1. Аналогично шагу 1: CSV `time_zones.csv` → `load_day={day}/time_zones.parquet`.
+1. `run_nb_stg_oktmo()` — DQ-дашборд и карта ОКТМО по логам шага 2.
 
-### Шаг 4. DQ `stg_time_zones`
+### Шаг 4. Build `stg_time_zones`
 
-1. `dq_stg_time_zones.run_dq` на выход шага 3.
+1. CSV `time_zones.csv` → `load_day={day}/time_zones.parquet`.
 
-### Шаг 5. Build `stg_tac`
+### Шаг 5. DQ `stg_time_zones`
+
+1. `dq_stg_time_zones.run_dq(time_zones_path=…)` на выход шага 4.
+
+### Шаг 6. Notebook `nb-stg-time-zones`
+
+1. `run_nb_stg_time_zones()` — DQ-дашборд и карта таймзон + ОКТМО.
+
+### Шаг 7. Build `stg_tac`
 
 1. CSV `tacdb_v001.csv` → `load_day={day}/tac.parquet`.
 
-### Шаг 6. DQ `stg_tac`
+### Шаг 8. DQ `stg_tac`
 
-1. `dq_stg_tac.run_dq` на выход шага 5.
+1. `dq_stg_tac.run_dq` на выход шага 7.
 
-### Шаг 7. Build `stg_oksm`
+### Шаг 9. Build `stg_oksm`
 
 1. CSV `oksm_v001.csv` → `load_day={day}/oksm.parquet` — см. [`build_stg_oksm.md`](./build_stg_oksm.md).
 
-### Шаг 8. DQ `stg_oksm`
+### Шаг 10. DQ `stg_oksm`
 
-1. `dq_stg_oksm.run_dq` на выход шага 7.
+1. `dq_stg_oksm.run_dq` на выход шага 9.
 
 **Оркестрация:** последовательность зашита в `BUILD_STG_DAY_STEPS` ([`day.py`](../../src/mobile/pipelines/stg/day.py)); каждый шаг пишет отдельную запись в `command_timing.jsonl`.
 
@@ -145,7 +155,7 @@ uv run mobile build-stg-day --day 2025-01-15
 | Шаг | DQ-команда | Документация checks |
 |-----|------------|---------------------|
 | 2 | `dq-stg-oktmo` | [`dq_stg_oktmo.md`](../dq/stg/dq_stg_oktmo.md#проверки) — схема, иерархия ОКТМО, WKT |
-| 4 | `dq-stg-time-zones` | [`dq_stg_time_zones.md`](../dq/stg/dq_stg_time_zones.md#проверки) — timezone, распределение TZ, geometry |
+| 5 | `dq-stg-time-zones` | [`dq_stg_time_zones.md`](../dq/stg/dq_stg_time_zones.md#проверки) — timezone, распределение TZ, geometry |
 | 6 | `dq-stg-tac` | [`dq_stg_tac.md`](../dq/stg/dq_stg_tac.md#проверки) — TAC, M2M, даты |
 | 8 | `dq-stg-oksm` | [`dq_stg_oksm.md`](../dq/stg/dq_stg_oksm.md#проверки) — коды стран, имена |
 

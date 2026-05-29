@@ -23,7 +23,7 @@ from mobile.cli_defaults import (
 )
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
-from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo
+from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo, run_nb_stg_time_zones, run_nb_stg_time_zones
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
@@ -72,14 +72,6 @@ from mobile.project_paths import (
 logger = logging.getLogger(__name__)
 
 _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
-    "build-stg-time-zones": (
-        lambda compression=DEFAULT_PARQUET_COMPRESSION: time_zones.run(
-            csv_path=DEFAULT_STG_TIME_ZONES_CSV_PATH,
-            output_path=DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
-            compression=compression,
-        ),
-        str(DEFAULT_STG_TIME_ZONES_CSV_PATH),
-    ),
     "build-stg-tac": (
         lambda compression=DEFAULT_PARQUET_COMPRESSION: tac.run(
             csv_path=DEFAULT_STG_TAC_CSV_PATH,
@@ -108,10 +100,6 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
 }
 
 _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
-    "dq-stg-time-zones": (
-        lambda: dq_time_zones.run_dq(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
-        str(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
-    ),
     "dq-stg-tac": (
         lambda: dq_tac.run_dq(DEFAULT_STG_TAC_OUTPUT_PATH),
         str(DEFAULT_STG_TAC_OUTPUT_PATH),
@@ -128,6 +116,7 @@ _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
 
 _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-oktmo": run_nb_stg_oktmo,
+    "nb-stg-time-zones": run_nb_stg_time_zones,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -135,6 +124,8 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-day",
     "build-stg-oktmo",
     "dq-stg-oktmo",
+    "build-stg-time-zones",
+    "dq-stg-time-zones",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -251,6 +242,29 @@ def run_dq_stg_oktmo(*, oktmo_path: str | None) -> None:
     run_timed_command(
         "dq-stg-oktmo",
         lambda: dq_oktmo.run_dq(oktmo_path=path),
+    )
+
+
+def run_dq_stg_time_zones(*, time_zones_path: str | None) -> None:
+    """DQ ``stg_time_zones`` (read-only проверки)."""
+    path = Path(time_zones_path) if time_zones_path else DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+    run_timed_command(
+        "dq-stg-time-zones",
+        lambda: dq_time_zones.run_dq(time_zones_path=path),
+    )
+
+
+def run_build_stg_time_zones(
+    *,
+    csv_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-time-zones: CSV таймзон → Parquet ``stg_time_zones``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_STG_TIME_ZONES_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+    run_timed_command(
+        "build-stg-time-zones",
+        lambda: time_zones.run(csv_path=csv, output_path=out),
     )
 
 
@@ -738,11 +752,13 @@ def _run_build_stg_day_step(step: str, params: stg_day.BuildStgDayParams) -> Non
         time_zones.run(
             csv_path=params.time_zones_csv_path,
             output_path=params.time_zones_output_path,
-            compression=params.compression,
         )
         return
     if step == "dq-stg-time-zones":
-        dq_time_zones.run_dq(params.time_zones_output_path)
+        dq_time_zones.run_dq(time_zones_path=params.time_zones_output_path)
+        return
+    if step == "nb-stg-time-zones":
+        run_nb_stg_time_zones()
         return
     if step == "build-stg-tac":
         tac.run(
@@ -782,6 +798,9 @@ def _run_command(
 ) -> None:
     if command == "build-stg-oktmo":
         run_build_stg_oktmo(csv_path=None, output_path=None)
+        return
+    if command == "build-stg-time-zones":
+        run_build_stg_time_zones(csv_path=None, output_path=None)
         return
     if command == "build-src-person":
         logger.info("Starting %s", command)
@@ -827,6 +846,7 @@ def _run_command(
 
 BUILD_STEPS: tuple[str, ...] = (
     "build-stg-oktmo",
+    "build-stg-time-zones",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -907,7 +927,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--csv-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-oktmo: входной CSV ОКТМО (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH})",
+        help=f"build-stg-oktmo / build-stg-time-zones: входной CSV (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH} или {DEFAULT_STG_TIME_ZONES_CSV_PATH})",
     )
     parser.add_argument(
         "--oktmo-path",
@@ -922,7 +942,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--time-zones-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-bs / build-stg-geo-intervals: справочник часовых поясов (по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})",
+        help=(
+            f"build-stg-bs / build-stg-geo-intervals / dq-stg-time-zones: stg_time_zones parquet "
+            f"(по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})"
+        ),
     )
     parser.add_argument(
         "--stg-bs-path",
@@ -1010,8 +1033,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-oktmo / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
-            f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
+            "build-stg-oktmo / build-stg-time-zones / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
+            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH}, {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
             f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
     )
@@ -1068,6 +1091,13 @@ def main() -> None:
             )
         elif args.command == "dq-stg-oktmo":
             run_dq_stg_oktmo(oktmo_path=args.oktmo_path)
+        elif args.command == "build-stg-time-zones":
+            run_build_stg_time_zones(
+                csv_path=args.csv_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "dq-stg-time-zones":
+            run_dq_stg_time_zones(time_zones_path=args.time_zones_path)
         elif args.command == "build-stg-geo-all":
             run_build_stg_geo_all(
                 report_date=args.report_date,
