@@ -169,12 +169,27 @@ uv run mobile build-src-person --target-per-operator 5000
 
 ### Шаг 2a. MNP и вторая SIM (для `build-stg-person`)
 
-На полном и частичном срезе дня, после генерации операторских чанков:
+Вызов: `_append_mnp_and_multi_sim_rows` после склейки чанков операторов, до записи parquet дня.
 
-1. **MNP** (`mnp_portability_ratio`, cap 20%): из ФЛ с GSM выбираются строки; копия с тем же `isdn`, новым `operator_Id`, `imsi`, `imei`, `iccid`, `actually_from` = день, `actually_to` = open. Нужны **несколько** `load_day` в месяце — см. [`build_stg_msisdn_operator.md`](../stg/build_stg_msisdn_operator.md).
-2. **Multi-SIM** (`multi_sim_per_contract_ratio`): копия с тем же `contract_number` и `isdn`, другой `imsi`/`iccid` — две подписки на одном договоре.
+**MNP** (`mnp_portability_ratio`, clamp 0…0.2):
 
-Downstream: [`build_stg_person.md`](../stg/build_stg_person.md) кластеризует такие строки в один `person_id`.
+1. Индекс ФЛ с GSM (`identity_type` / GSM-поля заполнены).
+2. `n_mnp = floor(len(gsm) * ratio)`; случайный выбор без возврата (`rng.choice`).
+3. Для каждой выбранной строки — **копия**:
+   - `isdn` (MSISDN) **без изменений**;
+   - новый `operator_Id` — соседний/случайный оператор (`OPERATORS`);
+   - новые `imsi`, `imei`, `iccid` (детерминированный seed от строки);
+   - `actually_from` = начало дня среза;
+   - `actually_to` = `ACTUALLY_TO_OPEN` (`2999-12-31`).
+4. Копии **добавляются** к выходу дня (concat), не заменяют исходную строку.
+
+**Multi-SIM** (`multi_sim_per_contract_ratio`, clamp 0…0.2):
+
+1. Индекс ФЛ (`client_type=0`).
+2. Выбор строк; копия с тем же `contract_number` и `isdn`;
+3. Новые `imsi` + `iccid`; `actually_from` = день; `actually_to` = open.
+
+**Downstream:** при нескольких `load_day` в месяце [`build-stg-msisdn-operator`](../stg/build_stg_msisdn_operator.md) видит две записи с одним MSISDN и разными `operator_Id`; [`build-stg-person`](../stg/build_stg_person.md) связывает их через `msisdn↔imsi` в union-find.
 
 ### Шаг 3. Завершение оркестратора
 

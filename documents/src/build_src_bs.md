@@ -170,8 +170,8 @@ uv run mobile build-src-bs
 ### Шаг 5. Запись (стадия `write_parquet_sec`)
 
 1. `output_path.parent.mkdir(parents=True, exist_ok=True)`.
-2. `data.to_parquet(output_path, compression=compression, index=False)` — перезапись.
-3. `append_command_metrics(command="build-src-bs", metrics={stats + perf})`.
+2. `data.to_parquet(output_path, compression=compression, index=False)` — полная перезапись `data/src/bs.parquet`.
+3. `append_command_metrics(command="build-src-bs")`: `generate_rows_sec`, `write_parquet_sec`, `row_count`, `subject_count`, счётчики шума из `_collect_stats`, `elapsed_total_sec`.
 
 ### Типовые ошибки
 

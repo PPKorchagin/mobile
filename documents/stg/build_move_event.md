@@ -103,12 +103,22 @@ uv run mobile build-move-event --report-date 2025-01-01
 
 ### Шаг 1. Перенос по ЦОД
 
-Для каждого ЦОД:
+Для каждого `source_id` из `DEFAULT_MOBILE_DATACENTERS` (`central`, `far-east`):
 
-1. Если `src` не существует — `status=missing_source`, **warning** в лог, переход к следующему ЦОД.
-2. Иначе `mkdir -p` для родителя `dst`.
-3. `shutil.copy2(src, dst)` — копия с сохранением метаданных файла.
-4. Лог: `source_id`, `report_date`, `src`, `dst`, `bytes`.
+1. **Источник:** `stg_event_output_path(source_id, report_date)`  
+   → `data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet` (после [`build-stg-event`](./build_stg_event.md)).
+2. **Назначение:** `stg_event_dds_output_path(source_id, report_date)`  
+   → `data/stg/event_dds/{YYYY-MM-DD}/{source_id}.parquet`.
+3. Если `src` не существует:
+   - в массив `moves` добавить `{source_id, status: "missing_source", …}`;
+   - **warning** в лог; `files_written` не увеличивается;
+   - перейти к следующему ЦОД (без исключения).
+4. Иначе:
+   - `dst.parent.mkdir(parents=True, exist_ok=True)`;
+   - `shutil.copy2(src, dst)` — бинарная копия + mtime/atime;
+   - `files_written += 1`;
+   - лог: `bytes` = размер файла.
+5. DDS-слой — **копия**, исходный `stg/event/…` не удаляется.
 
 ### Шаг 2. Метрики
 

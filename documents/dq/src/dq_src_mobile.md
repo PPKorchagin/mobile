@@ -99,16 +99,31 @@ uv run mobile dq-src-mobile --dc central --report-date 2025-01-01
 
 ### Шаг 1. Покрытие
 
-1. `rglob` `{mart}.parquet` под корнем витрины; окно путей ±1 день от `report_date`.
-2. Полное чтение parquet → фильтр строк по `Started` (локальная дата = `report_date`).
-3. Метрики `{mart}.coverage`, сводный `dataset_filter`.
+1. Для каждой витрины `cdr|sms|gprs|location`: `discover_mart_parquet_paths(mobile_root, mart)`.
+2. `filter_paths_near_report_date(paths, report_date, window_days=1)` — пути с календарём **±1 день** (учёт границ суток и layout).
+3. `read_all_parquets_concat(paths, columns=MOBILE_STG_CRITICAL_BY_MART[mart])` — только критичные колонки для ускорения.
+4. `_filter_df_by_local_report_date(df, report_date)`:
+   - `Started` как строка 14 цифр;
+   - локальная дата абонента = `Started[:8]` в формате `YYYYMMDD`;
+   - сравнение с `report_date.isoformat().replace("-","")`.
+5. Метрики:
+   - `{mart}.coverage` — файлов в окне, строк до/после фильтра;
+   - `dataset_filter` — сводка по всем витринам.
 
 ### Шаг 2. Cross-mart и профиль витрин
 
-1. `cross_mart.traffic_mix`, `cross_mart.day_traffic_mix`.
-2. `{mart}.day.coverage`.
-3. Два прогона `_emit_mart_deep_metrics`: префикс `{mart}.day.*` и `{mart}.*` (распределения по полям, `Started_hour`, `null_rates`).
-4. Gate `{mart}.stg_contract.columns`.
+1. **`cross_mart.traffic_mix`:** доли строк по витринам за всё окно чтения; `gprs_share`, `location_to_gprs_row_ratio`.
+2. **`cross_mart.day_traffic_mix`:** то же только для строк отчётного дня.
+3. **`{mart}.day.coverage`:** файлов и строк после дневного фильтра.
+4. **`_emit_mart_deep_metrics`** (два префикса: `{mart}.day.*` и `{mart}.*`):
+   - `sample_basic`, `schema_columns` (info);
+   - `distribution.{col}` — numeric/categorical профили;
+   - `distribution.Started_hour`;
+   - `null_rates` по всем полям `SRC_*_FIELDS`;
+   - для `location` — `spatial_ranges_sample`;
+   - для `cdr`/`gprs` — `imsi_started_duplicates_sample`.
+5. **Gate `{mart}.stg_contract.*`:** пороги валидности Started, Owner, Lac/Cell, IMSI, MSISDN, координат — см. таблицы в [Проверки](#проверки).
+6. **`{mart}.stg_contract.columns`:** **failed**, если нет колонки из `MOBILE_STG_CRITICAL_BY_MART`.
 
 ### Шаг 3. Итог
 

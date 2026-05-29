@@ -93,14 +93,16 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 ### Шаг 3. Gate-проверки
 
-1. `required_fields_presence`: обязательность `msisdn`, `cgi`, `start_time_utc`.
-2. `coords_range`: диапазоны `lat/lon`.
-3. `temporal_order`: `end_time_utc >= start_time_utc` (если `end_time_utc` не null).
-4. `event_count_valid`: `event_count >= 1`.
-5. `source_event_type_vocab`: допустимые значения `cdr/sms/gprs/location`.
-6. `distribution.source_event_type`: операционный профиль типов событий.
-7. `utc_offset_range`: разумный диапазон `[-12, 14]`.
-8. `duplicate_event_key`: дубликаты по ключу `msisdn + start_time_utc + source_event_type + cgi`.
+Для каждого check — расчёт метрик и статус **ok** / **warning** / **failed** (пороги в [`geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py)):
+
+1. **`required_fields_presence`:** доля null по `msisdn`, `cgi`, `start_time_utc`; любой null_ratio > 0 для обязательных → **failed**.
+2. **`coords_range`:** `lat ∈ [-90,90]`, `lon ∈ [-180,180]`; `out_of_range_rows` → **warning** при доле > порога.
+3. **`temporal_order`:** строки с `end_time_utc < start_time_utc` → **failed** если count > 0.
+4. **`event_count_valid`:** `event_count < 1` → **failed** (после 5m-схлопывания минимум 1).
+5. **`source_event_type_vocab`:** значения только `cdr`, `sms`, `gprs`, `location`; иначе **failed**.
+6. **`distribution.source_event_type`:** info — доли типов; сильный перекос → **warning** (опционально).
+7. **`utc_offset_range`:** `utc_offset_hours` (или эквивалент) в [-12, 14].
+8. **`duplicate_event_key`:** ключ `hash(msisdn, start_time_utc, source_event_type, cgi)`; `duplicate_count` → **warning**/**failed** по порогу доли дублей.
 
 ### Шаг 4. Итог
 

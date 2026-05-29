@@ -96,7 +96,22 @@ uv run mobile dq-stg-oktmo
 
 ### Шаг 3. Предметные проверки
 
-См. раздел [Проверки](#проверки).
+Последовательный проход по DataFrame (после `read_parquet`):
+
+1. **`level_distribution`:** `level ∈ {1, 2}`; иначе **warning** + `level_counts`, `invalid_level_count`.
+2. **`code_quality`:** `code` числовой и уникален в пределах файла; дубликаты / нечисловые → **warning**.
+3. **`parent_code_quality`:** числовой `parent_code` где задан.
+4. **`hierarchy_integrity`:**
+   - level=1 не должен иметь `parent_code`;
+   - level=2 должен иметь `parent_code`, существующий среди `code` level=1;
+   - у каждого parent level=1 — хотя бы один child level=2 (опционально warning).
+5. **`name_quality`:** пустые, `-`, `null` в `name` → **warning**.
+6. **`wkt_geometry`:** построчно `shapely.wkt.loads(WKT)`:
+   - `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`;
+   - `unsupported_geom_type_count` (не POLYGON/MULTIPOLYGON);
+   - **warning** при любом ненулевом счётчике (кроме допустимых типов).
+
+Таблица метрик — раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 

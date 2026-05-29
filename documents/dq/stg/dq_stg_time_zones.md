@@ -79,7 +79,12 @@ uv run mobile dq-stg-time-zones
 
 ### Шаг 3. Предметные проверки
 
-См. раздел [Проверки](#проверки).
+1. **`timezone_quality`:** пустые / дубликаты `timezone` → **warning** с `empty_timezone_count`, `duplicate_timezone_count`.
+2. **`utc_offset_range`:** `utc_offset` в [-12, 14]; выход за диапазон → **failed** или **warning** по порогу доли.
+3. **`wkt_geometry`:** аналогично ОКТМО — парсинг WKT, тип POLYGON/MULTIPOLYGON, топология; метрики `parse_error_count`, `geom_type_counts`.
+4. **`point_in_polygon_sample` (если реализовано):** spot-check нескольких тестовых точек против полигонов.
+
+Детали checks — [Проверки](#проверки).
 
 ### Шаг 4. Итог
 

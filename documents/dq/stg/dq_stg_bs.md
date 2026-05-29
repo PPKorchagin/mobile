@@ -85,21 +85,26 @@ uv run mobile dq-stg-bs
 
 ### Шаг 3. Ключи и интервальная целостность
 
-1. `key_presence`: null в `(mcc,mnc,lac,cell_id)` недопустимы.
-2. `key_uniqueness_per_snapshot`: дубликаты ключа `(mcc,mnc,lac,cell_id,date_on)` помечаются warning.
-3. `temporal_consistency`:
-   - проверить `date_off >= date_on`,
-   - дополнительно посчитать долю «открытых» строк с `date_off = 2262-04-11`.
+1. **`key_presence`:** для `mcc`, `mnc`, `lac`, `cell_id` — `null_count` должен быть 0; иначе **failed**.
+2. **`key_uniqueness_per_snapshot`:** в срезе с одинаковым `date_on` не должно быть двух строк с одним `(mcc,mnc,lac,cell_id)`; `duplicate_key_count` → **warning**.
+3. **`temporal_consistency`:**
+   - для всех строк `date_off >= date_on`;
+   - `inverted_interval_count` → **failed** при > 0.
+4. **`temporal_open_ratio`:** доля строк с `date_off` = открытый конец SCD (`2262-04-11` / `_OPEN_END_TS`); **warning**, если доля вне ожидаемого диапазона.
+5. **Пересечения интервалов** (опционально): для одного CGI два открытых интервала — **warning**.
 
 ### Шаг 4. Доменные и геометрические проверки
 
-1. `coords_range`: диапазоны широты/долготы.
-2. `bs_type_vocab`: допустимые типы БС `{m,f,i,x,o}`.
-3. `telecomstandard_vocab`: допустимые стандарты `{2G,3G,4G}`.
-4. `geometry.sector_wkt` и `geometry.mapinfo_wkt`:
-   - парсинг WKT,
-   - проверка типа геометрии,
-   - проверка топологии и пустых геометрий.
+1. **`coords_range`:** `lat ∈ [-90,90]`, `lon ∈ [-180,180]`; `out_of_range_count` → **warning**/**failed**.
+2. **`bs_type_vocab`:** `bs_type ∈ {m,f,i,x,o}`; неизвестные → **failed**.
+3. **`telecomstandard_vocab`:** `{2G,3G,4G}`; иначе **warning**.
+4. **`geometry.sector_wkt`:**
+   - построчный `shapely.wkt.loads`;
+   - тип POLYGON / MULTIPOLYGON / GEOMETRYCOLLECTION (по политике);
+   - `sector_wkt_area > 0` где задано.
+5. **`geometry.mapinfo_wkt`:** те же проверки для ячеек Вороного;
+   - `mapinfo_wkt_centroid_*` в допустимых координатах.
+6. **`oktmo_codes`:** непустые `oktmo_code_1/2` для доли БС (операционный порог).
 
 ### Шаг 5. Финализация
 

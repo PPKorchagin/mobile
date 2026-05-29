@@ -52,7 +52,7 @@
 | `output_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | `stg_person` |
 | `person_sim_path` | path | Нет | `data/stg/person_sim/{YYYY-MM-01}.parquet` | `stg_person_sim` |
 | `person_ledger_path` | path | Нет | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | ledger узлов |
-| `build_bindings_month` | bool | Нет | `true` | Вызвать `build-stg-msisdn-*-month`, если нет файла |
+| `build_bindings_month` | bool | Нет | `true` | `refresh_month_bindings_from_geo`, если нет month parquet |
 | `build_operator_vitrine` | bool | Нет | `true` | Пересобрать `stg_msisdn_operator` из всех срезов |
 
 ### Выбор `src_person` (профиль)
@@ -144,53 +144,120 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 
 ## Алгоритм обработки данных
 
+Точка входа: `run_build(report_date, …)` в [`person.py`](../../src/mobile/pipelines/stg/person.py).
+
 ### Шаг 0. Инициализация
 
-1. `report_date.day == 1`.
-2. Пути: `person`, `person_sim`, `person_id_ledger`, operator, monthly bindings.
-3. При необходимости — `build-stg-msisdn-operator` и `refresh_month_bindings_from_geo` (если нет month parquet).
+1. Валидация: `report_date.day == 1` (`_validate_report_month`).
+2. Период месяца: `period_start = report_date`, `period_end` = последний календарный день.
+3. `month_start` / `month_end` как `pd.Timestamp` (конец месяца 23:59:59 для фильтров).
+4. Разрешение путей:
+   - `person_out` → `data/stg/person/{YYYY-MM-01}.parquet`;
+   - `sim_out` → `person_sim/…`;
+   - `ledger_out` → `person_id_ledger/…`;
+   - `operator_out`, `imsi_month_path`, `imei_month_path`.
+5. Загрузка контракта полей из [`person.json`](../../src/mobile/schema/stg/person.json).
+6. Старт `timed_stage` и счётчиков (`src_rows_before_exclusions`, `excluded_m2m_tac_rows`, …).
 
 ### Шаг 1. Чтение `src_person` (профиль)
 
-`read_src_person_month(..., mode="latest_snapshot")`.
+1. `read_src_person_month(..., mode="latest_snapshot")`:
+   - обход `load_day=*` в `[period_start, period_end]` с `_SUCCESS`;
+   - выбор **максимального** `load_day`;
+   - один `person.parquet` (не concat всех срезов).
+2. Метрика `src_load_days` — какие `load_day` участвовали в выборе.
+3. При отсутствии среза — `FileNotFoundError`.
 
-### Шаг 2. Исключение M2M
+### Шаг 2. Исключение M2M по TAC
 
-TAC = первые 8 цифр IMEI; исключить `is_m2m=true` из [`stg_tac`](build_stg_tac.md).
+1. Чтение `stg_tac.parquet` (`tac`, `is_m2m`); множество `m2m_tacs`.
+2. Для каждой строки: `imei_tac = первые 8 цифр IMEI` после нормализации цифр.
+3. Удаление строк, где `imei_tac ∈ m2m_tacs`; счётчик `excluded_m2m_tac_rows`.
+4. Если файла TAC нет или нет колонок — **warning**, фильтр не применяется.
 
-### Шаг 3. Operator / MNP
+### Шаг 3. Витрина `stg_msisdn_operator` (MNP)
 
-Из **всех** срезов месяца — интервалы `(msisdn, operator_id, imsi)` → `stg_msisdn_operator`. Один MSISDN может иметь несколько операторов на разных интервалах.
+1. Если `build_operator_vitrine=true`:
+   - повторное чтение `src_person` в режиме **`all_snapshots`** (concat всех `load_day` месяца);
+   - повторный M2M-фильтр;
+   - `build_operator_intervals_from_src` → группировка `(msisdn, operator_id, imsi)`:
+     - `valid_from = min(actually_from)`, `valid_to = max(actually_to)`;
+     - только `client_type=0`, интервал ∩ месяц.
+2. Запись `operator_out` (parquet snappy).
+3. Если витрина уже есть и `build_operator_vitrine=false` — чтение с диска.
+4. **Рёбра MNP** в графе строятся только как `msisdn`↔`imsi` на интервале operator (не по одному `operator_id`).
 
-### Шаг 4. Месячные bindings
+### Шаг 4. Месячные binding MSISDN↔IMSI/IMEI
 
-Загрузка месячных `stg_msisdn_imsi` / `stg_msisdn_imei`; при отсутствии — `refresh_month_bindings_from_geo` по всем дням с `stg_geo_all`.
+1. Пути: `stg_msisdn_imsi_output_path(report_month)` → `…/msisdn_imsi/{YYYY-MM-01}.parquet` (месячный файл).
+2. Если `build_bindings_month=true` и файла нет — `refresh_month_bindings_from_geo`:
+   - для каждого дня месяца с `stg_geo_all` вызвать `build-stg-msisdn-imsi` и `build-stg-msisdn-imei` (инкремент в month parquet).
+3. `_read_binding_parquet` — нормализация `msisdn`/`imsi`/`imei`, `valid_from`/`valid_to`.
 
-### Шаг 5. Подписки и binding-fill
+### Шаг 5. Ledger прошлого месяца
 
-1. `client_type == 0`, пересечение с месяцем.
-2. Нормализация ID; binding-fill на конец месяца.
-3. Узлы строки: `bio:`, `contract:`, `iccid:`, `msisdn:`, `imsi:`, `imei:`.
+1. `_previous_report_month(report_month)` → 1-е число предыдущего месяца.
+2. `_load_previous_ledger`: чтение `person_id_ledger` прошлого месяца (если есть) — колонки `person_id`, `person_cluster_key`, `node`.
 
-### Шаг 6. Граф персон (union-find)
+### Шаг 6. Подготовка подписок (`_prepare_subscriptions`)
 
-**Рёбра:**
+1. **Фильтр ФЛ:** `client_type == 0`.
+2. **Пересечение с месяцем:** `actually_from <= month_end` и `actually_to >= month_start`; `actually_to` без значения → `2999-12-31`.
+3. **Нормализация ID:**
+   - `msisdn` ← `normalize_msisdn(isdn)`;
+   - `imsi`, `imei`, `iccid`, `contract_number` — строковые поля;
+   - `operator_id` ← `operator_Id`.
+4. **Binding-fill** на момент `binding_at` = конец последнего дня месяца (`_enrich_identifiers_from_bindings`):
+   - для пустого `imsi` — lookup по `msisdn` в `stg_msisdn_imsi` (интервал содержит `at`);
+   - симметрично `msisdn`←`imsi`, `imei`↔`msisdn`;
+   - при нескольких интервалах — запись с **максимальным** `valid_from` (самая свежая привязка);
+   - метрики `binding_fill` (сколько полей дозаполнено).
+5. Отбор строк с полным ключом: `msisdn`, `imsi`, `imei`, `operator_id`, интервалы не null.
 
-- co-occurrence на строке `src_person`;
-- пары из monthly `stg_msisdn_imsi` / `stg_msisdn_imei` (интервал ∩ месяц);
-- пары из `stg_msisdn_operator` (MNP: не сливать только по `operator_id` без msisdn).
+### Шаг 7. Кластеризация (`_assign_clusters`, union-find)
 
-**`person_cluster_key`:** приоритет `bio:` → `contract:` → `iccid:` → min(технические узлы).
+1. Инициализация `UnionFind`.
+2. **Узлы co-occurrence** на каждой строке `src_person`:
+   - `_unite_pair_column`: `msisdn↔imsi`, `msisdn↔imei`, `msisdn↔iccid`;
+   - `bio_key` = `bio:фамилия|имя|отчество|дата_рождения|цифры_документа` (casefold, только при валидном ФИО+ДР);
+   - `msisdn↔bio`, `msisdn↔contract:{номер}`.
+3. **Рёбра из binding** (`binding_edges_in_month`):
+   - все пары `(msisdn, imsi)` / `(msisdn, imei)`, у которых `[valid_from, valid_to]` пересекает `[month_start, month_end]`.
+4. **Рёбра MNP** (`operator_observation_edges`):
+   - для каждой строки operator-витрины: `union(msisdn:…, imsi:…)` если IMSI не пуст.
+5. **Канонический ключ кластера** (`canonical_cluster_key`):
+   - приоритет: первый лексикографически `bio:` → `contract:` → `iccid:` → иначе `min(все узлы кластера)`.
+6. Для каждой строки: `roots` = `find()` по всем узлам строки; `person_cluster_key` = canonical корня `min(roots)`; `person_confidence` по типам узлов в кластере.
 
-**`person_confidence`:** `high` (bio), `medium` (contract/iccid), `low` (только tech ID).
+### Шаг 8. Назначение `person_id` (`assign_person_ids_with_ledger`)
 
-**`person_id`:** `prs_` + SHA256(`person_cluster_key`)[:24], с переопределением из ledger прошлого месяца при совпадении узлов ([`assign_person_ids_with_ledger`](../../src/mobile/pipelines/stg/person_identity.py)).
+1. Из ledger прошлого месяца: индексы `node → person_id` и `person_cluster_key → person_id`.
+2. Для каждого `person_cluster_key` текущего месяца:
+   - если ключ уже в ledger → тот же `person_id`;
+   - иначе если **любой** узел кластера встречался в ledger → взять его `person_id`;
+   - иначе `person_id = prs_` + SHA256(`person_cluster_key`)[:24].
+3. Обновление индексов для всех узлов кластера (для следующих строк того же месяца).
 
-### Шаг 7. Выходные витрины
+### Шаг 9. Выходные витрины (`_build_outputs`)
 
-1. **`stg_person`:** одна строка на `person_id`; primary MSISDN/IMSI/IMEI по `is_primary`; `sim_count`.
-2. **`stg_person_sim`:** все SIM-интервалы кластера; ровно одна `is_primary=true` на `person_id`.
-3. **`stg_person_id_ledger`:** все узлы кластера для следующего месяца.
+1. **`stg_person_sim`:**
+   - все строки `work` с `report_date`, `person_id`;
+   - `is_primary=true` для строки с **максимальным** `actually_from` внутри `person_id` (последняя активная подписка);
+   - остальные `is_primary=false`.
+2. **`stg_person`:**
+   - одна строка на `person_id` — из primary-строки;
+   - `sim_count` = `nunique(imsi|iccid)` по подпискам персоны;
+   - `gender` ← `_derive_gender` (по полю/ФИО);
+   - `age` ← возраст на `month_start` из `birth_day` или `U`;
+   - `citizenship` ← `_derive_citizenship_from_row` или `U`.
+3. **`stg_person_id_ledger`:**
+   - для каждого `(person_cluster_key, person_id)` — по одной строке на каждый узел графа (`node` = `msisdn:…`, `bio:…`, …);
+   - снимок для стабильности ID в следующем месяце.
+
+### Шаг 10. Запись и метрики
+
+1. `to_parquet` для трёх витрин (snappy).
+2. `append_command_metrics`: `elapsed_*_sec`, `stg_rows_written`, `person_sim_rows`, `ledger_rows`, пути входов.
 
 ### Типовые ошибки
 
@@ -199,7 +266,8 @@ TAC = первые 8 цифр IMEI; исключить `is_m2m=true` из [`stg_
 | `report_date` не 1-е число | `ValueError` / `SystemExit` |
 | Нет `_SUCCESS` за месяц | `FileNotFoundError` |
 | Нет `stg_tac` | warning, M2M не фильтруется |
-| Нет суточных binding | пустые monthly / слабый fill |
+| Нет `stg_geo_all` за дни | пустые/частичные binding, слабый fill |
+| Нет bio и нет связующих рёбер | отдельные кластеры по tech ID, `person_confidence=low` |
 
 ---
 

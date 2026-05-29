@@ -149,10 +149,11 @@ uv run mobile build-src-mobile
      - `n_moves = max(1, int(total_rows * 0.025))` — перенос строк между витринами с `_wrong_event_for_mart`;
      - для оставшихся строк с вероятностью `0.02` — неверный `Event`; для cdr/gprs — `pick_weighted_service` (OCC-018).
 4. **Запись дня** (`write_mobile_day_parquet_by_datacenter`):
-   - `partition_mobile_rows_by_datacenter` → `central` / `far-east`;
-   - `finalize_*_day_parquet_from_rows` → по parquet на витрину в каждый ЦОД;
-   - путь: `resolve_mobile_oss_output_path` → `{dc}`, `{name_operator}`, `{YYYY}`, `{MM}`, `{DD}`.
-5. Лог строк cdr/sms/gprs/location за день; `files_per_mart = n_days`.
+   - `partition_mobile_rows_by_datacenter` — маршрутизация по `subject` абонента / БС → `central` или `far-east` ([`DEFAULT_MOBILE_DATACENTERS`](../../src/mobile/project_paths.py));
+   - для каждого ЦОД и витрины: `finalize_cdr_day_parquet_from_rows` и аналоги — приведение к `SRC_*_FIELDS`, Arrow schema, snappy;
+   - путь: `data/src/mobile/{dc}/operator/{mart}/{name_operator}/{segment}/{YYYY}/{MM}/{DD}/{mart}.parquet`.
+5. **Инъекция шума** (до записи): ~2.5% строк переносятся между витринами; ~2% — неверный код `Event` для проверки DQ downstream.
+6. Лог: строки по витринам за день; `files_per_mart` накопительно по дням оператора.
 
 ### Шаг 3. Вспомогательная логика (используется внутри генераторов)
 

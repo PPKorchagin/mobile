@@ -133,7 +133,10 @@ sample_size = min(target, eligible_triple_count)
 
 ### Шаг 4. Сэмплирование (`_sample_triples`)
 
-`random.Random(seed).sample(list(eligible.index), k=sample_size)` → `eligible.loc[idx]`.
+1. `rng = random.Random(seed)` — детерминированность при фиксированном `BuildSrcExclParams.seed`.
+2. `idx = rng.sample(list(eligible.index), k=sample_size)` — без возврата (уникальные тройки).
+3. `sampled = eligible.loc[idx]` — подмножество строк person с полной тройкой ID.
+4. Если `sample_size < target` — в метриках `eligible_triple_count` < `target` (все доступные eligible использованы).
 
 ### Шаг 5. Запись трёх витрин (`_write_single_column`)
 

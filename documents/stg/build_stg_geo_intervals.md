@@ -110,12 +110,17 @@ uv run mobile build-stg-geo-intervals --report-date 2025-01-01 --output-path dat
 
 ### Шаг 2. Дозаполнение `imsi/imei`
 
-1. Прочитать binding-витрины `stg_msisdn_imsi` и `stg_msisdn_imei`.
-2. Нормализовать `msisdn/imsi/imei` в `stg_geo_all` и binding-таблицах.
-3. Для строк с пустым `imsi`/`imei` найти запись в binding по:
-   - `msisdn`,
-   - `valid_from <= start_time_utc <= valid_to`.
-4. При нескольких совпадениях выбрать запись с максимальным `valid_from` (самое свежее соответствие).
+1. Пути binding (по умолчанию):
+   - `stg_msisdn_imsi_output_path(report_date)` → `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` (месячный срез, не суточный файл);
+   - аналогично `msisdn_imei`.
+2. `_read_binding`: колонки `msisdn`, `imsi`/`imei`, `valid_from`, `valid_to`; нормализация ID.
+3. `_fill_subscriber_ids` на копии `geo`:
+   - нормализация `msisdn`, `imsi`, `imei` в событиях;
+   - для пустого `imsi` (или `imei`): `merge` с binding по `msisdn`;
+   - условие попадания: `start_time_utc >= valid_from` и `start_time_utc <= valid_to`;
+   - при нескольких интервалах — `sort_values(valid_from, descending)` + `drop_duplicates(_row_id)` → **самый поздний** `valid_from`;
+   - симметричный проход: `imsi`→`msisdn`, `imei`→`msisdn` (двунаправленный fill).
+4. Строки без binding после fill остаются с null ID (не синтетически достраиваются).
 
 ### Шаг 3. Нормализация событий и 5-минутная агрегация
 

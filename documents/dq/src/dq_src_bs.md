@@ -95,11 +95,18 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 ### Шаг 3. Доменные/контрактные проверки
 
-1. Ключи и дубли (`key_integrity`, `contract.cgi_duplicate_rows`).
-2. Temporal (`temporal_consistency`, `temporal_open_date_off`, `contract.*`).
-3. Spatial (`spatial_ranges`, `contract.coords_*`).
-4. Радио- и справочные диапазоны (`contract.range.*`, `contract.generation_vocab`, frequency list).
-5. Контракт близости к STG (`stg_contract.*`).
+Полный проход по `src_bs` (без фильтра по дате):
+
+1. **`key_integrity`:** уникальность `(mcc,mnc,lac,cell)` в смысле бизнес-ключа; дубликаты активных строк → **warning**/**failed**.
+2. **`contract.cgi_duplicate_rows`:** число строк с одинаковым CGI и пересекающимися `[date_on, date_off]`.
+3. **Temporal:**
+   - `temporal_consistency` — `date_off >= date_on`;
+   - `temporal_open_date_off` — доля открытых интервалов;
+   - `contract.date_on_not_future`, `contract.date_off_after_on` — пороги на аномалии.
+4. **Spatial:** `spatial_ranges` — `coord_x`/`coord_y` (lon/lat) в диапазонах; `contract.coords_null`, `contract.coords_out_of_range`.
+5. **Радио:** `contract.range.*` — clip-диапазоны azimuth, power, height, …; `contract.generation_vocab`; список допустимых `frequency`.
+6. **`stg_contract.*`:** сравнение имён/типов с ожидаемым маппингом в [`build-stg-bs`](../../stg/build_stg_bs.md) (покрытие полей, которые должны пережить трансформацию).
+7. Каждый check логируется: `{"tag":"DQ_SRC_BS","check":"...","status":"...","metrics":{...}}`.
 
 ### Шаг 4. Итог
 

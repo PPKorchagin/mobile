@@ -139,13 +139,17 @@ uv run mobile build-stg-geo-all --report-date 2025-01-01 --output-path data/stg/
 
 ### Шаг 3. Валидация и агрегация
 
-1. Оставить только записи с непустыми `msisdn`, `cgi`, `start_time_utc`.
-2. Проверить диапазоны координат (`lat`, `lon`).
-3. Сортировка по `msisdn`, `start_time_utc`, `source_event_type`, `cgi`.
-4. 5m-схлопывание последовательностей:
-   - одинаковые `msisdn + source_event_type + cgi + bucket_5m`,
-   - разрыв по времени > 300 секунд начинает новую группу.
-5. `event_count` = размер группы.
+1. Отбор строк: `msisdn`, `cgi`, `start_time_utc` not null; координаты в допустимых диапазонах широты/долготы.
+2. Метрики отсева: `rows_after_validate` vs `rows_read`.
+3. Сортировка: `msisdn`, `start_time_utc`, `source_event_type`, `cgi` (детерминированный порядок группировки).
+4. **5m-схлопывание** (`_collapse_5m`):
+   - `bucket_5m = floor(start_time_local to 5 minutes)`;
+   - ключ группы: `(msisdn, source_event_type, cgi, bucket_5m)`;
+   - внутри группы: новая подгруппа, если `delta_sec > 300` между соседними событиями;
+   - `start_time_utc` / `end_time_utc` группы = min/max по событиям;
+   - `event_count` = число исходных событий в группе;
+   - координаты и `oktmo_*` — из агрегированной строки (веса по `event_count` на этапе join с BS уже применены).
+5. Итоговый DataFrame — контракт [`geo_all.json`](../../src/mobile/schema/stg/geo_all.json).
 
 ### Шаг 4. Запись
 

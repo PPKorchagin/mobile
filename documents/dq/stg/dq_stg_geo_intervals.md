@@ -92,14 +92,15 @@ uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-
 
 ### Шаг 3. Gate-проверки
 
-1. `required_fields_presence`: обязательность `msisdn/start_time_utc/end_time_utc`.
-2. `temporal_order`: `end_time_utc >= start_time_utc`.
-3. `coords_range`: диапазоны `sub_lat/sub_lon`.
-4. `bs_type_vocab`: допустимые `bs_type`.
-5. `timezone_range`: разумный диапазон timezone `[-12, 14]`.
-6. `cgi_list_non_empty`: непустой список CGI.
-7. `distribution.cgi_list_len`: распределение длины `cgi_list`.
-8. `duplicate_interval_key`: дубликаты ключа интервала.
+1. **`required_fields_presence`:** `msisdn`, `start_time_utc`, `end_time_utc`, `sub_lat`, `sub_lon`, `bs_type` — null_ratio = 0 для ключевых; иначе **failed**.
+2. **`temporal_order`:** `end_time_utc >= start_time_utc`; `inverted_count` → **failed**.
+3. **`coords_range`:** широта/долгота подписчика в физических пределах; NaN только для пустых интервалов без веса.
+4. **`bs_type_vocab`:** `bs_type ∈ {i,o,…}` по контракту [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json).
+5. **`timezone_range`:** `timezone` (UTC offset hours) ∈ [-12, 14]; выбросы → **warning**.
+6. **`cgi_list_non_empty`:** `cgi_list` не пустая строка / список; пустые → **failed** по доле.
+7. **`distribution.cgi_list_len`:** гистограмма числа CGI в интервале (info); аномально длинные списки → **warning**.
+8. **`duplicate_interval_key`:** дубликаты по `(imsi, imei, msisdn, start_time_utc, end_time_utc, bs_type)` → **warning**/**failed**.
+9. **`oktmo_dominance` (если есть):** согласованность `oktmo_code_1/2` с весами событий.
 
 ### Шаг 4. Итог
 

@@ -129,15 +129,26 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 ### Шаг 2. Нормализация чанка
 
-1. Проверка обязательных колонок (`SOURCE_MAPPING_COLUMNS`).
-2. Переименование 1:1.
-3. Отбор колонок `STG_TIME_ZONES_FIELDS`.
-4. Приведение типов (`string`, `int32`, …).
+1. Проверка: все колонки из `SOURCE_MAPPING_COLUMNS` присутствуют; иначе `ValueError`.
+2. Переименование 1:1 в имена витрины (`timezone`, `utc_offset`, `geometry`, …).
+3. Отбор и упорядочивание по `STG_TIME_ZONES_FIELDS`.
+4. Приведение типов по схеме JSON:
+   - `string` → pandas `string`;
+   - `int32` / `int64` → nullable integer;
+   - `float64` → float;
+   - `bool` → boolean.
+5. **geometry (WKT):**
+   - trim строки WKT;
+   - опциональная валидация через `shapely.wkt.loads` (невалидные — log/warning в build, строгий DQ — в [`dq_stg_time_zones`](../dq/stg/dq_stg_time_zones.md));
+   - допустимые типы для downstream point-in-polygon: `POLYGON`, `MULTIPOLYGON`.
+6. **utc_offset:** numeric, ожидаемый диапазон часовых сдвигов (DQ: [-12, 14]).
 
 ### Шаг 3. Сборка и запись
 
-1. `concat` чанков (`ignore_index=True`).
-2. `to_parquet(output_path, compression=compression, index=False)` — полная перезапись.
+1. `pd.concat` всех чанков (`ignore_index=True`).
+2. `output_path.parent.mkdir(parents=True, exist_ok=True)`.
+3. `to_parquet(output_path, compression=snappy, index=False)` — полная перезапись файла.
+4. Используется в [`build-stg-bs`](./build_stg_bs.md) и [`build-stg-geo-intervals`](./build_stg_geo_intervals.md) для timezone по координатам.
 
 ### Типовые ошибки
 

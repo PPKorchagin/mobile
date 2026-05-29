@@ -91,14 +91,38 @@ uv run mobile build-stg-day --day 2025-01-15
 
 `params = default_build_stg_day_params(day)` → `stg_load_day_paths(day)` формирует каталог `data/stg/load_day={iso}/` и шесть путей.
 
-### Шаги 1–6
+### Шаг 1. Build `stg_oktmo`
 
-Для каждого имени из `BUILD_STG_DAY_STEPS` — `run_timed_command(step, …)`:
+1. `run_timed_command("build-stg-oktmo", …)`.
+2. Вход: `params.oktmo_csv_path` (по умолчанию `src/mobile/raw_data/oktmo_v001.csv`).
+3. Выход: `params.oktmo_output_path` → `data/stg/load_day={day}/oktmo.parquet`.
+4. Вызов `oktmo.run(csv_path, output_path, compression)` — см. [`build_stg_oktmo.md`](./build_stg_oktmo.md).
 
-- build: `oktmo.run` / `time_zones.run` / `tac.run` с `csv_path`, `output_path`, `compression` из `params`;
-- dq: `run_dq(params.*_output_path)` сразу после соответствующего build.
+### Шаг 2. DQ `stg_oktmo`
 
-Альтернатива в коде без пошагового timing: `stg_day.run(params)` одним вызовом.
+1. `dq_stg_oktmo.run_dq(params.oktmo_output_path)`.
+2. Read-only проверки: схема, иерархия ОКТМО, WKT — [`dq_stg_oktmo.md`](../dq/stg/dq_stg_oktmo.md).
+3. Процесс **не падает** при failed checks; статус в логах.
+
+### Шаг 3. Build `stg_time_zones`
+
+1. Аналогично шагу 1: CSV `time_zones.csv` → `load_day={day}/time_zones.parquet`.
+
+### Шаг 4. DQ `stg_time_zones`
+
+1. `dq_stg_time_zones.run_dq` на выход шага 3.
+
+### Шаг 5. Build `stg_tac`
+
+1. CSV `tacdb_v001.csv` → `load_day={day}/tac.parquet`.
+
+### Шаг 6. DQ `stg_tac`
+
+1. `dq_stg_tac.run_dq` на выход шага 5.
+
+**Оркестрация:** последовательность зашита в `BUILD_STG_DAY_STEPS` ([`day.py`](../../src/mobile/pipelines/stg/day.py)); каждый шаг пишет отдельную запись в `command_timing.jsonl`.
+
+**Альтернатива:** `stg_day.run(params)` — те же шаги без отдельного `run_timed_command` на каждый (одна метрика на весь день).
 
 ### Проверки DQ в цепочке
 

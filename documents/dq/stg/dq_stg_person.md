@@ -87,34 +87,71 @@ uv run mobile dq-stg-person --report-date 2025-01-01
 
 ## Алгоритм обработки данных (план)
 
+Планируемая точка входа: `run_dq(report_date, …)` в `pipelines/dq/stg/person.py` (ещё не в CLI). Референс логики: `synthetic_data/documents/dq/dq_stg_person.md`.
+
 ### Шаг 0. Инициализация
 
-Разрешить пути; загрузить parquet; счётчики ok/warning/failed.
+1. Валидация `report_date.day == 1`.
+2. Разрешение путей:
+   - `stg_person_path` → `data/stg/person/{YYYY-MM-01}.parquet`;
+   - `stg_person_sim_path` → `data/stg/person_sim/{YYYY-MM-01}.parquet`;
+   - опционально ledger.
+3. Инициализация счётчиков `ok` / `warning` / `failed` и списка результатов checks.
+4. Если person parquet отсутствует → `dataset_presence` **failed**, досрочный `summary`, return (процесс не падает).
 
 ### Шаг 1. Наличие и базовый профиль
 
-`dataset_basic`: rows, `distinct_person_id`, `report_date`.
+1. `pd.read_parquet` person и person_sim.
+2. Check `dataset_basic`:
+   - `row_count`, `column_count`, `parquet_path`;
+   - `distinct_person_id` = `nunique(person_id)`;
+   - `distinct_report_date` — ожидается 1 значение = `report_date`;
+   - `min_report_date`, `max_report_date`.
 
 ### Шаг 2. Контракт и nulls
 
-`schema_columns` по [`person.json`](../../../src/mobile/schema/stg/person.json); `nulls.*` для ключевых полей.
+1. `schema_columns`: множество колонок parquet ⊇ полей из [`person.json`](../../../src/mobile/schema/stg/person.json); лишние колонки — **warning** (опционально).
+2. Для каждого обязательного поля `nulls.{field}`:
+   - `person_id`, `person_cluster_key`, `report_date`, `msisdn`, `imsi`, `imei`, `operator_id`;
+   - порог: `null_ratio > 0` для `person_id` → **failed**; для демографии — **warning**.
 
 ### Шаг 3. Ключевая целостность
 
-- `person_id` unique;
-- `person_id` + `report_date` (несколько report_date в одном файле — failed).
+1. `key.person_id_unique`: `row_count == nunique(person_id)`; иначе **failed** + `duplicate_person_id_count`.
+2. `key.person_id_format`: все `person_id` match `^prs_[0-9a-f]{24}$`; иначе **failed**.
+3. `key.report_date_single`: ровно одно значение `report_date` в файле и оно равно параметру CLI.
+4. Для `person_sim`:
+   - `person_id` ⊆ `stg_person.person_id` (нет сирот);
+   - иначе **failed** + `orphan_sim_rows`.
 
-### Шаг 4. Домены
+### Шаг 4. Домены и бизнес-правила
 
-`domain.gender`, `domain.age`, `domain.citizenship`.
+1. `domain.gender`: значения ⊆ `{M, F, U}`.
+2. `domain.age`: целое 0–120 или `U` (строка).
+3. `domain.citizenship`: непустая строка, допуск `U`.
+4. `domain.person_confidence`: ⊆ `{high, medium, low}`.
+5. `domain.sim_count`: `sim_count >= 1`.
+6. `distribution.person_confidence`: если доля `low` > порога (например 30%) → **warning**.
 
-### Шаг 5. Связь с SIM
+### Шаг 5. Связь person ↔ person_sim
 
-Join с `person_sim`: покрытие, `sim_count` vs фактическое число строк.
+1. Join `person` left join agg(`person_sim`) по `person_id`:
+   - `sim_rows` = count строк sim;
+   - `distinct_sim_keys` = `nunique(imsi|iccid)`.
+2. Check `sim_count_consistency`: `person.sim_count` ≈ `distinct_sim_keys` (допуск 0); иначе **warning**.
+3. Check `primary_sim`: ровно одна строка `is_primary=true` на `person_id`; 0 или >1 → **failed**.
+4. Check `primary_matches_profile`: MSISDN/IMSI/IMEI в `stg_person` совпадают с primary-строкой sim (после нормализации).
 
-### Шаг 6. Summary
+### Шаг 6. Ledger (опционально)
 
-JSON-логи `{"tag":"DQ_STG_PERSON","check":...,"status":...,"metrics":...}`.
+1. Если передан ledger: каждый `person_id` в person имеет ≥1 узла в ledger.
+2. Узлы `node` имеют ожидаемый префикс (`bio:`, `msisdn:`, …).
+
+### Шаг 7. Summary и timing
+
+1. Check `summary`: `total_checks`, `warning_checks`, `failed_checks`.
+2. Логи: `{"tag":"DQ_STG_PERSON","check":"...","status":"ok|warning|failed","metrics":{...}}`.
+3. `append_command_metrics(command="dq-stg-person", …)`.
 
 ### Типовые ошибки
 

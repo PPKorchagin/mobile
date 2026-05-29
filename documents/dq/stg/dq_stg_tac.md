@@ -76,7 +76,15 @@ uv run mobile dq-stg-tac
 
 ### Шаг 3. Предметные проверки
 
-См. раздел [Проверки](#проверки).
+Для каждой проверки — отдельная запись в лог с `tag=DQ_STG_TAC`. Порог M2M: `_MIN_M2M_RATIO = 0.05`.
+
+1. **`tac_integrity`:** все `tac` match `^\d{8}$`; `duplicate_tac_count` по полному дубликату ключа → **failed** при нарушении.
+2. **`m2m_coverage`:** `m2m_row_count`, `m2m_ratio`, `non_m2m_row_count`; **warning**, если M2M=0 или `m2m_ratio < 5%` (ожидается доля IoT в справочнике).
+3. **`m2m_equipment_type_consistency`:** для каждой строки `is_m2m == (equipment_type in M2M_EQUIPMENT_TYPES)`; при `mismatch_count > 0` → **failed** + top-20 `equipment_type_counts`.
+4. **`allocation_date_format`:** парсинг даты; **warning** при `invalid_date_count > 0`.
+5. **`manufacturer_quality`:** пустой или `-` в `manufacturer` → **warning** с `empty_manufacturer_count`.
+
+Подробная таблица статусов — раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 

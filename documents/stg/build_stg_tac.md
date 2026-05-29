@@ -126,13 +126,22 @@ raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
 
 ### Шаг 2. Нормализация
 
-1. Проверка и rename по `SOURCE_MAPPING_COLUMNS`.
-2. **TAC:** strip, только цифры, `zfill(8)`, последние 8 символов; regex `^\d{8}$` — иначе `ValueError`.
-3. Строковые поля — `strip`.
-4. **allocation_date:** `%d.%m.%Y`, fallback `dayfirst=True` → строка `YYYY-MM-DD`.
-5. **is_m2m:** `equipment_type in M2M_EQUIPMENT_TYPES`.
-6. Порядок колонок по `STG_TAC_FIELDS`, cast `string` / `bool`.
-7. Дубликаты `tac` после нормализации → `ValueError`.
+1. Проверка наличия всех колонок из `SOURCE_MAPPING_COLUMNS`; rename 1:1 в имена витрины.
+2. **TAC (ключ справочника):**
+   - `strip` → оставить только цифры;
+   - `zfill(8)` и взять **последние 8** символов (устойчивость к префиксам);
+   - валидация `^\d{8}$`; иначе `ValueError` с указанием строки.
+3. Строковые поля (`manufacturer`, `model_name`, …) — `strip`; пустые допускаются.
+4. **allocation_date:**
+   - первичный парсинг `%d.%m.%Y`;
+   - fallback `pd.to_datetime(..., dayfirst=True)`;
+   - выход — строка `YYYY-MM-DD` или null.
+5. **is_m2m (флаг IoT):**
+   - `equipment_type ∈ M2M_EQUIPMENT_TYPES` (константа в [`tac.py`](../../src/mobile/pipelines/stg/tac.py));
+   - используется в [`build-stg-person`](./build_stg_person.md) для отсечения M2M по первым 8 цифрам IMEI.
+6. Приведение типов: строковые колонки → pandas `string`; `is_m2m` → `boolean`.
+7. Порядок колонок строго `STG_TAC_FIELDS`.
+8. `duplicated(subset=["tac"]).any()` → `ValueError` (ключ TAC уникален).
 
 ### Шаг 3. Запись
 

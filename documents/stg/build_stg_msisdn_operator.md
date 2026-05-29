@@ -78,29 +78,54 @@ uv run mobile build-stg-msisdn-operator --report-date 2025-01-01
 
 ## Алгоритм обработки данных
 
+Точка входа: `run_build` → `build_operator_intervals_from_src` в [`msisdn_operator.py`](../../src/mobile/pipelines/stg/msisdn_operator.py).
+
 ### Шаг 0. Инициализация
 
-1. `report_date.day == 1`.
-2. Период месяца `[01 .. последний день]`.
-3. Обход всех `load_day` с `_SUCCESS` и `person.parquet`.
+1. `_validate_report_month`: `report_date` = 1-е число месяца.
+2. `period_start`, `period_end` = границы календарного месяца.
+3. `output_path` → `data/stg/msisdn_operator/{YYYY-MM-01}.parquet`.
+4. Старт `timed_stage` и `append_command_metrics`.
 
-### Шаг 1. Чтение
+### Шаг 1. Чтение всех срезов `src_person`
 
-`pd.concat` всех срезов месяца.
+1. `read_src_person_month(..., mode="all_snapshots")`:
+   - для каждого `load_day` в `[period_start, period_end]` с `_SUCCESS`;
+   - `pd.concat` всех `person.parquet` (в отличие от person-профиля, где берётся только последний срез).
+2. Это нужно, чтобы увидеть **смену оператора** (MNP) на одном MSISDN в разные дни месяца.
+3. При отсутствии срезов — `FileNotFoundError`.
 
-### Шаг 2. Фильтрация
+### Шаг 2. Фильтрация бизнес-правил
 
-1. `client_type == 0`.
-2. Интервал пересекает отчётный месяц.
-3. Нормализация `msisdn`, `imsi`; `operator_id` из `operator_Id`.
+1. `client_type == 0` (только физлица).
+2. `actually_from` / `actually_to` как timestamp; пустой `actually_to` → `2999-12-31 23:59:59`.
+3. Интервал подписки **пересекает** отчётный месяц:
+   - `actually_from <= month_end` и `actually_to >= month_start`.
+4. Нормализация:
+   - `msisdn` ← `normalize_msisdn(isdn)`;
+   - `imsi` ← `normalize_imsi(imsi)` (может быть null в группе);
+   - `operator_id` ← `operator_Id`.
+5. `dropna` по `msisdn`, `operator_id`, `actually_from`, `actually_to`.
 
-### Шаг 3. Агрегация
+### Шаг 3. Агрегация интервалов
 
-`groupby(msisdn, operator_id, imsi).agg(min actually_from, max actually_to)`.
+1. `groupby(["msisdn", "operator_id", "imsi"], dropna=False)`.
+2. Агрегаты:
+   - `valid_from = min(actually_from)`;
+   - `valid_to = max(actually_to)`.
+3. Выходные колонки: `msisdn`, `operator_id`, `imsi`, `valid_from`, `valid_to`.
+4. **Не** выполняется склейка смежных интервалов между разными срезами — только min/max внутри группы (достаточно для рёбер MNP в person).
 
 ### Шаг 4. Запись
 
-Parquet по `output_path`.
+1. `mkdir` родительского каталога.
+2. `to_parquet(output_path, compression=snappy)`.
+3. Метрики: `interval_rows`, `distinct_msisdn`, пути.
+
+### Шаг 5. Использование в `build-stg-person`
+
+1. `operator_observation_edges`: для каждой строки витрины с пересечением месяца — ребро `union(msisdn:…, imsi:…)` (если IMSI задан).
+2. Один MSISDN с двумя `operator_id` на разных интервалах **не** объединяется только по номеру — только через общий IMSI или другие узлы графа.
 
 ### Типовые ошибки
 
@@ -108,6 +133,7 @@ Parquet по `output_path`.
 |----------|-----------|
 | Нет срезов с `_SUCCESS` | `FileNotFoundError` |
 | Пустой месяц без ФЛ | пустой parquet |
+| `report_date` не 1-е число | `ValueError` |
 
 ---
 

@@ -115,7 +115,20 @@ uv run mobile dq-stg-event --report-date 2025-01-01
 
 ### Шаг 3. Профиль и gates
 
-Распределения `event` / `event_name`, `event_timestamp_parseable`, `event_count_valid`, дубликаты ключа, `event.stg_contract.*`, `stg_contract.columns`.
+Для каждого `source_id` (ЦОД) на отфильтрованном DataFrame:
+
+1. **Парсинг времени:** `event_timestamp_parseable` — доля строк, где `event_timestamp` = 14 цифр `YYYYMMDDhhmmss`; пороги **failed**/**warning** при низкой доле.
+2. **Счётчики событий:** `event_count_valid` — `event_count >= 1`; нарушения → **failed**.
+3. **Словари:** `distribution.event`, `distribution.event_name` — top-N значений, доли.
+4. **Дубликаты:** ключ `imsi + event_timestamp + event_name + location(cgi)`; `duplicate_event_key_count` → **warning**/**failed** по порогу.
+5. **STG-контракт** (`event.stg_contract.*`):
+   - `imsi` / `msisdn` / `imei` — формат цифр, минимальная длина;
+   - `location` — разбор mcc/mnc/lac/cell, валидность CGI;
+   - `lac_cell` — неотрицательные, верхние границы;
+   - `owner` ∈ {1, 2} где применимо.
+6. **`stg_contract.columns`:** все поля из [`event.json`](../../../src/mobile/schema/stg/event.json) присутствуют → иначе **failed**.
+
+Полный перечень — раздел [Проверки](#проверки).
 
 ### Шаг 4. Итог
 
