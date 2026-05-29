@@ -11,9 +11,10 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
+from mobile.pipelines.stg.binding_intervals import upsert_daily_into_month_parquet
 from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_msisdn
+from mobile.project_paths import report_month_start
 from mobile.project_paths import (
     DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH,
     resolve_project_path,
@@ -98,20 +99,29 @@ def _run_build(
             period_end=day_end,
         )
 
-    with timed_stage("write_sec", perf):
-        result = _coerce_output(intervals, field_names, value_col=value_col)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        result.to_parquet(output_path, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
+    with timed_stage("merge_month_sec", perf):
+        day_rows = _coerce_output(intervals, field_names, value_col=value_col, normalize_value=normalize_imei)
+        result = upsert_daily_into_month_parquet(
+            month_path=output_path,
+            day_intervals=day_rows,
+            value_col=value_col,
+            day_start=day_start,
+            day_end=day_end,
+            field_names=field_names,
+            normalize_value=normalize_imei,
+        )
 
     stats: dict[str, Any] = {
         "command": command,
         "table": STG_MSISDN_IMEI_TABLE,
         "report_date": report_date.isoformat(),
+        "report_month": report_month_start(report_date).isoformat(),
         "stg_geo_all_path": str(source_path),
         "output_path": str(output_path),
         "geo_rows_read": int(len(raw)),
         "event_rows_with_pair": int(len(events)),
-        "interval_rows": int(len(result)),
+        "day_interval_rows": int(len(day_rows)),
+        "month_interval_rows": int(len(result)),
         "distinct_msisdn": int(result["msisdn"].nunique()) if not result.empty else 0,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
@@ -213,12 +223,18 @@ def _build_temporal_intervals(
     return out.loc[out["valid_from"] <= out["valid_to"]].reset_index(drop=True)
 
 
-def _coerce_output(df: pd.DataFrame, field_names: list[str], *, value_col: str) -> pd.DataFrame:
+def _coerce_output(
+    df: pd.DataFrame,
+    field_names: list[str],
+    *,
+    value_col: str,
+    normalize_value: Callable[[pd.Series | None], pd.Series],
+) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=field_names)
     out = df.copy()
     out["msisdn"] = normalize_msisdn(out["msisdn"])
-    out[value_col] = normalize_imei(out[value_col])
+    out[value_col] = normalize_value(out[value_col])
     out["valid_from"] = pd.to_datetime(out["valid_from"], errors="coerce")
     out["valid_to"] = pd.to_datetime(out["valid_to"], errors="coerce")
     out = out.dropna(subset=field_names)

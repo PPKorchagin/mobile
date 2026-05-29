@@ -1,8 +1,8 @@
 # build-stg-msisdn-imsi
 
-**Витрина:** `stg_msisdn_imsi` · **Команда:** `build-stg-msisdn-imsi` · **Режим:** интервалы актуальности MSISDN↔IMSI за отчётный день (один Parquet на дату).
+**Витрина:** `stg_msisdn_imsi` · **Команда:** `build-stg-msisdn-imsi` · **Режим:** месячный parquet с **ежедневным** инкрементом из `stg_geo_all`.
 
-Референс: [`pipelines/stg/msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py). Схема витрины: [`msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json).
+Референс: [`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py), [`binding_intervals.py`](../../src/mobile/pipelines/stg/binding_intervals.py). Схема: [`msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json).
 
 ---
 
@@ -10,58 +10,47 @@
 
 | # | Задача | Результат |
 |---|--------|-----------|
-| 1 | Прочитать `stg_geo_all` за `report_date` | DataFrame событий |
-| 2 | Нормализовать MSISDN и IMSI, отфильтровать валидные пары | События с `msisdn`, `imsi`, `event_ts` |
-| 3 | Построить интервалы по смене IMSI на MSISDN | `valid_from` / `valid_to` |
-| 4 | Записать витрину в Parquet | Файл `output_path` |
+| 1 | Прочитать `stg_geo_all` за **отчётный день** `report_date` | События за сутки |
+| 2 | Построить суточные интервалы MSISDN↔IMSI | `valid_from` / `valid_to` в пределах дня |
+| 3 | Убрать из месячного файла старый вклад этого дня | Идемпотентность |
+| 4 | Склеить с остальными днями месяца и записать | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` |
 
-**Бизнес-назначение:** для любого момента внутри суток знать, какой IMSI был привязан к MSISDN по фактическим событиям (без синтетических разрывов).
+**Бизнес-назначение:** накопительная месячная картина привязки MSISDN↔IMSI для [`build-stg-person`](./build_stg_person.md) и fill в [`build-stg-geo-intervals`](./build_stg_geo_intervals.md).
 
-**В scope задач:** чтение `stg_geo_all`, нормализация идентификаторов, построение интервалов, запись Parquet. Объединение с историей за другие дни **не входит** — один файл на `report_date`.
+**В scope:** один запуск = один календарный день; файл витрины — **один на месяц** (ключ пути `YYYY-MM-01`).
 
 ---
 
 ## TODO
 
-1. DQ-витрина `dq-stg-msisdn-imsi` (схема, покрытие, пересечения интервалов).
-2. Включить в сквозную цепочку `run-all`, если появится оркестратор STG.
+1. DQ `dq-stg-msisdn-imsi`.
+2. Маркер «последний обновлённый день» в метриках / sidecar (опционально).
 
 ---
 
 ## Параметры запуска
 
-Переменные, передаваемые в job (аргументы `run_build()`).
-
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да* | — | Отчётный день (сутки по локальному `event_timestamp`) |
-| `stg_geo_all_path` | string (path) | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной `stg_geo_all` parquet или каталог `data/stg/geo_all` |
-| `output_path` | string (path) | Нет | `data/stg/msisdn_imsi/{report_date}.parquet` | Выходной Parquet (перезапись) |
+| `report_date` | date | Да* | — | **Любой день** месяца (`2025-01-15` → пишет в `2025-01-01.parquet`) |
+| `stg_geo_all_path` | path | Нет | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Geo за этот день |
+| `output_path` | path | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Месячный файл |
 
-\* Без `--report-date` в CLI — цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)); на каждый день отдельный timed-run и свой `output_path` по шаблону.
+\* Без `--report-date` — цикл по `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` (каждый день обновляет свой месяц).
 
-Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (`resolve_project_path` в [`project_paths.py`](../../src/mobile/project_paths.py)).
-
-**Константы ETL в коде** ([`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py), на вход job **не передаются**):
-
-| Константа | Значение |
-|-----------|----------|
-| `STG_MSISDN_IMSI_TABLE` | `stg_msisdn_imsi` (из [`msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json)) |
-| `STG_MSISDN_IMSI_FIELDS` | порядок и типы колонок |
-| `DEFAULT_PARQUET_COMPRESSION` | `snappy` ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
-
-**Предусловие:** `build-stg-geo-all` за ту же `report_date` (файл `data/stg/geo_all/{YYYY-MM-DD}.parquet`).
-
-Локальный запуск:
+**Предусловие:** `build-stg-geo-all` за тот же день.
 
 ```bash
+# обновить январь 2025 по мере появления geo_all:
 uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01
-uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
-  --stg-geo-all-path data/stg/geo_all \
-  --output-path data/stg/msisdn_imsi/2025-01-01.parquet
+uv run mobile build-stg-msisdn-imsi --report-date 2025-01-02
+# …
+
+# пересобрать весь месяц из geo (устаревшее имя команды):
+uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 ```
 
-Логи: `data/logs/mobile.log`. Метрики: `data/qa/command_timing.jsonl`, `command=build-stg-msisdn-imsi` или `build-stg-msisdn-imsi-{date}`.
+Логи: `command=build-stg-msisdn-imsi` или `build-stg-msisdn-imsi-{date}`.
 
 ---
 
@@ -69,74 +58,57 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 
 | Свойство | Значение |
 |----------|----------|
-| Имя таблицы | `stg_msisdn_imsi` — [`msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json) → `table` |
-| Описание | Интервалы MSISDN–IMSI — `description` в JSON |
-| Формат хранения | Parquet |
-| Партиционирование | Один файл на `report_date` |
-| Календарный срез | `report_date` (`YYYY-MM-DD` в пути по умолчанию) |
-| Сжатие | `snappy` (`DEFAULT_PARQUET_COMPRESSION`) |
+| Таблица | `stg_msisdn_imsi` |
+| Файл | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` |
+| Обновление | Идемпотентно по дню: повторный запуск за тот же `report_date` перезаписывает вклад дня |
+| Сжатие | `snappy` |
 
-### Поля витрины
+### Поля
 
-Контракт полей — [`msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json) → `fields`; в ETL — `STG_MSISDN_IMSI_FIELDS`.
-
-| # | Поле | Тип | Смысл |
-|---|------|-----|-------|
-| 1 | `msisdn` | string | MSISDN, E.164 (RU и иностранные 7–15 цифр) |
-| 2 | `imsi` | string | IMSI, 14–15 цифр |
-| 3 | `valid_from` | timestamp | Первое событие интервала (локальное время) |
-| 4 | `valid_to` | timestamp | Последнее событие интервала (локальное время) |
+| Поле | Смысл |
+|------|-------|
+| `msisdn` | Нормализованный MSISDN |
+| `imsi` | Нормализованный IMSI |
+| `valid_from` | Начало интервала (может быть раньше текущего дня после склейки) |
+| `valid_to` | Конец интервала |
 
 ---
 
-## Источники витрины
+## Источники
 
-| Атрибут | Значение |
-|---------|----------|
-| Слой | `stg_geo_all` после [`build-stg-geo-all`](./build_stg_geo_all.md) |
-| Путь | `data/stg/geo_all/{YYYY-MM-DD}.parquet` (или каталог через `stg_geo_all_path`) |
-| Чтение | Прямой `pd.read_parquet(...)` |
-| Колонки | `start_time_utc`, `msisdn`, `imsi` |
+| Источник | Путь |
+|----------|------|
+| `stg_geo_all` (день) | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
+| Месячный файл (чтение перед merge) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` |
 
 ---
 
 ## Алгоритм обработки данных
 
-### Шаг 0. Инициализация
+### Шаг 1. Суточные интервалы
 
-1. `output_path` — аргумент или `stg_msisdn_imsi_output_path(report_date)`.
-2. Схема из JSON при импорте модуля (`_load_schema_contract`).
+Из `stg_geo_all` за `report_date`: события → сегменты по смене IMSI на MSISDN; обрезка в границах суток.
 
-### Шаг 1. Чтение источника
+### Шаг 2. Инкремент в месячный файл
 
-Чтение `stg_geo_all` за `report_date` из `stg_geo_all_path` (файл или каталог).
+1. `month_path = stg_msisdn_imsi_output_path(report_date)` → всегда `YYYY-MM-01`.
+2. Прочитать существующий month parquet (если есть).
+3. Удалить строки, **пересекающие** `[00:00 .. 23:59:59]` этого `report_date`.
+4. `concat` + `merge_binding_intervals` по `(msisdn, imsi)`.
+5. Записать в `month_path`.
 
-### Шаг 2. Подготовка событий
+### Шаг 3. Потребители
 
-1. `event_ts` ← `start_time_utc`.
-2. `msisdn` ← [`normalize_msisdn`](../../src/mobile/pipelines/stg/subscriber_ids.py).
-3. `imsi` ← [`normalize_imsi`](../../src/mobile/pipelines/stg/subscriber_ids.py).
-4. Оставить строки, где все три поля не null.
+- **geo-intervals** за день `D`: тот же month-файл; fill по `start_time_utc` ∈ `[valid_from, valid_to]`.
+- **person** за месяц `M`: month-файл после прогона binding по всем дням (или `refresh_month_bindings_from_geo`).
 
-### Шаг 3. Интервалы
+### Типовые ситуации
 
-Для каждого `msisdn` (сортировка по `event_ts`):
-
-1. Идти по событиям; при смене `imsi` закрыть интервал `[valid_from, valid_to]` предыдущего значения.
-2. `valid_from` / `valid_to` — min/max `event_ts` в сегменте.
-3. Обрезка: `valid_from` ≥ начало суток, `valid_to` ≤ конец суток `report_date`.
-4. Отбросить интервалы с `valid_from > valid_to`.
-
-### Шаг 4. Запись
-
-`to_parquet(output_path, compression=snappy, index=False)` — перезапись; каталог создаётся при необходимости.
-
-### Типовые ошибки
-
-| Ошибка | Причина |
-|--------|---------|
-| Пустой вход | Нет `stg_geo_all` за день или файл не читается |
-| Пустой выход | Нет валидных пар MSISDN–IMSI за день |
+| Ситуация | Поведение |
+|----------|-----------|
+| Нет geo за день | warning, суточных интервалов нет; month без изменений по дню |
+| Первый день месяца | создаётся новый month-файл |
+| Повторный запуск за день | идемпотентно |
 
 ---
 
@@ -144,9 +116,7 @@ uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01 \
 
 | Артефакт | Путь |
 |----------|------|
-| Схема витрины | [`src/mobile/schema/stg/msisdn_imsi.json`](../../src/mobile/schema/stg/msisdn_imsi.json) |
-| ETL | [`src/mobile/pipelines/stg/msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py) |
-| Нормализация ID | [`src/mobile/pipelines/stg/subscriber_ids.py`](../../src/mobile/pipelines/stg/subscriber_ids.py) |
-| Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
-| MSISDN–IMEI | [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md) |
-| stg_geo_all | [`build_stg_geo_all.md`](./build_stg_geo_all.md) |
+| ETL | [`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py) |
+| Merge / refresh | [`binding_intervals.py`](../../src/mobile/pipelines/stg/binding_intervals.py) |
+| IMEI | [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md) |
+| Person | [`build_stg_person.md`](./build_stg_person.md) |

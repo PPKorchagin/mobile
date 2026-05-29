@@ -1,0 +1,17 @@
+{
+  "table": "stg_person_sim",
+  "description": "Подписки/SIM персоны: одна строка на интервал src_person в отчётном месяце",
+  "fields": [
+    { "name": "report_date", "type": "date", "comment": "1-е число отчётного месяца" },
+    { "name": "person_id", "type": "string", "comment": "Идентификатор персоны" },
+    { "name": "msisdn", "type": "string", "comment": "MSISDN" },
+    { "name": "imsi", "type": "string", "comment": "IMSI" },
+    { "name": "imei", "type": "string", "comment": "IMEI" },
+    { "name": "iccid", "type": "string", "comment": "ICCID SIM" },
+    { "name": "operator_id", "type": "long", "comment": "operator_Id" },
+    { "name": "contract_number", "type": "string", "comment": "Номер договора" },
+    { "name": "actually_from", "type": "timestamp", "comment": "Начало интервала" },
+    { "name": "actually_to", "type": "timestamp", "comment": "Конец интервала" },
+    { "name": "is_primary", "type": "bool", "comment": "Основная SIM в месяце для person_id" }
+  ]
+}

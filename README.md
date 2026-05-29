@@ -68,17 +68,21 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | CDR/SMS/GPRS/location → `data/stg/event/.../events.parquet` ([doc](documents/stg/build_stg_event.md)); фильтр по `Started`, сортировка по абоненту, сжатие 5m |
 | `build-stg-geo-all` | `event_dds` + `stg_bs` → `data/stg/geo_all/{YYYY-MM-DD}.parquet` (без fill через `msisdn-imsi`/`msisdn-imei`) ([doc](documents/stg/build_stg_geo_all.md)) |
 | `build-stg-geo-intervals` | `stg_geo_all` + `stg_bs` + `stg_time_zones` + fill из `stg_msisdn_*` → `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` ([doc](documents/stg/build_stg_geo_intervals.md)) |
-| `build-stg-person` | `src_person` + `stg_tac` (M2M) + `stg_msisdn_*` → `stg_person` за месяц ([doc](documents/stg/build_stg_person.md)) |
+| `build-stg-person` | `stg_person` + `stg_person_sim` + ledger ([doc](documents/stg/build_stg_person.md)) |
+| `build-stg-msisdn-operator` | MNP-наблюдения MSISDN↔operator ([doc](documents/stg/build_stg_msisdn_operator.md)) |
+| `build-stg-msisdn-imsi-month` | *(alias)* пересборка месяца из всех `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
+| `build-stg-msisdn-imei-month` | *(alias)* то же для IMSI+IMEI |
 | `build-move-event` | `stg/event/{dc}` → `stg/event_dds/{date}/{dc}.parquet` ([doc](documents/stg/build_move_event.md)) |
 | `dq-src-mobile` | DQ mobile за отчётную дату; без `--dc` — все дни × оба ЦОД ([checks](documents/dq/src/dq_src_mobile.md#проверки), логи `DQ_SRC_MOBILE`) |
 | `dq-src-bs` | DQ всей витрины `src_bs`: распределения, кросс-распределения, контрактные проверки ([checks](documents/dq/src/dq_src_bs.md#проверки), логи `DQ_SRC_BS`) |
 | `dq-stg-event` | DQ `event_dds` за `--report-date` и `--event-dds-path` ([checks](documents/dq/stg/dq_stg_event.md#проверки), логи `DQ_STG_EVENT`) |
 | `dq-stg-geo-all` | DQ `stg_geo_all` за день (`schema/nulls/ranges/distribution`) ([checks](documents/dq/stg/dq_stg_geo_all.md#проверки), логи `DQ_STG_GEO_ALL`) |
 | `dq-stg-geo-intervals` | DQ `stg_geo_intervals` за день (`schema/nulls/ranges/cgi_list/key`) ([checks](documents/dq/stg/dq_stg_geo_intervals.md#проверки), логи `DQ_STG_GEO_INTERVALS`) |
-| `build-stg-msisdn-imsi` | Интервалы MSISDN↔IMSI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
-| `build-stg-msisdn-imei` | Интервалы MSISDN↔IMEI из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imei.md)) |
+| `build-stg-msisdn-imsi` | Месячный `stg_msisdn_imsi`, ежедневный инкремент из `stg_geo_all` ([doc](documents/stg/build_stg_msisdn_imsi.md)) |
+| `build-stg-msisdn-imei` | Месячный `stg_msisdn_imei`, ежедневный инкремент ([doc](documents/stg/build_stg_msisdn_imei.md)) |
 | `build-stg-bs` | Полный `src_bs` + SCD-merge → `stg_bs` ([doc](documents/stg/build_stg_bs.md)) |
-| `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` |
+| `nb-perf-metrics` | Notebook-дашборд по `command_timing.jsonl` ([doc](documents/nb/nb_perf_metrics.md)) |
+| `dq-stg-person` | *(план)* DQ `stg_person` / `stg_person_sim` ([spec](documents/dq/stg/dq_stg_person.md)) |
 
 Флаг **`--day YYYY-MM-DD`** — для `build-stg-day` (по умолчанию `2025-01-01`).
 
@@ -124,16 +128,17 @@ uv run mobile nb-perf-metrics
 | `dq-stg-bs` | — | `data/stg/bs.parquet` | логи + timing |
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-stg-geo-all` | `--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet`, `data/stg/bs.parquet` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
-| `build-stg-geo-intervals` | `--report-date`, `--stg-geo-all-path`, `--stg-bs-path`, `--time-zones-path`, `--stg-msisdn-imsi-path`, `--stg-msisdn-imei-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet`, `data/stg/bs.parquet`, `data/stg/time_zones.parquet`, `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet`, `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` |
-| `build-stg-person` | `--report-date` (1-е число месяца), `--src-person-path`, `--stg-tac-path`, `--stg-msisdn-imsi-path`, `--stg-msisdn-imei-path`, `--output-path` | последний `data/src/person/.../person.parquet` месяца, `data/stg/tac.parquet`, `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | `data/stg/person/{YYYY-MM-01}.parquet` |
+| `build-stg-geo-intervals` | `--report-date`, … | `stg_geo_all` за день, `msisdn_imsi`/`imei` за **месяц** `{YYYY-MM-01}.parquet` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` |
+| `build-stg-person` | `--report-date` (1-е число месяца), … | `src_person`, `stg_tac`, `msisdn_imsi`/`imei` за месяц, `msisdn_operator`, ledger | `person/`, `person_sim/`, `person_id_ledger/` |
+| `build-stg-msisdn-operator` | `--report-date` | все срезы `src_person` месяца | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` |
+| `build-stg-msisdn-imsi` | `--report-date` (день) | `stg_geo_all` за день | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` (инкремент) |
+| `build-stg-msisdn-imei` | `--report-date` (день) | `stg_geo_all` за день | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` (инкремент) |
 | `build-move-event` | `--report-date` | `data/stg/event/.../events.parquet` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` |
 | `dq-src-mobile` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | логи `DQ_SRC_MOBILE` + timing |
 | `dq-src-bs` | `--src-bs-path` | `data/src/bs.parquet` | логи `DQ_SRC_BS` + timing |
 | `dq-stg-event` | `--report-date`, `--event-dds-path`, `--dc` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet` | логи `DQ_STG_EVENT` + timing |
 | `dq-stg-geo-all` | `--report-date`, `--stg-geo-all-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | логи `DQ_STG_GEO_ALL` + timing |
 | `dq-stg-geo-intervals` | `--report-date`, `--stg-geo-intervals-path` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` | логи `DQ_STG_GEO_INTERVALS` + timing |
-| `build-stg-msisdn-imsi` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` |
-| `build-stg-msisdn-imei` | `--report-date`, `--stg-geo-all-path`, `--output-path` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` |
 | `build-stg-bs` | `--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path` | `data/src/bs.parquet`, `data/stg/oktmo.parquet`, `data/stg/time_zones.parquet` | `data/stg/bs.parquet` |
 | `build-src-bs` | `data/stg/oktmo.parquet`, профиль OpenCellID | — | `data/src/bs.parquet` |
 | `build-src-person` | — | — | `data/src/person/load_year=…/person.parquet`, `_SUCCESS` |
@@ -151,6 +156,7 @@ uv run mobile nb-perf-metrics
 - [`documents/stg/build_stg_geo_all.md`](documents/stg/build_stg_geo_all.md)
 - [`documents/stg/build_stg_geo_intervals.md`](documents/stg/build_stg_geo_intervals.md)
 - [`documents/stg/build_stg_person.md`](documents/stg/build_stg_person.md)
+- [`documents/stg/build_stg_msisdn_operator.md`](documents/stg/build_stg_msisdn_operator.md)
 - [`documents/stg/build_move_event.md`](documents/stg/build_move_event.md)
 - [`documents/stg/build_stg_msisdn_imsi.md`](documents/stg/build_stg_msisdn_imsi.md)
 - [`documents/stg/build_stg_msisdn_imei.md`](documents/stg/build_stg_msisdn_imei.md)
@@ -161,6 +167,8 @@ uv run mobile nb-perf-metrics
 - [`documents/dq/stg/dq_stg_bs.md`](documents/dq/stg/dq_stg_bs.md)
 - [`documents/dq/stg/dq_stg_geo_all.md`](documents/dq/stg/dq_stg_geo_all.md)
 - [`documents/dq/stg/dq_stg_geo_intervals.md`](documents/dq/stg/dq_stg_geo_intervals.md)
+- [`documents/dq/stg/dq_stg_person.md`](documents/dq/stg/dq_stg_person.md) *(спецификация, CLI в разработке)*
+- [`documents/nb/nb_perf_metrics.md`](documents/nb/nb_perf_metrics.md)
 - [`documents/dq/src/dq_src_mobile.md`](documents/dq/src/dq_src_mobile.md)
 - [`documents/dq/src/dq_src_bs.md`](documents/dq/src/dq_src_bs.md)
 - [`documents/dq/stg/dq_stg_event.md`](documents/dq/stg/dq_stg_event.md)
@@ -179,6 +187,10 @@ uv run mobile nb-perf-metrics
 - `src/mobile/pipelines/stg/geo_all.py` — `run_build()`
 - `src/mobile/pipelines/stg/geo_intervals.py` — `run_build()`
 - `src/mobile/pipelines/stg/person.py` — `run_build()`
+- `src/mobile/pipelines/stg/person_identity.py` — union-find, ledger
+- `src/mobile/pipelines/stg/msisdn_operator.py` — `build_operator_intervals_from_src`
+- `src/mobile/pipelines/stg/binding_intervals.py` — merge / daily upsert / `refresh_month_bindings_from_geo`
+- `src/mobile/pipelines/stg/src_person_month.py` — `read_src_person_month`
 - `src/mobile/pipelines/stg/move_event.py` — `run_move()`
 - `src/mobile/pipelines/dq/stg/event.py` — `run_dq()`
 - `src/mobile/pipelines/stg/msisdn_imsi.py` — `run_build()`

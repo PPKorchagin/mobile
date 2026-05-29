@@ -35,6 +35,8 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-stg-geo-all",
         "build-stg-geo-intervals",
         "build-stg-person",
+        "build-stg-msisdn-operator",
+        "build-stg-msisdn-imsi-month",  # alias: refresh month from stg_geo_all
         "build-move-event",
         "build-stg-msisdn-imsi",
         "build-stg-msisdn-imei",

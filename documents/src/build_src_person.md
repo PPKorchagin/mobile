@@ -57,6 +57,8 @@
 | `movement_ratio` | `0.22` | «Переезд» home operator |
 | `foreign_subscriber_ratio` | `0.10` | Иностранные ФЛ |
 | `extra_random_full_snapshot_days` | `7` | Случайные полные дни поверх month-end |
+| `mnp_portability_ratio` | `0.02` | Доля ФЛ с **MNP**: тот же MSISDN, новый `operator_Id` / IMSI / IMEI / ICCID с `actually_from` = день среза |
+| `multi_sim_per_contract_ratio` | `0.015` | Доля ФЛ с **второй SIM** на том же `contract_number` (другой IMSI/ICCID) |
 | `seed` | `20250407` | Faker и выбор random full-дней |
 | `max_workers` | `default_max_workers()` | Параллелизм по **дням** (потоки) |
 
@@ -161,8 +163,18 @@ uv run mobile build-src-person --target-per-operator 5000
 | Локация | `abonent_last_location` с весами; `lac`/`cell` только при `== 0` |
 | Гео | `coordinates`, `geo_json` из latitude/longitude пула |
 | SCD2 PER-002 | `_append_scd2_overlap_rows`: +4% строк-копий с пересекающимися `actually_from`/`actually_to`; 35% из них с `ACTUALLY_TO_OPEN` |
+| MNP / multi-SIM | `_append_mnp_and_multi_sim_rows` после основного среза (см. ниже) |
 
 Возвращается `DataFrame` → `_align_columns_for_schema` → `pa.Table.from_pandas(..., schema=arrow_schema)`.
+
+### Шаг 2a. MNP и вторая SIM (для `build-stg-person`)
+
+На полном и частичном срезе дня, после генерации операторских чанков:
+
+1. **MNP** (`mnp_portability_ratio`, cap 20%): из ФЛ с GSM выбираются строки; копия с тем же `isdn`, новым `operator_Id`, `imsi`, `imei`, `iccid`, `actually_from` = день, `actually_to` = open. Нужны **несколько** `load_day` в месяце — см. [`build_stg_msisdn_operator.md`](../stg/build_stg_msisdn_operator.md).
+2. **Multi-SIM** (`multi_sim_per_contract_ratio`): копия с тем же `contract_number` и `isdn`, другой `imsi`/`iccid` — две подписки на одном договоре.
+
+Downstream: [`build_stg_person.md`](../stg/build_stg_person.md) кластеризует такие строки в один `person_id`.
 
 ### Шаг 3. Завершение оркестратора
 
@@ -186,4 +198,5 @@ uv run mobile build-src-person --target-per-operator 5000
 |----------|------|
 | Схема витрины | [`src/mobile/schema/src/person.json`](../../src/mobile/schema/src/person.json) |
 | ETL | [`src/mobile/pipelines/src/person.py`](../../src/mobile/pipelines/src/person.py) |
+| STG person | [`build_stg_person.md`](../stg/build_stg_person.md) |
 | Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |

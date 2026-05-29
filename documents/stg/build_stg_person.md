@@ -1,8 +1,10 @@
 # build-stg-person
 
-**Витрина:** `stg_person` · **Команда:** `build-stg-person` · **Режим:** месячный STG-профиль физлиц из `src_person` (ID + демография).
+**Витрины:** `stg_person`, `stg_person_sim`, `stg_person_id_ledger` · **Команда:** `build-stg-person` · **Режим:** месячный профиль физлиц с устойчивым `person_id`.
 
-Референс: [`pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py). Схема витрины: [`person.json`](../../src/mobile/schema/stg/person.json).
+Референс: [`pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py), [`person_identity.py`](../../src/mobile/pipelines/stg/person_identity.py).
+
+Схемы: [`person.json`](../../src/mobile/schema/stg/person.json), [`person_sim.json`](../../src/mobile/schema/stg/person_sim.json), [`person_id_ledger.json`](../../src/mobile/schema/stg/person_id_ledger.json).
 
 ---
 
@@ -11,26 +13,29 @@
 | # | Задача | Результат |
 |---|--------|-----------|
 | 1 | Принять `report_date` = 1-е число отчётного месяца | `2025-01-01` |
-| 2 | Обойти `load_day` за период `01..31`, выбрать max дату с `_SUCCESS` | Parquet `person.parquet` |
-| 3 | Прочитать `stg_msisdn_imsi` и `stg_msisdn_imei` | Lookup-таблицы для дозаполнения ID |
-| 4 | Исключить M2M по TAC из `stg_tac` (`is_m2m=true`) | Без IoT/M2M-терминалов |
-| 5 | Отфильтровать физлиц и интервалы, пересекающие месяц | Подмножество валидных строк |
-| 6 | Нормализовать и дозаполнить `msisdn`/`imsi`/`imei` | Единый и более полный набор ID |
-| 7 | Построить `person_id`, `gender`, `age`, `citizenship` | Один ряд на физлицо |
-| 8 | Записать витрину в Parquet | `data/stg/person/{YYYY-MM-01}.parquet` |
+| 2 | `src_person` — **последний** `load_day` с `_SUCCESS` (профиль) | `person.parquet` |
+| 3 | `stg_msisdn_operator` — **все** срезы месяца (MNP) | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` |
+| 4 | Месячные binding (ежедневный инкремент) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `msisdn_imei` |
+| 5 | Исключить M2M по `stg_tac` | Без IoT SIM |
+| 6 | Union-find: `bio`, `contract`, `iccid`, ID + bindings + operator | Кластер персоны |
+| 7 | `person_id` + ledger прошлого месяца | Стабильный ID между месяцами |
+| 8 | `stg_person` (1 строка) + `stg_person_sim` (N SIM) + ledger | Профиль, подписки, узлы |
 
-**Бизнес-назначение:** получить стабильный месячный слой персон (идентификатор + демография) для downstream-джойнов с geo и event витринами.
+**Бизнес-назначение:** стабильный месячный слой персон (идентификатор + демография + мульти-SIM) для джойнов с geo/event.
 
-**В scope задач:** чтение последнего `src_person` месяца, исключение M2M по справочнику TAC, фильтрация `client_type=0`, пересечение интервалов с месяцем, binding-fill ID, дедуп по `person_key`, профиль как в `synthetic_data`.
+**В scope:** кластеризация по био/договору/ICCID и техническим ID; MNP через operator-витрину; одна строка на персону + детализация SIM.
 
-**Предусловие:** [`build-stg-tac`](build_stg_tac.md) → `data/stg/tac.parquet` (иначе M2M-фильтр пропускается с warning).
+**Предусловия:**
+
+- [`build-stg-tac`](build_stg_tac.md) → `data/stg/tac.parquet` (иначе M2M-фильтр пропускается с warning).
+- Ежедневные [`build-stg-msisdn-imsi`](./build_stg_msisdn_imsi.md) / [`build-stg-msisdn-imei`](./build_stg_msisdn_imei.md) по дням месяца (или авто-`refresh` из `stg_geo_all`).
 
 ---
 
 ## TODO
 
-1. Добавить DQ-команду `dq-stg-person` (контракт, nulls, пересечения интервалов).
-2. Добавить профилирование по операторам и покрытию `src_person` в `command_timing`.
+1. Реализовать DQ: [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) → `dq-stg-person`.
+2. Профилирование по операторам и `person_confidence` в `command_timing`.
 
 ---
 
@@ -38,61 +43,82 @@
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да | — | **Только 1-е число отчётного месяца** (`YYYY-MM-01`, например `2025-01-01`) |
-| `src_person_path` | string (path) | Нет | `data/src/person` | Корень layout или явный parquet |
-| `stg_msisdn_imsi_path` | string (path) | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Binding MSISDN↔IMSI |
-| `stg_msisdn_imei_path` | string (path) | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Binding MSISDN↔IMEI |
-| `stg_tac_path` | string (path) | Нет | `data/stg/tac.parquet` | Справочник TAC для исключения M2M |
-| `output_path` | string (path) | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | Выходной parquet |
+| `report_date` | date | Да | — | **Только `YYYY-MM-01`** |
+| `src_person_path` | path | Нет | `data/src/person` | Корень layout или parquet |
+| `stg_msisdn_imsi_path` | path | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | MSISDN↔IMSI за месяц |
+| `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI за месяц |
+| `stg_msisdn_operator_path` | path | Нет | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` | MNP-интервалы |
+| `stg_tac_path` | path | Нет | `data/stg/tac.parquet` | M2M по TAC |
+| `output_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | `stg_person` |
+| `person_sim_path` | path | Нет | `data/stg/person_sim/{YYYY-MM-01}.parquet` | `stg_person_sim` |
+| `person_ledger_path` | path | Нет | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | ledger узлов |
+| `build_bindings_month` | bool | Нет | `true` | Вызвать `build-stg-msisdn-*-month`, если нет файла |
+| `build_operator_vitrine` | bool | Нет | `true` | Пересобрать `stg_msisdn_operator` из всех срезов |
 
-### Выбор `src_person`
+### Выбор `src_person` (профиль)
 
-Период месяца: с `report_date` (1-е число) по последний день месяца (`2025-01-01` … `2025-01-31`).
+Режим **`latest_snapshot`** ([`src_person_month.py`](../../src/mobile/pipelines/stg/src_person_month.py)):
 
-Алгоритм в `data/src/person/load_year=YYYY/load_month=MM/load_day=DD/`:
+1. Период: с `report_date` по последний день месяца.
+2. Каталоги `load_day=*` с `_SUCCESS` и `person.parquet`.
+3. Взять **максимальный** `load_day`.
+4. Прочитать один `person.parquet`.
 
-1. перебрать все каталоги `load_day=*` в пределах периода;
-2. оставить только те, где есть `_SUCCESS` и `person.parquet`;
-3. взять каталог с **максимальной** датой `load_day`;
-4. прочитать `person.parquet` из него.
-
-Если подходящего каталога нет — `FileNotFoundError`.
-
-Локальный запуск:
+Для **MNP** отдельно читаются **все** срезы месяца (`all_snapshots`) — см. [`build_stg_msisdn_operator.md`](./build_stg_msisdn_operator.md).
 
 ```bash
 uv run mobile build-stg-person --report-date 2025-01-01
-uv run mobile build-stg-person --report-date 2025-01-01 --src-person-path data/src/person
+```
+
+Опционально до person — прогнать binding по дням месяца или один раз:
+
+```bash
+uv run mobile build-stg-msisdn-operator --report-date 2025-01-01
+uv run mobile build-stg-msisdn-imsi --report-date 2025-01-01   # и за 02, 03, …
+# либо пересборка месяца из geo:
+uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 ```
 
 Логи: `data/logs/mobile.log`. Метрики: `data/qa/command_timing.jsonl`, `command=build-stg-person`.
 
 ---
 
-## Структура генерируемой витрины
+## Структура генерируемых витрин
 
-| Свойство | Значение |
-|----------|----------|
-| Имя таблицы | `stg_person` |
-| Формат хранения | Parquet |
-| Партиционирование | Один файл на отчётный месяц (`report_date = YYYY-MM-01`) |
-| Сжатие | `snappy` |
+| Витрина | Путь | Гранулярность |
+|---------|------|----------------|
+| `stg_person` | `data/stg/person/{YYYY-MM-01}.parquet` | 1 строка на `person_id` |
+| `stg_person_sim` | `data/stg/person_sim/{YYYY-MM-01}.parquet` | 1 строка на подписку/SIM-интервал |
+| `stg_person_id_ledger` | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | Узлы графа → `person_id` |
 
-### Поля витрины
+Формат: Parquet, `snappy`.
+
+### Поля `stg_person`
 
 | # | Поле | Тип | Смысл |
 |---|------|-----|-------|
-| 1 | `report_date` | date | 1-е число отчётного месяца |
-| 2 | `person_id` | string | `prs_` + SHA256(`person_cluster_key`)[:24] |
-| 3 | `msisdn` | string | Нормализованный MSISDN |
-| 4 | `imsi` | string | Нормализованный IMSI |
-| 5 | `imei` | string | Нормализованный IMEI |
-| 6 | `gender` | string | `M` / `F` / `U` (по ФИО) |
-| 7 | `age` | string | Возраст на начало месяца или `U` |
-| 8 | `citizenship` | string | Код страны или `U` |
-| 9 | `operator_id` | long | Код оператора из `src_person.operator_Id` |
-| 10 | `actually_from` | timestamp | Начало интервала (последняя запись по person) |
-| 11 | `actually_to` | timestamp | Конец интервала |
+| 1 | `report_date` | date | 1-е число месяца |
+| 2 | `person_id` | string | `prs_` + SHA256[:24]; стабилен через ledger |
+| 3 | `person_cluster_key` | string | Канонический ключ кластера |
+| 4 | `person_confidence` | string | `high` / `medium` / `low` |
+| 5 | `sim_count` | long | Число distinct SIM (`imsi` \| `iccid`) |
+| 6 | `msisdn` | string | Основной MSISDN |
+| 7 | `imsi` | string | Основной IMSI |
+| 8 | `imei` | string | Основной IMEI |
+| 9 | `gender` | string | `M` / `F` / `U` |
+| 10 | `age` | string | Возраст на начало месяца или `U` |
+| 11 | `citizenship` | string | Код страны или `U` |
+| 12 | `operator_id` | long | Оператор основной подписки |
+| 13 | `actually_from` | timestamp | Начало интервала основной SIM |
+| 14 | `actually_to` | timestamp | Конец интервала |
+
+### Поля `stg_person_sim`
+
+`person_id`, `msisdn`, `imsi`, `imei`, `iccid`, `operator_id`, `contract_number`, `actually_from`, `actually_to`, `is_primary` — см. [`person_sim.json`](../../src/mobile/schema/stg/person_sim.json).
+
+### Поля `stg_person_id_ledger`
+
+`person_id`, `person_cluster_key`, `node` (`bio:`, `contract:`, `iccid:`, `msisdn:`, …) — см. [`person_id_ledger.json`](../../src/mobile/schema/stg/person_id_ledger.json).
 
 ---
 
@@ -100,10 +126,19 @@ uv run mobile build-stg-person --report-date 2025-01-01 --src-person-path data/s
 
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
-| 1 | `src_person` | `data/src/person/load_year=YYYY/load_month=MM/load_day=*/person.parquet` | Последний срез месяца |
-| 2 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Дозаполнение IMSI/MSISDN |
-| 3 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Дозаполнение IMEI/MSISDN |
-| 4 | `stg_tac` | `data/stg/tac.parquet` | M2M: TAC с `is_m2m=true` |
+| 1 | `src_person` (latest) | `data/src/person/.../person.parquet` | Профиль, bio, contract, iccid |
+| 2 | `src_person` (all snapshots) | те же `load_day` | MNP → operator-витрина |
+| 3 | `stg_msisdn_operator` | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` | Рёбра MNP |
+| 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMSI (месяц, daily upsert) |
+| 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMEI |
+| 6 | `stg_tac` | `data/stg/tac.parquet` | M2M |
+| 7 | ledger (прошлый месяц) | `data/stg/person_id_ledger/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
+
+Документация вспомогательных сборок:
+
+- [`build_stg_msisdn_operator.md`](./build_stg_msisdn_operator.md)
+- [`build_stg_msisdn_imsi.md`](./build_stg_msisdn_imsi.md)
+- [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md)
 
 ---
 
@@ -111,70 +146,60 @@ uv run mobile build-stg-person --report-date 2025-01-01 --src-person-path data/s
 
 ### Шаг 0. Инициализация
 
-1. Проверить `report_date.day == 1`.
-2. Период: `period_start = report_date`, `period_end = последний день месяца`.
-3. Разрешить `output_path` → `data/stg/person/{report_date}.parquet`.
-4. Выбрать `src_person`: max `load_day` с `_SUCCESS` в `[period_start, period_end]`.
-5. Разрешить binding parquet за `report_date`.
-6. Разрешить `stg_tac_path` → `data/stg/tac.parquet`.
+1. `report_date.day == 1`.
+2. Пути: `person`, `person_sim`, `person_id_ledger`, operator, monthly bindings.
+3. При необходимости — `build-stg-msisdn-operator` и `refresh_month_bindings_from_geo` (если нет month parquet).
 
-### Шаг 1. Чтение
+### Шаг 1. Чтение `src_person` (профиль)
 
-`pd.read_parquet` по выбранному `src_person` и binding-таблицам.
+`read_src_person_month(..., mode="latest_snapshot")`.
 
-### Шаг 2. Исключение M2M по TAC
+### Шаг 2. Исключение M2M
 
-1. Из `stg_tac` — множество `tac`, где `is_m2m=true`.
-2. TAC абонента = **первые 8 цифр IMEI** (`src_person.imei`).
-3. Строки с TAC ∈ множестве M2M **удаляются**; метрика `excluded_m2m_tac_rows`.
-4. Если `stg_tac` отсутствует или без колонок `tac`/`is_m2m` — warning, фильтр не применяется.
+TAC = первые 8 цифр IMEI; исключить `is_m2m=true` из [`stg_tac`](build_stg_tac.md).
 
-### Шаг 3. Фильтрация бизнес-правил
+### Шаг 3. Operator / MNP
 
-1. `client_type == 0` (физлица).
-2. Интервал актуальности пересекает отчётный месяц:
-   - `month_start = report_month`;
-   - `month_end = последний день месяца`;
-   - `actually_from <= month_end` и `actually_to >= month_start`.
+Из **всех** срезов месяца — интервалы `(msisdn, operator_id, imsi)` → `stg_msisdn_operator`. Один MSISDN может иметь несколько операторов на разных интервалах.
 
-### Шаг 4. Нормализация и дозаполнение ID
+### Шаг 4. Месячные bindings
 
-1. Нормализация `msisdn` / `imsi` / `imei`.
-2. Binding-fill на срезе `at = конец month_end` (как в synthetic_data):
-   - `msisdn ↔ imsi` через `stg_msisdn_imsi`;
-   - `msisdn ↔ imei` через `stg_msisdn_imei`;
-   - повторный проход после взаимного заполнения.
-3. `operator_id` из `operator_Id`, отбор строк с полным ключом.
+Загрузка месячных `stg_msisdn_imsi` / `stg_msisdn_imei`; при отсутствии — `refresh_month_bindings_from_geo` по всем дням с `stg_geo_all`.
 
-### Шаг 5. Стабильный `person_id` (кластер идентификаторов)
+### Шаг 5. Подписки и binding-fill
 
-**Цель:** смена `msisdn` / `imsi` / `imei` не меняет `person_id`, если это одна и та же персона.
+1. `client_type == 0`, пересечение с месяцем.
+2. Нормализация ID; binding-fill на конец месяца.
+3. Узлы строки: `bio:`, `contract:`, `iccid:`, `msisdn:`, `imsi:`, `imei:`.
 
-1. **Узлы графа:** `msisdn:…`, `imsi:…`, `imei:…`, `bio:фамилия|имя|отчество|дата_рождения|цифры_документа`.
-2. **Рёбра (union-find):**
-   - на каждой строке `src_person` — все узлы строки в один кластер (co-occurrence + bio);
-   - в `stg_msisdn_imsi` / `stg_msisdn_imei` — пары, чей интервал пересекает отчётный месяц.
-3. **`person_cluster_key`** = канонический id кластера (лексикографически минимальный узел).
-4. **`person_id`** = `prs_` + SHA256(`person_cluster_key`)[:24].
-5. Дедуп: одна строка на кластер, с максимальным `actually_from`; в выходе — актуальные `msisdn`/`imsi`/`imei` этой строки.
-6. `gender` / `age` / `citizenship` — с выбранной «последней» строки кластера.
+### Шаг 6. Граф персон (union-find)
 
-**Ограничения:** без ФИО+даты рождения и без связи через bindings/co-occurrence разные наборы ID останутся разными персонами; полные однофамильцы с одной датой рождения теоретически сольются.
+**Рёбра:**
 
-### Шаг 6. Финализация и запись
+- co-occurrence на строке `src_person`;
+- пары из monthly `stg_msisdn_imsi` / `stg_msisdn_imei` (интервал ∩ месяц);
+- пары из `stg_msisdn_operator` (MNP: не сливать только по `operator_id` без msisdn).
 
-1. `report_date = report_month` (1-е число).
-2. Дедуп по `person_id`.
-3. Запись parquet.
+**`person_cluster_key`:** приоритет `bio:` → `contract:` → `iccid:` → min(технические узлы).
+
+**`person_confidence`:** `high` (bio), `medium` (contract/iccid), `low` (только tech ID).
+
+**`person_id`:** `prs_` + SHA256(`person_cluster_key`)[:24], с переопределением из ledger прошлого месяца при совпадении узлов ([`assign_person_ids_with_ledger`](../../src/mobile/pipelines/stg/person_identity.py)).
+
+### Шаг 7. Выходные витрины
+
+1. **`stg_person`:** одна строка на `person_id`; primary MSISDN/IMSI/IMEI по `is_primary`; `sim_count`.
+2. **`stg_person_sim`:** все SIM-интервалы кластера; ровно одна `is_primary=true` на `person_id`.
+3. **`stg_person_id_ledger`:** все узлы кластера для следующего месяца.
 
 ### Типовые ошибки
 
-| Ошибка/ситуация | Поведение |
-|-----------------|-----------|
-| `report_date` не 1-е число | `ValueError` / `SystemExit` в CLI |
-| Нет `_SUCCESS` за период месяца | `FileNotFoundError` |
-| Пустой выход | нет физлиц с валидными ID за месяц |
-| Нет `stg_tac` | warning, M2M-фильтр пропущен |
+| Ситуация | Поведение |
+|----------|-----------|
+| `report_date` не 1-е число | `ValueError` / `SystemExit` |
+| Нет `_SUCCESS` за месяц | `FileNotFoundError` |
+| Нет `stg_tac` | warning, M2M не фильтруется |
+| Нет суточных binding | пустые monthly / слабый fill |
 
 ---
 
@@ -182,9 +207,9 @@ uv run mobile build-stg-person --report-date 2025-01-01 --src-person-path data/s
 
 | Артефакт | Путь |
 |----------|------|
-| Схема витрины | [`src/mobile/schema/stg/person.json`](../../src/mobile/schema/stg/person.json) |
-| ETL | [`src/mobile/pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py) |
-| Нормализация ID | [`src/mobile/pipelines/stg/subscriber_ids.py`](../../src/mobile/pipelines/stg/subscriber_ids.py) |
-| Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
-| Источник Person | [`documents/src/build_src_person.md`](../src/build_src_person.md) |
-| Справочник TAC | [`build_stg_tac.md`](build_stg_tac.md) |
+| ETL | [`person.py`](../../src/mobile/pipelines/stg/person.py) |
+| Граф / ID | [`person_identity.py`](../../src/mobile/pipelines/stg/person_identity.py) |
+| Чтение src | [`src_person_month.py`](../../src/mobile/pipelines/stg/src_person_month.py) |
+| DQ (план) | [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) |
+| Источник | [`build_src_person.md`](../src/build_src_person.md) |
+| Пути | [`project_paths.py`](../../src/mobile/project_paths.py) |

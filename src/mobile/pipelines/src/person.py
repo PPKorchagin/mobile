@@ -159,6 +159,8 @@ class BuildSrcPersonParams:
     corporate_ratio: float
     inter_operator_transition_ratio: float
     movement_ratio: float
+    mnp_portability_ratio: float
+    multi_sim_per_contract_ratio: float
     foreign_subscriber_ratio: float
     extra_random_full_snapshot_days: int
     seed: int
@@ -762,7 +764,15 @@ def _generate_operator_slice(
         + data["latitude"].round(6).astype(str)
         + "]}"
     )
-    return _append_scd2_overlap_rows(data, day, rng)
+    data = _append_scd2_overlap_rows(data, day, rng)
+    return _append_mnp_and_multi_sim_rows(
+        data,
+        day=day,
+        serving_operator=serving_operator,
+        rng=rng,
+        mnp_ratio=float(params.mnp_portability_ratio),
+        multi_sim_ratio=float(params.multi_sim_per_contract_ratio),
+    )
 
 
 def _resolve_output_path(template: str, day: date) -> Path:
@@ -897,6 +907,71 @@ def _sample_invalid_isdn_digits(rng: np.random.Generator) -> str:
             ],
         ),
     )
+
+
+def _append_mnp_and_multi_sim_rows(
+    data: pd.DataFrame,
+    *,
+    day: date,
+    serving_operator: str,
+    rng: np.random.Generator,
+    mnp_ratio: float,
+    multi_sim_ratio: float,
+) -> pd.DataFrame:
+    """MNP: тот же msisdn/ФИО/договор, новый operator_Id+imsi+iccid. Multi-SIM: тот же договор+bio, вторая SIM."""
+    if data.empty:
+        return data
+    out = data
+    mnp_ratio = max(0.0, min(0.2, mnp_ratio))
+    multi_sim_ratio = max(0.0, min(0.2, multi_sim_ratio))
+
+    gsm_mask = out["isdn"].notna() & out["imsi"].notna() & (pd.to_numeric(out.get("client_type"), errors="coerce") == 0)
+    gsm_idx = out.index[gsm_mask]
+    extras: list[pd.DataFrame] = []
+
+    n_mnp = max(0, int(len(gsm_idx) * mnp_ratio))
+    if n_mnp > 0:
+        picked = rng.choice(gsm_idx.to_numpy(), size=min(n_mnp, len(gsm_idx)), replace=False)
+        mnp_rows = out.loc[picked].copy()
+        day_ts = pd.Timestamp(day)
+        for row_idx in mnp_rows.index:
+            sid_seed = int(rng.integers(10**9, 10**10))
+            new_op = _neighbor_operator(serving_operator, sid_seed)
+            mnp_rows.at[row_idx, "operator_Id"] = int(OPERATORS[new_op])
+            mnp_rows.at[row_idx, "imsi"] = int(_imsi_digits(new_op, sid_seed))
+            mnp_rows.at[row_idx, "imei"] = int(_imei_digits(new_op, sid_seed))
+            mnp_rows.at[row_idx, "iccid"] = _iccid_array(rng, 1)[0]
+            mnp_rows.at[row_idx, "actually_from"] = day_ts
+            mnp_rows.at[row_idx, "actually_to"] = ACTUALLY_TO_OPEN
+        extras.append(mnp_rows)
+
+    fl_mask = gsm_mask & out["contract_number"].astype("string").str.len().fillna(0).gt(0)
+    fl_idx = out.index[fl_mask]
+    n_multi = max(0, int(len(fl_idx) * multi_sim_ratio))
+    if n_multi > 0:
+        picked = rng.choice(fl_idx.to_numpy(), size=min(n_multi, len(fl_idx)), replace=False)
+        sim_rows = out.loc[picked].copy()
+        day_ts = pd.Timestamp(day)
+        for row_idx in sim_rows.index:
+            sid_seed = int(rng.integers(10**9, 10**10))
+            home_op = serving_operator
+            if "operator_Id" in sim_rows.columns:
+                mnc = pd.to_numeric(sim_rows.at[row_idx, "operator_Id"], errors="coerce")
+                for op_name, mnc_val in OPERATORS.items():
+                    if mnc_val == mnc:
+                        home_op = op_name
+                        break
+            sim_rows.at[row_idx, "isdn"] = int(_msisdn_digits(home_op, sid_seed))
+            sim_rows.at[row_idx, "imsi"] = int(_imsi_digits(home_op, sid_seed))
+            sim_rows.at[row_idx, "imei"] = int(_imei_digits(home_op, sid_seed))
+            sim_rows.at[row_idx, "iccid"] = _iccid_array(rng, 1)[0]
+            sim_rows.at[row_idx, "actually_from"] = day_ts
+            sim_rows.at[row_idx, "actually_to"] = ACTUALLY_TO_OPEN
+        extras.append(sim_rows)
+
+    if not extras:
+        return out
+    return pd.concat([out, *extras], ignore_index=True)
 
 
 def _append_scd2_overlap_rows(data: pd.DataFrame, day: date, rng: np.random.Generator) -> pd.DataFrame:

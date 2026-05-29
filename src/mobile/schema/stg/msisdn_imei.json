@@ -1,6 +1,6 @@
 {
     "table": "stg_msisdn_imei",
-    "description": "Интервалы актуальности связки MSISDN–IMEI по наблюдениям event_dds за отчётный день",
+    "description": "Месячные интервалы MSISDN–IMEI (файл YYYY-MM-01), пополняются ежедневно из stg_geo_all",
     "fields": [
         {
             "name": "msisdn",

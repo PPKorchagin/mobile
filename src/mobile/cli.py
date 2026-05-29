@@ -33,8 +33,10 @@ from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
 from mobile.pipelines.stg import person as stg_person
 from mobile.pipelines.stg import move_event as stg_move_event
 from mobile.pipelines.stg import bs as stg_bs
+from mobile.pipelines.stg import binding_intervals as stg_binding_intervals
 from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
+from mobile.pipelines.stg import msisdn_operator as stg_msisdn_operator
 from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
@@ -137,6 +139,9 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-geo-all",
     "build-stg-geo-intervals",
     "build-stg-person",
+    "build-stg-msisdn-operator",
+    "build-stg-msisdn-imsi-month",
+    "build-stg-msisdn-imei-month",
     "build-move-event",
     "dq-stg-event",
     "dq-stg-geo-all",
@@ -307,6 +312,40 @@ def run_build_stg_geo_intervals(
             output_path=out,
         ),
     )
+
+
+def run_build_stg_msisdn_operator(*, report_date: date | None, src_person_path: str | None, output_path: str | None) -> None:
+    if report_date is None:
+        raise SystemExit("build-stg-msisdn-operator: --report-date is required")
+    if report_date.day != 1:
+        raise SystemExit(f"build-stg-msisdn-operator: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+    run_timed_command(
+        "build-stg-msisdn-operator",
+        lambda: stg_msisdn_operator.run_build(
+            report_date=report_date,
+            src_person_path=Path(src_person_path) if src_person_path else None,
+            output_path=Path(output_path) if output_path else None,
+        ),
+    )
+
+
+def run_build_stg_msisdn_imsi_month(*, report_date: date | None, output_path: str | None) -> None:
+    """Устаревшее имя: пересборка месячного ``stg_msisdn_imsi`` из всех ``stg_geo_all`` за месяц."""
+    if report_date is None:
+        raise SystemExit("build-stg-msisdn-imsi-month: --report-date is required")
+    if report_date.day != 1:
+        raise SystemExit(f"build-stg-msisdn-imsi-month: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+    if output_path is not None:
+        logger.warning("build-stg-msisdn-imsi-month: --output-path ignored; use build-stg-msisdn-imsi --report-date <day>")
+    run_timed_command(
+        "build-stg-msisdn-imsi-month",
+        lambda: stg_binding_intervals.refresh_month_bindings_from_geo(report_date),
+    )
+
+
+def run_build_stg_msisdn_imei_month(*, report_date: date | None, output_path: str | None) -> None:
+    """Устаревшее имя: то же, что ``build-stg-msisdn-imsi-month`` (обновляет оба binding)."""
+    run_build_stg_msisdn_imsi_month(report_date=report_date, output_path=output_path)
 
 
 def run_build_stg_person(
@@ -926,6 +965,22 @@ def main() -> None:
                 time_zones_path=args.time_zones_path,
                 stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
                 stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-stg-msisdn-operator":
+            run_build_stg_msisdn_operator(
+                report_date=args.report_date,
+                src_person_path=args.src_person_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-stg-msisdn-imsi-month":
+            run_build_stg_msisdn_imsi_month(
+                report_date=args.report_date,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-stg-msisdn-imei-month":
+            run_build_stg_msisdn_imei_month(
+                report_date=args.report_date,
                 output_path=args.output_path,
             )
         elif args.command == "build-stg-person":

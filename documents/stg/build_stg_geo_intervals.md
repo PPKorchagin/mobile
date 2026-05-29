@@ -39,8 +39,8 @@
 | `stg_geo_all_path` | path | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной `stg_geo_all` (файл или каталог) |
 | `stg_bs_path` | path | Нет | `data/stg/bs.parquet` | Входной `stg_bs` lookup |
 | `time_zones_path` | path | Нет | `data/stg/time_zones.parquet` | Полигоны часовых поясов |
-| `stg_msisdn_imsi_path` | path | Нет | `data/stg/msisdn_imsi/{report_date}.parquet` | Binding для fill `imsi` |
-| `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{report_date}.parquet` | Binding для fill `imei` |
+| `stg_msisdn_imsi_path` | path | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Месячный binding (1-е число месяца `report_date`) |
+| `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Месячный binding |
 | `output_path` | path | Нет | `data/stg/geo_intervals/{report_date}.parquet` | Выходной parquet |
 
 Локальный запуск:
@@ -89,8 +89,8 @@ uv run mobile build-stg-geo-intervals --report-date 2025-01-01 --output-path dat
 | 1 | `stg_geo_all` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | События с координатами/CGI |
 | 2 | `stg_bs` | `data/stg/bs.parquet` | Центроиды и fallback timezone |
 | 3 | `stg_time_zones` | `data/stg/time_zones.parquet` | Point-in-polygon timezone |
-| 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet` | Дозаполнение `imsi` |
-| 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-DD}.parquet` | Дозаполнение `imei` |
+| 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Дозаполнение `imsi` (месячный срез) |
+| 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Дозаполнение `imei` |
 
 ---
 

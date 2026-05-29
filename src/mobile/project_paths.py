@@ -40,9 +40,13 @@ STG_EVENT_LAYOUT_TEMPLATE = "data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.
 STG_EVENT_DDS_LAYOUT_TEMPLATE = "data/stg/event_dds/{report_date}/{source_id}.parquet"
 STG_MSISDN_IMSI_LAYOUT_TEMPLATE = "data/stg/msisdn_imsi/{report_date}.parquet"
 STG_MSISDN_IMEI_LAYOUT_TEMPLATE = "data/stg/msisdn_imei/{report_date}.parquet"
+# report_date в шаблоне — всегда YYYY-MM-01 (месячный срез, обновляется ежедневно)
 STG_GEO_ALL_LAYOUT_TEMPLATE = "data/stg/geo_all/{report_date}.parquet"
 STG_GEO_INTERVALS_LAYOUT_TEMPLATE = "data/stg/geo_intervals/{report_date}.parquet"
 STG_PERSON_LAYOUT_TEMPLATE = "data/stg/person/{report_date}.parquet"
+STG_PERSON_SIM_LAYOUT_TEMPLATE = "data/stg/person_sim/{report_date}.parquet"
+STG_PERSON_ID_LEDGER_LAYOUT_TEMPLATE = "data/stg/person_id_ledger/{report_date}.parquet"
+STG_MSISDN_OPERATOR_LAYOUT_TEMPLATE = "data/stg/msisdn_operator/{report_date}.parquet"
 STG_BS_LAYOUT_TEMPLATE = "data/stg/bs.parquet"
 DEFAULT_STG_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
 DEFAULT_STG_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
@@ -52,6 +56,9 @@ DEFAULT_STG_PERSON_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "person"
 DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imsi.json"
 DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imei.json"
 DEFAULT_STG_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person.json"
+DEFAULT_STG_PERSON_SIM_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person_sim.json"
+DEFAULT_STG_PERSON_ID_LEDGER_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person_id_ledger.json"
+DEFAULT_STG_MSISDN_OPERATOR_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_operator.json"
 DEFAULT_SRC_BS_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "bs.json"
 DEFAULT_STG_BS_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "bs.json"
 DEFAULT_STG_BS_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "bs.parquet"
@@ -279,14 +286,21 @@ def stg_event_dds_output_path(source_id: str, day: date) -> Path:
     return PROJECT_ROOT / resolved
 
 
+def report_month_start(day: date) -> date:
+    """1-е число календарного месяца для ``day``."""
+    return day.replace(day=1)
+
+
 def stg_msisdn_imsi_output_path(day: date) -> Path:
-    """``data/stg/msisdn_imsi/{YYYY-MM-DD}.parquet``."""
-    return PROJECT_ROOT / STG_MSISDN_IMSI_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+    """Месячный ``stg_msisdn_imsi``: ``data/stg/msisdn_imsi/{YYYY-MM-01}.parquet``."""
+    month = report_month_start(day)
+    return PROJECT_ROOT / STG_MSISDN_IMSI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
 
 
 def stg_msisdn_imei_output_path(day: date) -> Path:
-    """``data/stg/msisdn_imei/{YYYY-MM-DD}.parquet``."""
-    return PROJECT_ROOT / STG_MSISDN_IMEI_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+    """Месячный ``stg_msisdn_imei``: ``data/stg/msisdn_imei/{YYYY-MM-01}.parquet``."""
+    month = report_month_start(day)
+    return PROJECT_ROOT / STG_MSISDN_IMEI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
 
 
 def stg_bs_output_path() -> Path:
@@ -307,3 +321,17 @@ def stg_geo_intervals_output_path(day: date) -> Path:
 def stg_person_output_path(day: date) -> Path:
     """``data/stg/person/{YYYY-MM-DD}.parquet``."""
     return PROJECT_ROOT / STG_PERSON_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+
+
+def stg_person_sim_output_path(day: date) -> Path:
+    return PROJECT_ROOT / STG_PERSON_SIM_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+
+
+def stg_person_id_ledger_output_path(day: date) -> Path:
+    return PROJECT_ROOT / STG_PERSON_ID_LEDGER_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+
+
+def stg_msisdn_operator_output_path(day: date) -> Path:
+    return PROJECT_ROOT / STG_MSISDN_OPERATOR_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+
+
