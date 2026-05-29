@@ -102,7 +102,7 @@ uv run mobile build-stg-day --day 2025-01-15
 1. `run_timed_command("build-stg-oktmo", …)`.
 2. Вход: `params.oktmo_csv_path` (по умолчанию `src/mobile/raw_data/oktmo_v001.csv`).
 3. Выход: `params.oktmo_output_path` → `data/stg/load_day={day}/oktmo.parquet`.
-4. Вызов `oktmo.run(csv_path, output_path, compression)` — см. [`build_stg_oktmo.md`](./build_stg_oktmo.md).
+4. Вызов `oktmo.run(csv_path, output_path)` — см. [`build_stg_oktmo.md`](./build_stg_oktmo.md).
 
 ### Шаг 2. DQ `stg_oktmo`
 

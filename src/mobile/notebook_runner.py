@@ -1,4 +1,4 @@
-"""Execute notebooks from CLI (``nb-perf-metrics``)."""
+"""Execute notebooks and nb-* CLI reports."""
 
 from __future__ import annotations
 
@@ -14,11 +14,18 @@ from nbclient import NotebookClient
 from nbformat.validator import normalize
 
 from mobile.project_paths import (
+    DEFAULT_NB_STG_OKTMO_EXECUTED_PATH,
+    DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH,
     DEFAULT_NOTEBOOK_KERNEL_NAME,
     DEFAULT_NOTEBOOK_RESOURCES_PATH,
+    DEFAULT_PERF_METRICS_EXECUTED_PATH,
+    DEFAULT_PERF_METRICS_NOTEBOOK_PATH,
+    PROJECT_ROOT,
 )
 
 logger = logging.getLogger(__name__)
+
+_LEGACY_DQ_STG_OKTMO_HTML = PROJECT_ROOT / "data" / "notebooks" / "dq_stg_oktmo.html"
 
 
 def run_notebook(
@@ -54,6 +61,27 @@ def run_notebook(
     with executed_notebook.open("w", encoding="utf-8") as file:
         nbformat.write(nb, file)
     logger.info("Notebook executed: %s", executed_notebook)
+
+
+def run_nb_perf_metrics() -> None:
+    if DEFAULT_PERF_METRICS_EXECUTED_PATH.exists():
+        DEFAULT_PERF_METRICS_EXECUTED_PATH.unlink()
+    run_notebook(
+        source_notebook=DEFAULT_PERF_METRICS_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_PERF_METRICS_EXECUTED_PATH,
+        timeout_seconds=300,
+    )
+
+
+def run_nb_stg_oktmo() -> None:
+    if _LEGACY_DQ_STG_OKTMO_HTML.exists():
+        _LEGACY_DQ_STG_OKTMO_HTML.unlink()
+    if DEFAULT_NB_STG_OKTMO_EXECUTED_PATH.exists():
+        DEFAULT_NB_STG_OKTMO_EXECUTED_PATH.unlink()
+    run_notebook(
+        source_notebook=DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_STG_OKTMO_EXECUTED_PATH,
+    )
 
 
 def _ensure_notebook_kernel() -> str:

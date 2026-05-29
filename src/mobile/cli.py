@@ -23,7 +23,7 @@ from mobile.cli_defaults import (
 )
 from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
-from mobile.pipelines.nb import perf_metrics as nb_perf_metrics
+from mobile.notebook_runner import run_nb_perf_metrics, run_nb_stg_oktmo
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
@@ -72,14 +72,6 @@ from mobile.project_paths import (
 logger = logging.getLogger(__name__)
 
 _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
-    "build-stg-oktmo": (
-        lambda compression=DEFAULT_PARQUET_COMPRESSION: oktmo.run(
-            csv_path=DEFAULT_STG_OKTMO_CSV_PATH,
-            output_path=DEFAULT_STG_OKTMO_OUTPUT_PATH,
-            compression=compression,
-        ),
-        str(DEFAULT_STG_OKTMO_CSV_PATH),
-    ),
     "build-stg-time-zones": (
         lambda compression=DEFAULT_PARQUET_COMPRESSION: time_zones.run(
             csv_path=DEFAULT_STG_TIME_ZONES_CSV_PATH,
@@ -116,10 +108,6 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
 }
 
 _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
-    "dq-stg-oktmo": (
-        lambda: dq_oktmo.run_dq(DEFAULT_STG_OKTMO_OUTPUT_PATH),
-        str(DEFAULT_STG_OKTMO_OUTPUT_PATH),
-    ),
     "dq-stg-time-zones": (
         lambda: dq_time_zones.run_dq(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
         str(DEFAULT_STG_TIME_ZONES_OUTPUT_PATH),
@@ -139,11 +127,14 @@ _DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
 }
 
 _NB_COMMANDS: dict[str, Callable[[], None]] = {
-    "nb-perf-metrics": nb_perf_metrics.run,
+    "nb-stg-oktmo": run_nb_stg_oktmo,
+    "nb-perf-metrics": run_nb_perf_metrics,
 }
 
 CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-day",
+    "build-stg-oktmo",
+    "dq-stg-oktmo",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -252,6 +243,29 @@ def run_build_stg_binding(
             lambda d=day: runner(report_date=d, stg_geo_all_path=geo_all, output_path=out),
         )
     logger.info("%s completed successfully", command)
+
+
+def run_dq_stg_oktmo(*, oktmo_path: str | None) -> None:
+    """DQ ``stg_oktmo`` (read-only проверки)."""
+    path = Path(oktmo_path) if oktmo_path else DEFAULT_STG_OKTMO_OUTPUT_PATH
+    run_timed_command(
+        "dq-stg-oktmo",
+        lambda: dq_oktmo.run_dq(oktmo_path=path),
+    )
+
+
+def run_build_stg_oktmo(
+    *,
+    csv_path: str | None,
+    output_path: str | None,
+) -> None:
+    """build-stg-oktmo: CSV ОКТМО → Parquet ``stg_oktmo``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_STG_OKTMO_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_STG_OKTMO_OUTPUT_PATH
+    run_timed_command(
+        "build-stg-oktmo",
+        lambda: oktmo.run(csv_path=csv, output_path=out),
+    )
 
 
 def run_build_stg_bs(
@@ -712,11 +726,13 @@ def _run_build_stg_day_step(step: str, params: stg_day.BuildStgDayParams) -> Non
         oktmo.run(
             csv_path=params.oktmo_csv_path,
             output_path=params.oktmo_output_path,
-            compression=params.compression,
         )
         return
     if step == "dq-stg-oktmo":
-        dq_oktmo.run_dq(params.oktmo_output_path)
+        dq_oktmo.run_dq(oktmo_path=params.oktmo_output_path)
+        return
+    if step == "nb-stg-oktmo":
+        run_nb_stg_oktmo()
         return
     if step == "build-stg-time-zones":
         time_zones.run(
@@ -764,6 +780,9 @@ def _run_command(
     target_per_operator: int | None = None,
     excl_pct_of_ab: float | None = None,
 ) -> None:
+    if command == "build-stg-oktmo":
+        run_build_stg_oktmo(csv_path=None, output_path=None)
+        return
     if command == "build-src-person":
         logger.info("Starting %s", command)
         person.run(
@@ -807,6 +826,7 @@ def _run_command(
 
 
 BUILD_STEPS: tuple[str, ...] = (
+    "build-stg-oktmo",
     *tuple(_BUILD_COMMANDS),
     "build-src-person",
     "build-src-excl",
@@ -884,10 +904,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"build-stg-bs / dq-src-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
     )
     parser.add_argument(
+        "--csv-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-oktmo: входной CSV ОКТМО (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH})",
+    )
+    parser.add_argument(
         "--oktmo-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-bs: справочник ОКТМО (по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH})",
+        help=(
+            f"build-stg-bs / dq-stg-oktmo: stg_oktmo parquet "
+            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH})"
+        ),
     )
     parser.add_argument(
         "--time-zones-path",
@@ -981,7 +1010,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
+            "build-stg-oktmo / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
             f"(по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
             f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
@@ -1032,6 +1061,13 @@ def main() -> None:
                     mobile_root=args.mobile_root,
                 ),
             )
+        elif args.command == "build-stg-oktmo":
+            run_build_stg_oktmo(
+                csv_path=args.csv_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "dq-stg-oktmo":
+            run_dq_stg_oktmo(oktmo_path=args.oktmo_path)
         elif args.command == "build-stg-geo-all":
             run_build_stg_geo_all(
                 report_date=args.report_date,

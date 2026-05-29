@@ -237,11 +237,13 @@ def read_all_parquets_concat(paths: list[Path], *, columns: list[str] | None = N
     return pd.concat(parts, ignore_index=True)
 
 
-_NB = Path(__file__).resolve().parent / "nb"
+_NB = Path(__file__).resolve().parent / "pipelines" / "nb"
 _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"
 
 DEFAULT_PERF_METRICS_NOTEBOOK_PATH = _NB / "perf_metrics.ipynb"
 DEFAULT_PERF_METRICS_EXECUTED_PATH = _DATA_NOTEBOOKS / "perf_metrics.executed.ipynb"
+DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH = _NB / "1_stg_oktmo.ipynb"
+DEFAULT_NB_STG_OKTMO_EXECUTED_PATH = _DATA_NOTEBOOKS / "1_stg_oktmo.executed.ipynb"
 DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 

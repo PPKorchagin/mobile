@@ -13,7 +13,7 @@
 | --- | --------------------------------------------------------- | ----------------------------------------------- |
 | 1   | Загрузить сырой CSV классификатора ОКТМО                  | Данные в памяти по чанкам                       |
 | 2   | Привести набор колонок и типы к целевой схеме `stg_oktmo` | Нормализованный DataFrame                       |
-| 3   | Записать витрину в Parquet с заданным сжатием             | Файл `output_path`, готовый к чтению downstream |
+| 3   | Записать витрину в Parquet                                | Файл `output_path`, готовый к чтению downstream |
 
 
 **Бизнес-назначение:** справочник административно-территориального деления (ОКТМО) на STG-слое. 
@@ -34,11 +34,10 @@
 Переменные, передаваемые в job (аргументы `oktmo.run()`).
 
 
-| Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                                                                                               |
-| ------------- | ------------- | -------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oktmo_v001.csv` | Входной CSV ОКТМО                                                                                      |
-| `output_path` | string (path) | Да             | `data/stg/oktmo.parquet`             | Выходной Parquet (перезапись)                                                                          |
-| `compression` | string        | Да             | `snappy`                             | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py)) |
+| Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
+| ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
+| `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oktmo_v001.csv` | Входной CSV ОКТМО (CLI `--csv-path`)   |
+| `output_path` | string (path) | Да             | `data/stg/oktmo.parquet`             | Выходной Parquet (CLI `--output-path`) |
 
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
@@ -60,6 +59,7 @@
 
 ```bash
 uv run mobile build-stg-oktmo
+uv run mobile build-stg-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --output-path data/stg/oktmo.parquet
 ```
 
 ---
@@ -74,7 +74,7 @@ uv run mobile build-stg-oktmo
 | Формат хранения                | Parquet                                        |
 | Партиционирование              | Нет                                            |
 | Календарный срез / `load_date` | Нет (актуальный snapshot)                      |
-| Сжатие                         | Параметр `compression` (по умолчанию `snappy`) |
+| Сжатие                         | `snappy` (`DEFAULT_PARQUET_COMPRESSION`, не параметр job) |
 
 
 ### Поля витрины
@@ -171,7 +171,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 1. `concat` всех чанков (`ignore_index=True`).
 2. Создать каталог для `output_path`, если нет.
-3. `to_parquet(output_path, compression=compression, index=False)` — полная перезапись.
+3. `to_parquet(output_path, compression=snappy, index=False)` — полная перезапись.
 
 ### Типовые ошибки
 

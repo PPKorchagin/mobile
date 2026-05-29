@@ -2,7 +2,7 @@
 
 **Витрина:** `stg_oktmo` · **Команда:** `dq-stg-oktmo` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/oktmo.py`](../../../src/mobile/pipelines/dq/stg/oktmo.py). Схема (контракт): [`oktmo.json`](../../../src/mobile/schema/stg/oktmo.json).
+Референс: `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)`. Схема (контракт): `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)`.
 
 ---
 
@@ -31,17 +31,20 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(parquet_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-oktmo`).
+Вызов: `run_dq(oktmo_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-stg-oktmo`).
 
 
-| Переменная     | Тип           | Обязательность | Значение по умолчанию    | Описание                                                                                  |
-| -------------- | ------------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------- |
-| `parquet_path` | string (path) | Да             | `data/stg/oktmo.parquet` | `DEFAULT_STG_OKTMO_OUTPUT_PATH` в [`project_paths.py`](../../../src/mobile/project_paths.py) |
+| Переменная   | Тип           | Обязательность | Значение по умолчанию    | Описание                |
+| ------------ | ------------- | -------------- | ------------------------ | ----------------------- |
+| `oktmo_path` | string (path) | Да             | `data/stg/oktmo.parquet` | CLI: `**--oktmo-path`** |
 
 
-Флагов CLI **нет** (путь задаётся в CLI из дефолта, как у `build-stg-oktmo` → `output_path`).
+```bash
+uv run mobile dq-stg-oktmo
+uv run mobile dq-stg-oktmo --oktmo-path data/stg/oktmo.parquet
+```
 
-**Схема полей в runtime:** `STG_OKTMO_FIELDS` в [`pipelines/stg/oktmo.py`](../../../src/mobile/pipelines/stg/oktmo.py); JSON [`oktmo.json`](../../../src/mobile/schema/stg/oktmo.json) — только контракт документации.
+**Схема полей в runtime:** `STG_OKTMO_FIELDS` в `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`; JSON `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)` — только контракт документации.
 
 **Предусловие:** `uv run mobile build-stg-oktmo`.
 
@@ -58,11 +61,11 @@ uv run mobile dq-stg-oktmo
 ## Структура проверяемой витрины
 
 
-| Свойство    | Значение                                                                                                                    |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Имя таблицы | `stg_oktmo`                                                                                                                 |
-| Формат      | Parquet                                                                                                                     |
-| Поля        | `WKT`, `level`, `parent_code`, `code`, `name` — `STG_OKTMO_FIELDS` / [`oktmo.json`](../../../src/mobile/schema/stg/oktmo.json) |
+| Свойство    | Значение                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Имя таблицы | `stg_oktmo`                                                                                                                    |
+| Формат      | Parquet                                                                                                                        |
+| Поля        | `WKT`, `level`, `parent_code`, `code`, `name` — `STG_OKTMO_FIELDS` / `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)` |
 
 
 ---
@@ -70,9 +73,9 @@ uv run mobile dq-stg-oktmo
 ## Источники
 
 
-| #   | Источник    | Путь                                      | Назначение |
-| --- | ----------- | ----------------------------------------- | ---------- |
-| 1   | Витрина STG | `data/stg/oktmo.parquet` (`parquet_path`) | Объект DQ  |
+| #   | Источник    | Путь                                    | Назначение |
+| --- | ----------- | --------------------------------------- | ---------- |
+| 1   | Витрина STG | `data/stg/oktmo.parquet` (`oktmo_path`) | Объект DQ  |
 
 
 ---
@@ -81,7 +84,7 @@ uv run mobile dq-stg-oktmo
 
 ### Шаг 0. Инициализация
 
-1. `resolved = _resolve_parquet_path(parquet_path)` (относительно `PROJECT_ROOT`).
+1. `resolved = _resolve_oktmo_path(oktmo_path)` (относительно `PROJECT_ROOT`).
 2. `expected_columns` — имена из `STG_OKTMO_FIELDS`.
 
 ### Шаг 1. Наличие данных
@@ -98,24 +101,22 @@ uv run mobile dq-stg-oktmo
 
 Последовательный проход по DataFrame (после `read_parquet`):
 
-1. **`level_distribution`:** `level ∈ {1, 2}`; иначе **warning** + `level_counts`, `invalid_level_count`.
-2. **`code_quality`:** `code` числовой и уникален в пределах файла; дубликаты / нечисловые → **warning**.
-3. **`parent_code_quality`:** числовой `parent_code` где задан.
-4. **`hierarchy_integrity`:**
-   - level=1 не должен иметь `parent_code`;
-   - level=2 должен иметь `parent_code`, существующий среди `code` level=1;
-   - у каждого parent level=1 — хотя бы один child level=2 (опционально warning).
-5. **`name_quality`:** пустые, `-`, `null` в `name` → **warning**.
-6. **`wkt_geometry`:** построчно `shapely.wkt.loads(WKT)`:
-   - `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`;
-   - `unsupported_geom_type_count` (не POLYGON/MULTIPOLYGON);
-   - **warning** при любом ненулевом счётчике (кроме допустимых типов).
-
-Таблица метрик — раздел [Проверки](#проверки).
+1. `**level_distribution`:** `level ∈ {1, 2}`; иначе **warning** + `level_counts`, `invalid_level_count`.
+2. `**code_quality`:** `code` числовой и уникален в пределах файла; дубликаты / нечисловые → **warning**.
+3. `**parent_code_quality`:** числовой `parent_code` где задан.
+4. `**hierarchy_integrity`:**
+  - level=1 не должен иметь `parent_code`;
+  - level=2 должен иметь `parent_code`, существующий среди `code` level=1;
+  - у каждого parent level=1 — хотя бы один child level=2 (опционально warning).
+5. `**name_quality`:** пустые, `-`, `null` в `name` → **warning**.
+6. `**wkt_geometry`:** построчно `shapely.wkt.loads(WKT)`:
+  - `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`;
+  - `unsupported_geom_type_count` (не POLYGON/MULTIPOLYGON);
+  - **warning** при любом ненулевом счётчике (кроме допустимых типов).
 
 ### Шаг 4. Итог
 
-`summary` с агрегатами; return dict со `status`, `parquet_path`, счётчиками checks.
+`summary` с агрегатами; return dict со `status`, `oktmo_path`, счётчиками checks.
 
 Каждый check — JSON в лог: `{"tag":"DQ_STG_OKTMO","check":"...","status":"...","metrics":{...}}`.
 
@@ -132,53 +133,60 @@ uv run mobile dq-stg-oktmo
 
 ## Проверки
 
-Статусы: **ok** / **warning** / **failed** (кроме метрик `nulls.*` и `cardinality.*` — всегда **ok**).
+Статусы: **ok** / **warning** / **failed** (кроме метрик `nulls.`* и `cardinality.*` — всегда **ok**).
 
 ### Наличие и схема
 
-| Check | Статус при сбое | Смысл |
-|-------|-----------------|--------|
-| `dataset_presence` | **failed** | Parquet по `parquet_path` не найден; дальнейшие checks не выполняются |
-| `dataset_basic` | **ok** | `row_count`, `column_count`, `parquet_path` |
-| `schema_columns` | **failed** | Отсутствуют колонки из `STG_OKTMO_FIELDS` (`WKT`, `level`, `parent_code`, `code`, `name`) |
+
+| Check              | Статус при сбое | Смысл                                                                                     | Обоснование                                                        |
+| ------------------ | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `dataset_presence` | **failed**      | Parquet по `oktmo_path` не найден; дальнейшие checks не выполняются                       | Без файла витрины DQ и downstream-пайплайны не имеют входа         |
+| `dataset_basic`    | **ok**          | `row_count`, `column_count`, `oktmo_path`                                                 | Фиксация объёма среза для сравнения прогонов и пустого справочника |
+| `schema_columns`   | **failed**      | Отсутствуют колонки из `STG_OKTMO_FIELDS` (`WKT`, `level`, `parent_code`, `code`, `name`) | Контракт колонок совпадает с ETL и ожиданиями geo-джойнов          |
+
 
 ### По каждому полю схемы
 
 Для каждого присутствующего поля из `STG_OKTMO_FIELDS`:
 
-| Check | Статус | Метрики |
-|-------|--------|---------|
-| `nulls.{field}` | **ok** | `null_count`, `null_ratio` |
-| `cardinality.{field}` | **ok** | `nunique` |
+
+| Check                 | Статус | Метрики                    | Обоснование                                          |
+| --------------------- | ------ | -------------------------- | ---------------------------------------------------- |
+| `nulls.{field}`       | **ok** | `null_count`, `null_ratio` | Доля пропусков по полю контракта                     |
+| `cardinality.{field}` | **ok** | `nunique`                  | Число distinct значений — профиль полноты и выбросов |
+
 
 ### Предметные checks
 
-| Check | Статус при сбое | Смысл / метрики |
-|-------|-----------------|-----------------|
-| `level_distribution` | **warning** | `level` не в {1, 2}; `level_counts`, `invalid_level_count` |
-| `code_quality` | **warning** | Дубли `code` или нечисловой `code`; `duplicate_code_count`, `non_numeric_code_count` |
-| `parent_code_quality` | **warning** | Нечисловой `parent_code`; `non_numeric_parent_code_count` |
-| `hierarchy_integrity` | **warning** | level1 с parent, level2 без parent, child без parent в справочнике, parent без children; счётчики по уровням |
-| `name_quality` | **warning** | Пустые / `-` / `null` в `name`; `invalid_name_count` |
-| `wkt_geometry` | **warning** | WKT (`shapely.wkt.loads` построчно): `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count` (допустимы `POLYGON`, `MULTIPOLYGON`), `geom_type_counts`, `valid_geometry_count` |
+
+| Check                 | Статус при сбое | Смысл / метрики                                                                                                                                                                                                             | Обоснование                                         |
+| --------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `level_distribution`  | **warning**     | `level` не в {1, 2}; `level_counts`, `invalid_level_count`                                                                                                                                                                  | В STG только субъекты РФ (1) и муниципалитеты (2)   |
+| `code_quality`        | **warning**     | Дубли `code` или нечисловой `code`; `duplicate_code_count`, `non_numeric_code_count`                                                                                                                                        | `code` — ключ справочника для джойнов               |
+| `parent_code_quality` | **warning**     | Нечисловой `parent_code`; `non_numeric_parent_code_count`                                                                                                                                                                   | Корректный формат ссылок в иерархии                 |
+| `hierarchy_integrity` | **warning**     | level1 с parent, level2 без parent, child без parent в справочнике, parent без children; счётчики по уровням                                                                                                                | Согласованность parent↔child для агрегаций по ОКТМО |
+| `name_quality`        | **warning**     | Пустые / `-` / `null` в `name`; `invalid_name_count`                                                                                                                                                                        | Читаемые наименования для отчётов и UI              |
+| `wkt_geometry`        | **warning**     | WKT (`shapely.wkt.loads` построчно): `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count` (допустимы `POLYGON`, `MULTIPOLYGON`), `geom_type_counts`, `valid_geometry_count` | Геометрия нужна для point-in-polygon и карт         |
+
 
 ### Итог
 
-| Check | Смысл |
-|-------|--------|
-| `summary` | `total_checks`, `warning_checks`, `failed_checks` |
+
+| Check     | Смысл                                             | Обоснование                         |
+| --------- | ------------------------------------------------- | ----------------------------------- |
+| `summary` | `total_checks`, `warning_checks`, `failed_checks` | Сводка прогона для мониторинга и CI |
+
 
 ---
 
 ## Ссылки
 
 
-| Артефакт | Путь |
-|----------|------|
-| Обзор DQ | [`../README.md`](../README.md) |
-| Схема | [`oktmo.json`](../../../src/mobile/schema/stg/oktmo.json) |
-| ETL build | [`pipelines/stg/oktmo.py`](../../../src/mobile/pipelines/stg/oktmo.py) |
-| DQ | [`pipelines/dq/stg/oktmo.py`](../../../src/mobile/pipelines/dq/stg/oktmo.py) |
-| Пути | [`project_paths.py`](../../../src/mobile/project_paths.py) |
+| Артефакт  | Путь                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| Схема     | `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)`                    |
+| ETL build | `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`       |
+| DQ        | `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)` |
+| Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                   |
 
 

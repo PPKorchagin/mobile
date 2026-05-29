@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.project_paths import PROJECT_ROOT
 
@@ -39,7 +40,6 @@ def run(
     *,
     csv_path: str | Path,
     output_path: str | Path,
-    compression: str,
 ) -> dict[str, Any]:
     csv_file = _resolve_path(csv_path)
     parquet_file = _resolve_path(output_path)
@@ -65,7 +65,7 @@ def run(
 
     with timed_stage("write_parquet_sec", perf):
         parquet_file.parent.mkdir(parents=True, exist_ok=True)
-        data.to_parquet(parquet_file, compression=compression, index=False)
+        data.to_parquet(parquet_file, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
 
     logger.info(
         "%s parquet created: path=%s rows=%s columns=%s compression=%s",
@@ -73,7 +73,7 @@ def run(
         parquet_file,
         len(data),
         len(data.columns),
-        compression,
+        DEFAULT_PARQUET_COMPRESSION,
     )
     stats = {
         "table": STG_OKTMO_TABLE,
@@ -81,7 +81,7 @@ def run(
         "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
         "column_count": int(len(data.columns)),
-        "parquet_compression": compression,
+        "parquet_compression": DEFAULT_PARQUET_COMPRESSION,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-stg-oktmo", metrics={**stats, **perf})
