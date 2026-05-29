@@ -369,6 +369,7 @@ def run_build_stg_person(
     stg_msisdn_imsi_path: str | None,
     stg_msisdn_imei_path: str | None,
     stg_tac_path: str | None,
+    stg_oksm_path: str | None,
     output_path: str | None,
 ) -> None:
     """build-stg-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
@@ -380,6 +381,7 @@ def run_build_stg_person(
     imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
     imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
     tac = Path(stg_tac_path) if stg_tac_path else None
+    oksm = Path(stg_oksm_path) if stg_oksm_path else None
     out = Path(output_path) if output_path else None
     run_timed_command(
         "build-stg-person",
@@ -389,6 +391,7 @@ def run_build_stg_person(
             stg_msisdn_imsi_path=imsi,
             stg_msisdn_imei_path=imei,
             stg_tac_path=tac,
+            stg_oksm_path=oksm,
             output_path=out,
         ),
     )
@@ -910,6 +913,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"build-stg-person: справочник stg_tac для исключения M2M (по умолчанию {DEFAULT_STG_TAC_OUTPUT_PATH})",
     )
     parser.add_argument(
+        "--stg-oksm-path",
+        default=None,
+        metavar="PATH",
+        help=f"build-stg-person: справочник stg_oksm для citizenship (по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})",
+    )
+    parser.add_argument(
         "--event-dds-path",
         default=None,
         metavar="PATH",
@@ -1014,6 +1023,7 @@ def main() -> None:
                 stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
                 stg_msisdn_imei_path=args.stg_msisdn_imei_path,
                 stg_tac_path=args.stg_tac_path,
+                stg_oksm_path=args.stg_oksm_path,
                 output_path=args.output_path,
             )
         elif args.command == "dq-stg-event":

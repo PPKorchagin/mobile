@@ -28,6 +28,7 @@
 **Предусловия:**
 
 - [`build-stg-tac`](build_stg_tac.md) → `data/stg/tac.parquet` (иначе M2M-фильтр пропускается с warning).
+- [`build-stg-oksm`](build_stg_oksm.md) → `data/stg/oksm.parquet` (обязателен для `citizenship`).
 - Ежедневные [`build-stg-msisdn-imsi`](./build_stg_msisdn_imsi.md) / [`build-stg-msisdn-imei`](./build_stg_msisdn_imei.md) по дням месяца (или авто-`refresh` из `stg_geo_all`).
 
 ---
@@ -49,6 +50,7 @@
 | `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI за месяц |
 | `stg_msisdn_operator_path` | path | Нет | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` | MNP-интервалы |
 | `stg_tac_path` | path | Нет | `data/stg/tac.parquet` | M2M по TAC |
+| `stg_oksm_path` | path | Нет | `data/stg/oksm.parquet` | Справочник ОКСМ для `citizenship` |
 | `output_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | `stg_person` |
 | `person_sim_path` | path | Нет | `data/stg/person_sim/{YYYY-MM-01}.parquet` | `stg_person_sim` |
 | `person_ledger_path` | path | Нет | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | ledger узлов |
@@ -107,7 +109,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 | 8 | `imei` | string | Основной IMEI |
 | 9 | `gender` | string | `M` / `F` / `U` |
 | 10 | `age` | string | Возраст на начало месяца или `U` |
-| 11 | `citizenship` | string | Код страны или `U` |
+| 11 | `citizenship` | string | Цифровой код ОКСМ (`numeric_code`) или `U` |
 | 12 | `operator_id` | long | Оператор основной подписки |
 | 13 | `actually_from` | timestamp | Начало интервала основной SIM |
 | 14 | `actually_to` | timestamp | Конец интервала |
@@ -132,7 +134,8 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 | 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMSI (месяц, daily upsert) |
 | 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMEI |
 | 6 | `stg_tac` | `data/stg/tac.parquet` | M2M |
-| 7 | ledger (прошлый месяц) | `data/stg/person_id_ledger/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
+| 7 | `stg_oksm` | `data/stg/oksm.parquet` | Коды гражданства |
+| 8 | ledger (прошлый месяц) | `data/stg/person_id_ledger/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
 
 Документация вспомогательных сборок:
 
@@ -249,7 +252,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
    - `sim_count` = `nunique(imsi|iccid)` по подпискам персоны;
    - `gender` ← `_derive_gender` (по полю/ФИО);
    - `age` ← возраст на `month_start` из `birth_day` или `U`;
-   - `citizenship` ← `_derive_citizenship_from_row` или `U`.
+   - `citizenship` ← `_derive_citizenship_from_row` + [`oksm.load_lookup`](../../src/mobile/pipelines/stg/oksm.py) (`numeric_code`) или `U`.
 3. **`stg_person_id_ledger`:**
    - для каждого `(person_cluster_key, person_id)` — по одной строке на каждый узел графа (`node` = `msisdn:…`, `bio:…`, …);
    - снимок для стабильности ID в следующем месяце.
@@ -266,6 +269,7 @@ uv run mobile build-stg-msisdn-imsi-month --report-date 2025-01-01
 | `report_date` не 1-е число | `ValueError` / `SystemExit` |
 | Нет `_SUCCESS` за месяц | `FileNotFoundError` |
 | Нет `stg_tac` | warning, M2M не фильтруется |
+| Нет `stg_oksm` | `FileNotFoundError` при старте |
 | Нет `stg_geo_all` за дни | пустые/частичные binding, слабый fill |
 | Нет bio и нет связующих рёбер | отдельные кластеры по tech ID, `person_confidence=low` |
 

@@ -12,7 +12,7 @@
         { "name": "imei", "type": "string", "comment": "Основной IMEI" },
         { "name": "gender", "type": "string", "comment": "M / F / U" },
         { "name": "age", "type": "string", "comment": "Возраст на начало месяца или U" },
-        { "name": "citizenship", "type": "string", "comment": "Код страны или U" },
+        { "name": "citizenship", "type": "string", "comment": "Цифровой код ОКСМ (numeric_code) или U" },
         { "name": "operator_id", "type": "long", "comment": "operator_Id основной подписки" },
         { "name": "actually_from", "type": "timestamp", "comment": "Начало интервала основной подписки" },
         { "name": "actually_to", "type": "timestamp", "comment": "Конец интервала основной подписки" }

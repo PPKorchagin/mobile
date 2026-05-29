@@ -102,6 +102,8 @@ uv run mobile nb-perf-metrics
 
 Флаг **`--stg-tac-path PATH`** — для `build-stg-person`: справочник TAC для исключения M2M SIM (по умолчанию `data/stg/tac.parquet`; нужен `build-stg-tac`).
 
+Флаг **`--stg-oksm-path PATH`** — для `build-stg-person`: справочник ОКСМ для `citizenship` (по умолчанию `data/stg/oksm.parquet`; нужен `build-stg-oksm`).
+
 Флаг **`--oktmo-path PATH`** — для `build-stg-bs`: справочник ОКТМО (по умолчанию `data/stg/oktmo.parquet`).
 
 Флаг **`--time-zones-path PATH`** — для `build-stg-bs` / `build-stg-geo-intervals`: справочник часовых поясов (по умолчанию `data/stg/time_zones.parquet`).
@@ -135,7 +137,7 @@ uv run mobile nb-perf-metrics
 | `build-stg-event` | `--dc`, `--report-date` | `data/src/mobile/{dc}/operator/...` | `data/stg/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` |
 | `build-stg-geo-all` | `--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path` | `data/stg/event_dds/{YYYY-MM-DD}/{dc}.parquet`, `data/stg/bs.parquet` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
 | `build-stg-geo-intervals` | `--report-date`, … | `stg_geo_all` за день, `msisdn_imsi`/`imei` за **месяц** `{YYYY-MM-01}.parquet` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` |
-| `build-stg-person` | `--report-date` (1-е число месяца), … | `src_person`, `stg_tac`, `msisdn_imsi`/`imei` за месяц, `msisdn_operator`, ledger | `person/`, `person_sim/`, `person_id_ledger/` |
+| `build-stg-person` | `--report-date` (1-е число месяца), … | `src_person`, `stg_tac`, `stg_oksm`, `msisdn_imsi`/`imei` за месяц, `msisdn_operator`, ledger | `person/`, `person_sim/`, `person_id_ledger/` |
 | `build-stg-msisdn-operator` | `--report-date` | все срезы `src_person` месяца | `data/stg/msisdn_operator/{YYYY-MM-01}.parquet` |
 | `build-stg-msisdn-imsi` | `--report-date` (день) | `stg_geo_all` за день | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` (инкремент) |
 | `build-stg-msisdn-imei` | `--report-date` (день) | `stg_geo_all` за день | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` (инкремент) |

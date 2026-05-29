@@ -63,7 +63,7 @@ uv run mobile dq-stg-person --report-date 2025-01-01
 | `msisdn`, `imsi`, `imei` | нормализованные цифры |
 | `gender` | M, F, U |
 | `age` | 0–120 или U |
-| `citizenship` | код или U |
+| `citizenship` | numeric_code ОКСМ или U |
 
 ### `stg_person_sim`
 

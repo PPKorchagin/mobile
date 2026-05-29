@@ -3,13 +3,15 @@ from __future__ import annotations
 import logging
 import re
 import time
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import PROJECT_ROOT
+from mobile.project_paths import DEFAULT_STG_OKSM_OUTPUT_PATH, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,96 @@ STG_OKSM_FIELDS: list[dict[str, str]] = [
     {"name": "alpha3", "type": "string"},
     {"name": "autokey", "type": "string"},
 ]
+
+_RUSSIA_ALPHA2 = "RU"
+_RUSSIA_NUMERIC = "643"
+
+
+@dataclass(frozen=True)
+class OksmLookup:
+    """Индексы ``stg_oksm``: alpha2/alpha3 → numeric_code, подстроки наименований → numeric_code."""
+
+    alpha2_to_numeric: dict[str, str]
+    alpha3_to_numeric: dict[str, str]
+    numeric_codes: frozenset[str]
+    name_tokens: tuple[tuple[str, str], ...]
+
+    @classmethod
+    def from_dataframe(cls, frame: pd.DataFrame) -> OksmLookup:
+        required = {"numeric_code", "name_short", "name_full", "alpha2", "alpha3"}
+        missing = required - set(frame.columns)
+        if missing:
+            raise ValueError(f"stg_oksm missing columns: {sorted(missing)}")
+
+        alpha2_to_numeric: dict[str, str] = {}
+        alpha3_to_numeric: dict[str, str] = {}
+        numeric_codes: set[str] = set()
+        token_to_numeric: dict[str, str] = {}
+
+        for row in frame.itertuples(index=False):
+            numeric = str(getattr(row, "numeric_code", "")).strip()
+            if not _NUMERIC_CODE_RE.fullmatch(numeric):
+                continue
+            numeric_codes.add(numeric)
+            alpha2 = str(getattr(row, "alpha2", "")).strip().upper()
+            alpha3 = str(getattr(row, "alpha3", "")).strip().upper()
+            if _ALPHA2_RE.fullmatch(alpha2):
+                alpha2_to_numeric[alpha2] = numeric
+            if _ALPHA3_RE.fullmatch(alpha3):
+                alpha3_to_numeric[alpha3] = numeric
+            for label in (getattr(row, "name_short", ""), getattr(row, "name_full", "")):
+                token = str(label).strip().lower()
+                if len(token) >= 4:
+                    token_to_numeric[token] = numeric
+
+        name_tokens = tuple(sorted(token_to_numeric.items(), key=lambda item: len(item[0]), reverse=True))
+        return cls(
+            alpha2_to_numeric=alpha2_to_numeric,
+            alpha3_to_numeric=alpha3_to_numeric,
+            numeric_codes=frozenset(numeric_codes),
+            name_tokens=name_tokens,
+        )
+
+    def from_alpha2(self, code: str) -> str | None:
+        normalized = str(code).strip().upper()
+        if not normalized:
+            return None
+        return self.alpha2_to_numeric.get(normalized)
+
+    def match_text_tokens(self, text: str, mapping: dict[str, str]) -> str | None:
+        lowered = text.lower()
+        for token, alpha2 in mapping.items():
+            if token in lowered:
+                return self.from_alpha2(alpha2)
+        return None
+
+    def match_country_names(self, text: str) -> str | None:
+        lowered = text.lower()
+        for token, numeric in self.name_tokens:
+            if token in lowered:
+                return numeric
+        return None
+
+    def default_russia(self) -> str:
+        return self.from_alpha2(_RUSSIA_ALPHA2) or _RUSSIA_NUMERIC
+
+
+def load_lookup(path: str | Path | None = None) -> OksmLookup:
+    resolved = _resolve_path(path or DEFAULT_STG_OKSM_OUTPUT_PATH)
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"stg_oksm parquet not found: {resolved}. Run `uv run mobile build-stg-oksm` first."
+        )
+    frame = pd.read_parquet(
+        resolved,
+        columns=["numeric_code", "name_short", "name_full", "alpha2", "alpha3"],
+    )
+    return OksmLookup.from_dataframe(frame)
+
+
+@lru_cache(maxsize=1)
+def cached_lookup(path: str) -> OksmLookup:
+    return load_lookup(path)
 
 
 def run(

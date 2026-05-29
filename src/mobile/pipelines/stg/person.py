@@ -25,9 +25,11 @@ from mobile.pipelines.stg.person_identity import (
     str_field,
     to_digit_string_series,
 )
+from mobile.pipelines.stg.oksm import OksmLookup, load_lookup
 from mobile.pipelines.stg.src_person_month import read_src_person_month
 from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_imsi, normalize_msisdn
 from mobile.project_paths import (
+    DEFAULT_STG_OKSM_OUTPUT_PATH,
     DEFAULT_STG_PERSON_SCHEMA_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     resolve_project_path,
@@ -98,6 +100,7 @@ def run_build(
     stg_msisdn_imei_path: str | Path | None = None,
     stg_msisdn_operator_path: str | Path | None = None,
     stg_tac_path: str | Path | None = None,
+    stg_oksm_path: str | Path | None = None,
     output_path: str | Path | None = None,
     person_sim_path: str | Path | None = None,
     person_ledger_path: str | Path | None = None,
@@ -130,6 +133,9 @@ def run_build(
     src_rows_before_exclusions = int(len(raw))
 
     tac_path = resolve_project_path(stg_tac_path) if stg_tac_path is not None else DEFAULT_STG_TAC_OUTPUT_PATH
+    oksm_path = resolve_project_path(stg_oksm_path) if stg_oksm_path is not None else DEFAULT_STG_OKSM_OUTPUT_PATH
+    with timed_stage("load_oksm_sec", perf):
+        oksm_lookup = load_lookup(oksm_path)
     with timed_stage("exclusions_sec", perf):
         m2m_tacs = _read_m2m_tac_set(tac_path)
         raw, excluded_m2m_tac_rows = _exclude_m2m_by_tac(raw, m2m_tacs=m2m_tacs)
@@ -193,6 +199,7 @@ def run_build(
             cluster_to_nodes=cluster_to_nodes,
             report_month=report_month,
             field_names=field_names,
+            oksm_lookup=oksm_lookup,
         )
 
     with timed_stage("write_sec", perf):
@@ -493,6 +500,7 @@ def _build_outputs(
     cluster_to_nodes: dict[str, set[str]],
     report_month: date,
     field_names: list[str],
+    oksm_lookup: OksmLookup,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if work.empty:
         empty_person = pd.DataFrame(columns=field_names)
@@ -533,7 +541,10 @@ def _build_outputs(
     profile["sim_count"] = profile["person_id"].map(sim_counts).fillna(1).astype("Int64")
     profile["gender"] = profile.apply(_derive_gender, axis=1)
     profile["age"] = profile["birth_day"].map(lambda v: _derive_age_as_of_month_start(v, month_start))
-    profile["citizenship"] = profile.apply(_derive_citizenship_from_row, axis=1).astype("string")
+    profile["citizenship"] = profile.apply(
+        lambda row: _derive_citizenship_from_row(row, oksm_lookup=oksm_lookup),
+        axis=1,
+    ).astype("string")
 
     person_out = profile.drop(columns=["sim_key"], errors="ignore")
     person_out = person_out.drop_duplicates(subset=["person_id"], keep="first")
@@ -659,13 +670,14 @@ def _derive_age_as_of_month_start(birth_day: pd.Timestamp | Any, month_start: pd
     return str(years)
 
 
-def _derive_citizenship_from_row(row: pd.Series) -> str:
+def _derive_citizenship_from_row(row: pd.Series, *, oksm_lookup: OksmLookup) -> str:
     return _derive_citizenship(
         dul_department=row.get("dul_department"),
         document=row.get("document"),
         first_name=row.get("first_name"),
         second_name=row.get("second_name"),
         last_name=row.get("last_name"),
+        oksm_lookup=oksm_lookup,
     )
 
 
@@ -676,40 +688,32 @@ def _derive_citizenship(
     first_name: Any = None,
     second_name: Any = None,
     last_name: Any = None,
+    oksm_lookup: OksmLookup,
 ) -> str:
     from mobile.pipelines.stg.person_identity import str_field
 
     dept = str_field(dul_department).lower()
-    if dept and (hit := _match_tokens(dept, _DEPT_MAP)):
-        return hit
     doc = str_field(document).lower()
-    if doc and (hit := _match_tokens(doc, _DOC_MAP)):
-        return hit
     name_blob = " ".join(str_field(x).lower() for x in (last_name, first_name, second_name)).strip()
-    if name_blob and (hit := _match_name_hints(name_blob)):
+    combined = " ".join(part for part in (dept, doc, name_blob) if part)
+
+    if dept and (hit := oksm_lookup.match_text_tokens(dept, _DEPT_MAP)):
+        return hit
+    if doc and (hit := oksm_lookup.match_text_tokens(doc, _DOC_MAP)):
+        return hit
+    if combined and (hit := oksm_lookup.match_text_tokens(combined, _NAME_HINTS)):
+        return hit
+    if combined and (hit := oksm_lookup.match_country_names(combined)):
         return hit
     if name_blob and any(s in name_blob for s in ("вич", "вна", "оглы", "кызы")):
         if "мвд" in dept or "паспорт рф" in doc:
-            return "RU"
+            return oksm_lookup.default_russia()
         if not dept and not doc:
-            return "RU"
+            return oksm_lookup.default_russia()
     return "U"
 
 
-def _match_tokens(text: str, mapping: dict[str, str]) -> str | None:
-    for token, code in mapping.items():
-        if token in text:
-            return code
-    return None
-
-
-def _match_name_hints(text: str) -> str | None:
-    for token, code in _NAME_HINTS:
-        if token in text:
-            return code
-    return None
-
-
+# Подстроки в bio → ISO alpha-2; в ``stg_person.citizenship`` — numeric_code из ``stg_oksm``.
 _DEPT_MAP = {
     "мвд": "RU",
     "овд": "RU",
@@ -717,12 +721,40 @@ _DEPT_MAP = {
     "russia": "RU",
     "kaz": "KZ",
     "uzb": "UZ",
+    "tajik": "TJ",
+    "kyrgyz": "KG",
+    "belarus": "BY",
+    "armenia": "AM",
+    "azerbaijan": "AZ",
+    "ukrain": "UA",
+    "china": "CN",
+    "german": "DE",
+    "american": "US",
 }
 _DOC_MAP = {
     "паспорт рф": "RU",
     "российск": "RU",
     "казахстан": "KZ",
     "узбекистан": "UZ",
+    "таджикистан": "TJ",
+    "кыргыз": "KG",
+    "беларус": "BY",
+    "армен": "AM",
+    "азербайджан": "AZ",
+    "украин": "UA",
+    "кнр": "CN",
+    "chinese": "CN",
+    "german passport": "DE",
+    "american passport": "US",
 }
-_NAME_HINTS = (("kaz", "KZ"), ("uzb", "UZ"), ("ukr", "UA"))
+_NAME_HINTS = {
+    "kaz": "KZ",
+    "uzb": "UZ",
+    "ukr": "UA",
+    "tj": "TJ",
+    "kg": "KG",
+    "blr": "BY",
+    "arm": "AM",
+    "aze": "AZ",
+}
 
