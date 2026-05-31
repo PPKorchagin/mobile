@@ -24,4 +24,7 @@
 | 19            | build-src-excl       | Генерация списков исключений (IMSI, IMEI, MSISDN)    | —                                                                                       | [Документ](documents/src/build_src_excl.md)       |
 | 20            | dq-src-excl          | Проверка качества списков исключений                 | --src-imsi-path data/src/excl/src_imsi.parquet --src-imei-path data/src/excl/src_imei.parquet --src-msisdn-path data/src/excl/src_msisdn.parquet | [Документ](documents/dq/src/dq_src_excl.md)       |
 | 21            | nb-src-excl          | Визуализация метрик DQ списков исключений            | —                                                                                       | —                                                 |
+| 22            | build-src-mobile     | Генерация синтетических mobile-витрин (CDR, SMS, GPRS, location) | —                                                                                       | [Документ](documents/src/build_src_mobile.md)     |
+| 23            | dq-src-mobile        | Проверка качества mobile-витрин (день × ЦОД)         | `--report-date` + 4 пути витрин; без флагов — DEFAULT_SRC_* × central/far-east         | [Документ](documents/dq/src/dq_src_mobile.md)     |
+| 24            | nb-src-mobile        | Визуализация метрик DQ mobile-витрин                 | —                                                                                       | —                                                 |
 

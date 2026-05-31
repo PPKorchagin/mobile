@@ -1813,3 +1813,174 @@ def render_src_excl_dq_marts(latest: pd.DataFrame) -> plt.Figure:
     fig.suptitle("Витрины и итог DQ", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
+
+
+# --- src_mobile DQ charts ---
+
+_MOBILE_MARTS = ("cdr", "sms", "gprs", "location")
+_MOBILE_MART_LABELS = {"cdr": "CDR", "sms": "SMS", "gprs": "GPRS", "location": "LOC"}
+_MOBILE_STG_GATE_SUFFIXES = ("started", "owner", "lac_cell", "imsi", "msisdn", "coords", "columns")
+
+
+def mobile_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for mart in _MOBILE_MARTS:
+        metrics = _metrics_for_check(latest, f"{mart}.coverage")
+        if not metrics:
+            continue
+        rows.append(
+            {
+                "mart": mart,
+                "label": _MOBILE_MART_LABELS[mart],
+                "row_count_total": int(metrics.get("row_count_total") or 0),
+                "parquet_files_scanned": int(metrics.get("parquet_files_scanned") or 0),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def mobile_traffic_mix_frame(latest: pd.DataFrame, *, day: bool = True) -> pd.DataFrame:
+    check = "cross_mart.day_traffic_mix" if day else "cross_mart.traffic_mix"
+    metrics = _metrics_for_check(latest, check)
+    totals = metrics.get("row_totals")
+    if not isinstance(totals, dict):
+        return pd.DataFrame(columns=["mart", "label", "rows"])
+    rows = [
+        {
+            "mart": mart,
+            "label": _MOBILE_MART_LABELS.get(mart, mart),
+            "rows": int(totals.get(mart) or 0),
+        }
+        for mart in _MOBILE_MARTS
+        if mart in totals
+    ]
+    return pd.DataFrame(rows)
+
+
+def mobile_stg_gate_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for mart in _MOBILE_MARTS:
+        for gate in _MOBILE_STG_GATE_SUFFIXES:
+            status = "missing"
+            for prefix in (f"{mart}.day.mobile.stg_contract.", f"{mart}.mobile.stg_contract."):
+                full = f"{prefix}{gate}"
+                hit = latest[latest["check"] == full]
+                if not hit.empty:
+                    status = str(hit.iloc[-1]["status"])
+                    break
+            rows.append(
+                {
+                    "mart": mart,
+                    "label": _MOBILE_MART_LABELS[mart],
+                    "gate": gate,
+                    "status": status,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _plot_mobile_coverage_bars(coverage: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if coverage.empty:
+        ax.set_title("coverage — нет данных в логе")
+        ax.axis("off")
+        return fig
+    ax.bar(coverage["label"], coverage["row_count_total"], color="#1f77b4", alpha=0.88)
+    ax.set_ylabel("row_count_total")
+    ax.set_title("Строки после фильтра Started (coverage)")
+    for i, row in enumerate(coverage.itertuples()):
+        ax.text(i, row.row_count_total, f"{row.row_count_total:,}", ha="center", va="bottom", fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_mobile_traffic_mix(mix: pd.DataFrame, *, title: str, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+    if mix.empty:
+        ax.set_title(f"{title}\n(нет данных)")
+        ax.axis("off")
+        return fig
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd"]
+    ax.pie(
+        mix["rows"],
+        labels=mix["label"],
+        autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+        colors=colors[: len(mix)],
+        startangle=90,
+    )
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_mobile_stg_gate_grid(gates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 3.5))
+    else:
+        fig = ax.figure
+    if gates.empty:
+        ax.set_title("stg_contract — нет данных")
+        ax.axis("off")
+        return fig
+    pivot = gates.pivot(index="label", columns="gate", values="status")
+    pivot = pivot.reindex(columns=list(_MOBILE_STG_GATE_SUFFIXES))
+    codes = {"failed": 0, "warning": 1, "ok": 2, "missing": 3, "info": 2}
+    matrix = pivot.map(lambda status: codes.get(str(status), 3)).to_numpy(dtype=float)
+    im = ax.imshow(matrix, aspect="auto", cmap=plt.cm.RdYlGn, vmin=0, vmax=2)
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=25, ha="right")
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            ax.text(j, i, pivot.iloc[i, j], ha="center", va="center", fontsize=7, color="black")
+    ax.set_title("Gate stg_contract по витринам")
+    fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02, ticks=[0, 1, 2], label="failed → ok")
+    fig.tight_layout()
+    return fig
+
+
+def render_src_mobile_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    coverage = mobile_coverage_frame(latest)
+    mix = mobile_traffic_mix_frame(latest, day=True)
+    filt = _metrics_for_check(latest, "dataset_filter")
+    report_date = filt.get("report_date") if filt else None
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    _plot_mobile_coverage_bars(coverage, ax=axes[0, 1])
+    _plot_mobile_traffic_mix(mix, title="cross_mart.day_traffic_mix", ax=axes[1, 0])
+    plot_summary_metrics(latest, ax=axes[1, 1])
+    title = f"DQ SRC MOBILE — report_date={report_date}" if report_date else "DQ SRC MOBILE — обзор"
+    fig.suptitle(title, fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_mobile_dq_marts(latest: pd.DataFrame) -> plt.Figure:
+    coverage = mobile_coverage_frame(latest)
+    gates = mobile_stg_gate_frame(latest)
+    mix_all = mobile_traffic_mix_frame(latest, day=False)
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
+    if not coverage.empty:
+        axes[0].bar(
+            coverage["label"],
+            coverage["parquet_files_scanned"],
+            color="#17becf",
+            alpha=0.88,
+        )
+        axes[0].set_ylabel("parquet_files_scanned")
+        axes[0].set_title("Файлы в окне ±1 день")
+    else:
+        axes[0].set_title("coverage — нет данных")
+        axes[0].axis("off")
+    _plot_mobile_traffic_mix(mix_all, title="cross_mart.traffic_mix (окно чтения)", ax=axes[1])
+    _plot_mobile_stg_gate_grid(gates, ax=axes[2])
+    fig.suptitle("Витрины и STG-контракт", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig

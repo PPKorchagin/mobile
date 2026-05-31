@@ -220,14 +220,13 @@ _DISTRIBUTION_COLUMNS_BY_MART: dict[str, tuple[str, ...]] = {
 
 
 def run_dq(
-    dc: str,
     report_date: date,
     cdr_path: str | Path,
     sms_path: str | Path,
     gprs_path: str | Path,
     location_path: str | Path,
 ) -> dict[str, Any]:
-    """DQ mobile-витрин одного ЦОД за отчётную дату в локальном времени абонента.
+    """DQ mobile-витрин за отчётную дату в локальном времени абонента.
 
     Строки отбираются по полю ``Started`` (``YYYYMMDDhhmmss`` в локальном времени, как в ``build-src-mobile``),
     а не по сегменту ``YYYY/MM/DD`` в пути parquet. Файлы читаются из каталогов витрин с окном ±1 день
@@ -286,7 +285,6 @@ def run_dq(
         mart_dfs[key] = df
         mart_rows[key] = int(len(df))
         cov: dict[str, Any] = {
-            "datacenter": dc,
             "mart_root": str(mart_roots[key]),
             "parquet_files_scanned": int(len(paths)),
             "row_count_before_local_filter": int(len(df_all)),
@@ -390,7 +388,6 @@ def run_dq(
         "mart_rows": row_totals,
         "mart_files_scanned": {k: int(mart_files_scanned.get(k, 0)) for k in configs},
         "report_date": report_day,
-        "datacenter": dc,
         "mart_paths": {k: str(mart_roots[k]) for k in configs},
     }
 

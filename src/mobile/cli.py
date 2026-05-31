@@ -26,6 +26,7 @@ from mobile.notebook_runner import (
     run_nb_perf_metrics,
     run_nb_src_bs,
     run_nb_src_excl,
+    run_nb_src_mobile,
     run_nb_src_person,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
@@ -110,6 +111,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
+    "nb-src-mobile": run_nb_src_mobile,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -165,19 +167,77 @@ def _calendar_days_inclusive(start: date, end: date) -> list[date]:
 
 def dq_src_mobile_run(
     *,
-    datacenter: str,
     report_date: date,
-    mobile_root: Path | None = None,
+    cdr_path: Path,
+    sms_path: Path,
+    gprs_path: Path,
+    location_path: Path,
 ) -> dict:
-    paths = mobile_mart_paths(datacenter, mobile_root=mobile_root)
     return dq_src_mobile.run_dq(
-        datacenter,
         report_date,
-        paths["cdr"],
-        paths["sms"],
-        paths["gprs"],
-        paths["location"],
+        cdr_path,
+        sms_path,
+        gprs_path,
+        location_path,
     )
+
+
+def _resolve_dq_src_mobile_mart_paths(
+    *,
+    datacenter: str,
+    mobile_root: Path | None,
+    cdr_path: str | None,
+    sms_path: str | None,
+    gprs_path: str | None,
+    location_path: str | None,
+) -> dict[str, Path]:
+    defaults = mobile_mart_paths(datacenter, mobile_root=mobile_root)
+    return {
+        "cdr_path": Path(cdr_path) if cdr_path else defaults["cdr"],
+        "sms_path": Path(sms_path) if sms_path else defaults["sms"],
+        "gprs_path": Path(gprs_path) if gprs_path else defaults["gprs"],
+        "location_path": Path(location_path) if location_path else defaults["location"],
+    }
+
+
+def _dq_src_mobile_run_paths(
+    *,
+    datacenter: str | None,
+    mobile_root: Path | None,
+    cdr_path: str | None,
+    sms_path: str | None,
+    gprs_path: str | None,
+    location_path: str | None,
+) -> dict[str, Path]:
+    if datacenter is not None:
+        return _resolve_dq_src_mobile_mart_paths(
+            datacenter=datacenter,
+            mobile_root=mobile_root,
+            cdr_path=cdr_path,
+            sms_path=sms_path,
+            gprs_path=gprs_path,
+            location_path=location_path,
+        )
+    missing = [
+        name
+        for name, value in (
+            ("--cdr-path", cdr_path),
+            ("--sms-path", sms_path),
+            ("--gprs-path", gprs_path),
+            ("--location-path", location_path),
+        )
+        if value is None
+    ]
+    if missing:
+        raise SystemExit(
+            "dq-src-mobile: pass --dc or all mart paths: " + ", ".join(missing)
+        )
+    return {
+        "cdr_path": Path(cdr_path),
+        "sms_path": Path(sms_path),
+        "gprs_path": Path(gprs_path),
+        "location_path": Path(location_path),
+    }
 
 
 def build_stg_event_run(
@@ -699,56 +759,59 @@ def run_dq_src_mobile(
     datacenter: str | None,
     report_date: date | None,
     mobile_root: str | None,
+    cdr_path: str | None,
+    sms_path: str | None,
+    gprs_path: str | None,
+    location_path: str | None,
 ) -> None:
-    """DQ mobile: worker (``--dc`` + ``--report-date``) или оркестратор (2 процесса на день)."""
+    """DQ mobile: один прогон (``--report-date``) или цикл дней × ЦОД."""
     root = Path(mobile_root) if mobile_root else None
 
-    if datacenter is not None:
-        if report_date is None:
-            raise SystemExit("dq-src-mobile: --report-date is required with --dc")
+    if report_date is not None:
+        paths = _dq_src_mobile_run_paths(
+            datacenter=datacenter,
+            mobile_root=root,
+            cdr_path=cdr_path,
+            sms_path=sms_path,
+            gprs_path=gprs_path,
+            location_path=location_path,
+        )
+        label = (
+            f"dq-src-mobile-{datacenter}-{report_date.isoformat()}"
+            if datacenter
+            else f"dq-src-mobile-{report_date.isoformat()}"
+        )
         run_timed_command(
-            f"dq-src-mobile-{datacenter}",
-            lambda: dq_src_mobile_run(
-                datacenter=datacenter,
-                report_date=report_date,
-                mobile_root=root,
-            ),
+            label,
+            lambda: dq_src_mobile_run(report_date=report_date, **paths),
         )
         return
 
     lo = DEFAULT_SRC_START_DATE
     hi = DEFAULT_SRC_END_DATE
-    if report_date is not None:
-        lo = hi = report_date
-    if lo > hi:
-        raise ValueError(f"Invalid date range: {lo} > {hi}")
-
     days = _calendar_days_inclusive(lo, hi)
     dcs = mobile_datacenter_ids()
     logger.info(
-        "Starting dq-src-mobile: days=%s (%s process per day) datacenters=%s (%s .. %s)",
+        "Starting dq-src-mobile: days=%s datacenters=%s (%s .. %s)",
         len(days),
-        len(dcs),
         ", ".join(dcs),
         lo.isoformat(),
         hi.isoformat(),
     )
     for day in days:
         for dc in dcs:
-            cmd = [
-                sys.executable,
-                "-m",
-                "mobile",
-                "dq-src-mobile",
-                "--dc",
-                dc,
-                "--report-date",
-                day.isoformat(),
-            ]
-            if mobile_root is not None:
-                cmd.extend(["--mobile-root", mobile_root])
-            logger.info("dq-src-mobile spawn: %s", " ".join(cmd))
-            subprocess.run(cmd, check=True)
+            paths = _resolve_dq_src_mobile_mart_paths(
+                datacenter=dc,
+                mobile_root=root,
+                cdr_path=cdr_path,
+                sms_path=sms_path,
+                gprs_path=gprs_path,
+                location_path=location_path,
+            )
+            run_timed_command(
+                f"dq-src-mobile-{dc}-{day.isoformat()}",
+                lambda d=day, p=paths: dq_src_mobile_run(report_date=d, **p),
+            )
     logger.info("dq-src-mobile completed successfully")
 
 
@@ -985,14 +1048,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dc",
         choices=list(mobile_datacenter_ids()),
         default=None,
-        help="dq-src-mobile / build-stg-event / dq-stg-event: ЦОД (central / far-east)",
+        help="build-stg-event / dq-stg-event: ЦОД (central / far-east); dq-src-mobile: резолв путей витрин с --report-date",
     )
     parser.add_argument(
         "--report-date",
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event / dq-stg-event: отчётная дата (с --dc обязателен; без --dc — цикл DEFAULT_SRC_START_DATE..END); build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день или YYYY-MM-01 для person",
+        help="dq-src-mobile: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_START_DATE..END × все ЦОД); build-stg-event / dq-stg-event / build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день или YYYY-MM-01 для person",
     )
     parser.add_argument(
         "--src-bs-path",
@@ -1094,7 +1157,31 @@ def _build_parser() -> argparse.ArgumentParser:
         "--mobile-root",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень витрин ЦОД (по умолчанию data/src/mobile/{dc})",
+        help="dq-src-mobile / build-stg-event: корень витрин ЦОД при --dc (по умолчанию data/src/mobile/{dc})",
+    )
+    parser.add_argument(
+        "--cdr-path",
+        default=None,
+        metavar="PATH",
+        help="dq-src-mobile: корень CDR (по умолчанию data/src/mobile/{dc}/operator/cdr)",
+    )
+    parser.add_argument(
+        "--sms-path",
+        default=None,
+        metavar="PATH",
+        help="dq-src-mobile: корень SMS (по умолчанию data/src/mobile/{dc}/operator/sms)",
+    )
+    parser.add_argument(
+        "--gprs-path",
+        default=None,
+        metavar="PATH",
+        help="dq-src-mobile: корень GPRS (по умолчанию data/src/mobile/{dc}/operator/gprs)",
+    )
+    parser.add_argument(
+        "--location-path",
+        default=None,
+        metavar="PATH",
+        help="dq-src-mobile: корень location (по умолчанию data/src/mobile/{dc}/operator/location)",
     )
     parser.add_argument(
         "--src-person-path",
@@ -1162,13 +1249,14 @@ def main() -> None:
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
         if args.command == "dq-src-mobile":
-            run_timed_command(
-                "dq-src-mobile",
-                lambda: run_dq_src_mobile(
-                    datacenter=args.dc,
-                    report_date=args.report_date,
-                    mobile_root=args.mobile_root,
-                ),
+            run_dq_src_mobile(
+                datacenter=args.dc,
+                report_date=args.report_date,
+                mobile_root=args.mobile_root,
+                cdr_path=args.cdr_path,
+                sms_path=args.sms_path,
+                gprs_path=args.gprs_path,
+                location_path=args.location_path,
             )
         elif args.command == "dq-src-bs":
             run_dq_src_bs(
