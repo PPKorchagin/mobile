@@ -1250,3 +1250,377 @@ def render_stg_time_zones_folium_map(root: Path) -> folium.Map:
         print(f"Пропущено WKT: таймзоны={bad_geom}, ОКТМО-1={bad_oktmo}")
 
     return m
+
+
+# --- src_person DQ charts ---
+
+_SRC_PERSON_KEY_DISTRIBUTIONS = (
+    ("period.distribution.identity_type", "identity_type (period)"),
+    ("period.distribution.client_type", "client_type (period)"),
+    ("period.distribution.operator_Id", "operator_Id (period)"),
+    ("distribution.identity_type", "identity_type (snapshot day)"),
+    ("distribution.client_type", "client_type (snapshot day)"),
+    ("distribution.operator_Id", "operator_Id (snapshot day)"),
+)
+
+_SRC_PERSON_KEY_NULLS = (
+    "identity_type",
+    "client_type",
+    "operator_Id",
+    "isdn",
+    "imsi",
+    "imei",
+    "birth_day",
+    "actually_from",
+    "actually_to",
+)
+
+_SRC_PERSON_MONTH_CHECKS = (
+    "distribution.actually_from_month",
+    "distribution.actually_to_month",
+    "distribution.birth_day_month",
+    "distribution.start_contract_date_month",
+)
+
+
+def _metric_scalar(latest: pd.DataFrame, check: str, key: str) -> float | int | None:
+    metrics = _metrics_for_check(latest, check)
+    if not metrics or key not in metrics:
+        return None
+    value = metrics[key]
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return value
+    return None
+
+
+def day_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, row in latest.iterrows():
+        if row["check"] != "day.coverage":
+            continue
+        metrics = row.get("metrics")
+        if not isinstance(metrics, dict) or not metrics.get("calendar_day"):
+            continue
+        rows.append(
+            {
+                "calendar_day": pd.Timestamp(str(metrics["calendar_day"])),
+                "row_count": int(metrics.get("row_count") or 0),
+                "has_success": bool(metrics.get("has_success")),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("calendar_day") if rows else pd.DataFrame()
+
+
+def period_volume_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "period.volume")
+    if not metrics or not isinstance(metrics.get("daily_row_counts"), list):
+        return pd.DataFrame()
+    return (
+        pd.DataFrame(metrics["daily_row_counts"])
+        .assign(calendar_day=lambda df: pd.to_datetime(df["calendar_day"]))
+        .sort_values("calendar_day")
+    )
+
+
+def distribution_pct_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, check)
+    if not metrics or not isinstance(metrics.get("distribution_pct"), dict):
+        return pd.DataFrame(columns=["value", "pct"])
+    return pd.DataFrame(
+        [{"value": str(key), "pct": float(value)} for key, value in metrics["distribution_pct"].items()]
+    ).sort_values("pct", ascending=False)
+
+
+def identity_fill_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, row in latest.iterrows():
+        check = str(row["check"])
+        if not check.startswith("identity_type.") or not check.endswith("_fill"):
+            continue
+        metrics = row.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        rows.append(
+            {
+                "check": check,
+                "non_null_rate": float(metrics.get("non_null_rate") or 0),
+                "rows": int(metrics.get("rows") or 0),
+                "status": row.get("status"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def domain_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    specs = (
+        ("isdn_format", "valid_rate"),
+        ("imsi_format", "valid_len_rate"),
+        ("imei_format", "valid_len_rate"),
+        ("iccid_format", "valid_len_rate"),
+        ("passport_format", "valid_format_rate"),
+        ("fio_quality_physical", "fio_present_rate"),
+        ("stg_contract.physical.fio_present", "fio_present_rate"),
+        ("stg_contract.physical.interval_order", "valid_order_rate"),
+    )
+    rows: list[dict[str, Any]] = []
+    for check, metric_key in specs:
+        value = _metric_scalar(latest, check, metric_key)
+        if value is None:
+            continue
+        rows.append({"check": check, "metric": metric_key, "value": float(value)})
+    return pd.DataFrame(rows)
+
+
+def success_days_inventory(latest: pd.DataFrame) -> list[str]:
+    metrics = _metrics_for_check(latest, "success_days_inventory")
+    if not metrics:
+        return []
+    raw = metrics.get("success_days")
+    return [str(item) for item in raw] if isinstance(raw, list) else []
+
+
+def plot_daily_volume(
+    volume: pd.DataFrame,
+    *,
+    ax: plt.Axes | None = None,
+    title: str | None = None,
+) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(11, 4))
+    else:
+        fig = ax.figure
+    if volume.empty:
+        ax.set_title(title or "Объём по дням — нет метрик day.coverage / period.volume")
+        ax.axis("off")
+        return fig
+    success = volume["has_success"].fillna(False) if "has_success" in volume.columns else pd.Series(False, index=volume.index)
+    colors = ["#1f77b4" if flag else "#aec7e8" for flag in success]
+    ax.bar(volume["calendar_day"], volume["row_count"], color=colors, width=0.85)
+    if success.any():
+        ax.bar([], [], color="#1f77b4", label="_SUCCESS")
+        ax.bar([], [], color="#aec7e8", label="частичный")
+        ax.legend(fontsize=8)
+    ax.set_ylabel("row_count (DQ metric)")
+    ax.set_title(title or "Строки по дням (DQ)")
+    fig.autofmt_xdate(rotation=35, ha="right")
+    fig.tight_layout()
+    return fig
+
+
+def plot_distribution_bars(
+    dist: pd.DataFrame,
+    *,
+    title: str,
+    ax: plt.Axes | None = None,
+    top_n: int = 12,
+) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if dist.empty:
+        ax.set_title(f"{title}\n(нет distribution_pct в логе)")
+        ax.axis("off")
+        return fig
+    work = dist.head(top_n).iloc[::-1]
+    ax.barh(work["value"].astype(str), work["pct"], color="#9467bd", alpha=0.88)
+    ax.set_xlabel("%")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def plot_identity_fill(fill: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(9, 5))
+    else:
+        fig = ax.figure
+    if fill.empty:
+        ax.set_title("identity_type.*_fill — нет данных")
+        ax.axis("off")
+        return fig
+    work = fill.sort_values("non_null_rate", ascending=True)
+    labels = work["check"].str.replace("identity_type.", "", regex=False).str.replace("_fill", "", regex=False)
+    colors = [
+        "#d62728" if status == "failed" else "#ff7f0e" if status == "warning" else "#2ca02c"
+        for status in work["status"]
+    ]
+    ax.barh(labels, work["non_null_rate"] * 100, color=colors, alpha=0.88)
+    ax.set_xlabel("non_null_rate, %")
+    ax.set_title("Заполнение полей по identity_type (DQ)")
+    ax.axvline(99, color="gray", ls="--", lw=0.8, label="99%")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def plot_domain_quality(domain: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 4))
+    else:
+        fig = ax.figure
+    if domain.empty:
+        ax.set_title("Доменные rate-метрики — нет данных")
+        ax.axis("off")
+        return fig
+    work = domain.sort_values("value", ascending=True)
+    ax.barh(work["check"], work["value"] * 100, color="#17becf", alpha=0.88)
+    ax.set_xlabel("rate, %")
+    ax.set_title("Качество форматов / контракт (DQ)")
+    fig.tight_layout()
+    return fig
+
+
+def plot_cross_identity_client(latest: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 4))
+    else:
+        fig = ax.figure
+    metrics = _metrics_for_check(latest, "period.cross.identity_type_x_client_type")
+    if not metrics or not isinstance(metrics.get("rows"), list):
+        ax.set_title("period.cross — нет данных")
+        ax.axis("off")
+        return fig
+    frame = pd.DataFrame(metrics["rows"])
+    frame["label"] = frame["identity_type"].astype(str) + " / ct=" + frame["client_type"].astype(str)
+    work = frame.sort_values("pct", ascending=True).tail(12)
+    ax.barh(work["label"], work["pct"], color="#8c564b", alpha=0.88)
+    ax.set_xlabel("% (period scan)")
+    ax.set_title("identity_type × client_type (DQ)")
+    fig.tight_layout()
+    return fig
+
+
+def plot_profile_coverage(latest: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+    else:
+        fig = ax.figure
+    metrics = _metrics_for_check(latest, "field_profile_coverage")
+    if not metrics:
+        ax.set_title("field_profile_coverage — нет данных")
+        ax.axis("off")
+        return fig
+    labels = ["profiled_fields", "distribution_checks", "numeric_profile_checks", "unique_values_checks"]
+    values = [int(metrics.get(label) or 0) for label in labels]
+    ax.bar(labels, values, color="#bcbd22", alpha=0.9)
+    ax.set_ylabel("count")
+    ax.set_title("Охват профилирования полей (DQ)")
+    plt.setp(ax.get_xticklabels(), rotation=25, ha="right")
+    fig.tight_layout()
+    return fig
+
+
+def plot_success_timeline(latest: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    volume = period_volume_frame(latest)
+    if volume.empty:
+        volume = day_coverage_frame(latest)
+    inventory = set(success_days_inventory(latest))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(11, 2.8))
+    else:
+        fig = ax.figure
+    if volume.empty:
+        ax.set_title("_SUCCESS timeline — нет day.coverage")
+        ax.axis("off")
+        return fig
+    days = volume["calendar_day"]
+    fact = volume["has_success"].fillna(False).astype(int)
+    ax.step(days, fact, where="mid", label="факт _SUCCESS", color="#2ca02c")
+    if inventory:
+        marked = [1 if day.strftime("%Y-%m-%d") in inventory else 0 for day in days]
+        ax.step(days, marked, where="mid", label="success_days_inventory", color="#9467bd", alpha=0.7)
+    ax.set_ylim(-0.1, 1.2)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["нет", "да"])
+    ax.set_title("Полные срезы (_SUCCESS) по дням (DQ)")
+    ax.legend(fontsize=8)
+    fig.autofmt_xdate(rotation=35, ha="right")
+    fig.tight_layout()
+    return fig
+
+
+def render_src_person_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    volume = period_volume_frame(latest)
+    title = "period.volume (DQ)"
+    if volume.empty:
+        volume = day_coverage_frame(latest)
+        title = "day.coverage (DQ)"
+    plot_daily_volume(volume, ax=axes[0, 1], title=title)
+    dist = distribution_pct_frame(latest, "period.distribution.identity_type")
+    if dist.empty:
+        dist = distribution_pct_frame(latest, "distribution.identity_type")
+    plot_distribution_bars(dist, title="identity_type (period → snapshot)", ax=axes[1, 0])
+    plot_cross_identity_client(latest, ax=axes[1, 1])
+    basic = _metrics_for_check(latest, "dataset_filter")
+    period = ""
+    if basic:
+        period = f"{basic.get('start_date')} .. {basic.get('end_date')}"
+    fig.suptitle(f"DQ SRC PERSON — метрики лога ({period})", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_person_dq_distributions(latest: pd.DataFrame) -> plt.Figure:
+    count = len(_SRC_PERSON_KEY_DISTRIBUTIONS)
+    cols = 2
+    rows = (count + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(14, 4 * rows))
+    axes_flat = axes.flatten() if count > 1 else [axes]
+    for ax, (check, title) in zip(axes_flat, _SRC_PERSON_KEY_DISTRIBUTIONS, strict=False):
+        plot_distribution_bars(distribution_pct_frame(latest, check), title=title, ax=ax)
+    for ax in axes_flat[len(_SRC_PERSON_KEY_DISTRIBUTIONS) :]:
+        ax.axis("off")
+    fig.suptitle("distribution_pct из DQ-логов", fontsize=12, y=1.01)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_person_dq_quality(latest: pd.DataFrame) -> plt.Figure:
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    nulls = null_ratio_frame(latest)
+    if not nulls.empty:
+        nulls = nulls[nulls["field"].isin(_SRC_PERSON_KEY_NULLS)]
+    plot_null_ratios(nulls, ax=axes[0, 0])
+    plot_identity_fill(identity_fill_frame(latest), ax=axes[0, 1])
+    plot_domain_quality(domain_quality_frame(latest), ax=axes[1, 0])
+    plot_profile_coverage(latest, ax=axes[1, 1])
+    fig.suptitle("Качество и профили (DQ-метрики)", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_person_dq_timeseries(latest: pd.DataFrame) -> plt.Figure:
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4))
+    plot_success_timeline(latest, ax=axes[0])
+    basic = _metrics_for_check(latest, "dataset_basic")
+    row_count = int(basic.get("row_count") or 0) if basic else 0
+    axes[1].text(
+        0.5,
+        0.55,
+        f"Выбранный день (DQ):\n{basic.get('selected_day') if basic else '—'}\n"
+        f"row_count={row_count:,}\n"
+        f"by_success={basic.get('selected_by_success') if basic else '—'}",
+        ha="center",
+        va="center",
+        fontsize=11,
+        transform=axes[1].transAxes,
+    )
+    axes[1].set_title("Контекст snapshot (dataset_basic)")
+    axes[1].axis("off")
+    fig.suptitle("Календарь и контекст среза", fontsize=12)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_person_month_distributions(latest: pd.DataFrame) -> plt.Figure:
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    for ax, check in zip(axes.flatten(), _SRC_PERSON_MONTH_CHECKS):
+        plot_distribution_bars(distribution_pct_frame(latest, check), title=check, ax=ax)
+    for ax in axes.flatten()[len(_SRC_PERSON_MONTH_CHECKS) :]:
+        ax.axis("off")
+    fig.suptitle("distribution_*_month (snapshot day, DQ)", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -25,9 +26,11 @@ DEFAULT_STG_OKSM_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oksm.parquet"
 DEFAULT_BS_PROFILE_PATH = _RAW_DATA / "build_bs_profile_from_opencellid.json"
 DEFAULT_BS_LAYOUT = PROJECT_ROOT / "data" / "src" / "bs.parquet"
 DEFAULT_TIME_ZONES_RAW_PATH = DEFAULT_STG_TIME_ZONES_CSV_PATH
+DEFAULT_SRC_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "person.json"
 
 SRC_PERSON_LAYOUT_TEMPLATE = "data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}"
 SRC_PERSON_SUCCESS_FLAG = "_SUCCESS"
+DEFAULT_SRC_PERSON_OUTPUT_ROOT = PROJECT_ROOT / "data" / "src" / "person"
 
 DEFAULT_SRC_EXCL_IMSI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_imsi.parquet"
 DEFAULT_SRC_EXCL_IMEI_OUTPUT = PROJECT_ROOT / "data" / "src" / "excl" / "src_imei.parquet"
@@ -142,6 +145,11 @@ def mobile_mart_paths(
     }
 
 
+def calendar_month_end(day: date) -> date:
+    """Последний календарный день месяца для ``day``."""
+    return date(day.year, day.month, monthrange(day.year, day.month)[1])
+
+
 def resolve_project_path(path: str | Path) -> Path:
     p = Path(path)
     if not p.is_absolute():
@@ -252,6 +260,8 @@ DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH = _NB / "4_stg_oksm.ipynb"
 DEFAULT_NB_STG_OKSM_EXECUTED_PATH = _DATA_NOTEBOOKS / "4_stg_oksm.executed.ipynb"
 DEFAULT_NB_SRC_BS_NOTEBOOK_PATH = _NB / "5_src_bs.ipynb"
 DEFAULT_NB_SRC_BS_EXECUTED_PATH = _DATA_NOTEBOOKS / "5_src_bs.executed.ipynb"
+DEFAULT_NB_SRC_PERSON_NOTEBOOK_PATH = _NB / "6_src_person.ipynb"
+DEFAULT_NB_SRC_PERSON_EXECUTED_PATH = _DATA_NOTEBOOKS / "6_src_person.executed.ipynb"
 DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 

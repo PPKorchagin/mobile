@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from mobile.cli_defaults import (
+    DEFAULT_DQ_SRC_PERSON_START_DATE,
     DEFAULT_PARQUET_COMPRESSION,
     DEFAULT_SRC_END_DATE,
     DEFAULT_SRC_START_DATE,
@@ -24,6 +25,7 @@ from mobile.logging_config import setup_logging
 from mobile.notebook_runner import (
     run_nb_perf_metrics,
     run_nb_src_bs,
+    run_nb_src_person,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -32,6 +34,7 @@ from mobile.notebook_runner import (
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
+from mobile.pipelines.dq.src import person as dq_src_person
 from mobile.pipelines.stg import event as stg_event
 from mobile.pipelines.stg import geo_all as stg_geo_all
 from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
@@ -50,6 +53,7 @@ from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as d
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
+    DEFAULT_SRC_PERSON_OUTPUT_ROOT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_STG_OKTMO_CSV_PATH,
@@ -67,6 +71,7 @@ from mobile.project_paths import (
     mobile_datacenter_ids,
     mobile_datacenter_root,
     mobile_mart_paths,
+    calendar_month_end,
     resolve_oktmo_layout,
     stg_bs_output_path,
     stg_event_dds_output_path,
@@ -99,6 +104,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-tac": run_nb_stg_tac,
     "nb-stg-oksm": run_nb_stg_oksm,
     "nb-src-bs": run_nb_src_bs,
+    "nb-src-person": run_nb_src_person,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -117,6 +123,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-src-mobile",
     "dq-src-mobile",
     "dq-src-bs",
+    "dq-src-person",
     "build-stg-event",
     "build-stg-geo-all",
     "build-stg-geo-intervals",
@@ -751,6 +758,31 @@ def run_dq_src_bs(
     )
 
 
+def run_dq_src_person(
+    *,
+    start_date: date | None = None,
+    src_person_path: str | None = None,
+) -> None:
+    """DQ витрины src_person: период месяца от start_date, корень data/src/person."""
+    period_start = start_date or DEFAULT_DQ_SRC_PERSON_START_DATE
+    period_end = calendar_month_end(period_start)
+    person_root = Path(src_person_path) if src_person_path else DEFAULT_SRC_PERSON_OUTPUT_ROOT
+    logger.info(
+        "Starting dq-src-person period=%s .. %s person_root=%s",
+        period_start.isoformat(),
+        period_end.isoformat(),
+        person_root,
+    )
+    run_timed_command(
+        "dq-src-person",
+        lambda: dq_src_person.run_dq(
+            start_date=period_start,
+            end_date=period_end,
+            person_root=person_root,
+        ),
+    )
+
+
 def _run_build(command: str) -> None:
     fn, config_path = _BUILD_COMMANDS[command]
     logger.info("Starting %s (config=%s)", command, config_path)
@@ -841,6 +873,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PCT",
         help="build-src-excl: %% строк АБ в списках исключений (по умолчанию 0.7)",
+    )
+    parser.add_argument(
+        "--start-date",
+        type=_parse_day,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help=f"dq-src-person: начало периода (по умолчанию {DEFAULT_DQ_SRC_PERSON_START_DATE}; end — последний день месяца start)",
     )
     parser.add_argument(
         "--dc",
@@ -943,7 +982,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--src-person-path",
         default=None,
         metavar="PATH",
-        help="build-stg-person: входной src_person parquet или корень layout (по умолчанию data/src/person)",
+        help=f"build-stg-person / dq-src-person: корень src_person (по умолчанию {DEFAULT_SRC_PERSON_OUTPUT_ROOT})",
     )
     parser.add_argument(
         "--stg-tac-path",
@@ -999,7 +1038,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     setup_logging()
-    args = _build_parser().parse_args(sys.argv[1:])
+    parser = _build_parser()
+    args = parser.parse_args(sys.argv[1:])
 
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
@@ -1015,6 +1055,11 @@ def main() -> None:
         elif args.command == "dq-src-bs":
             run_dq_src_bs(
                 src_bs_path=args.src_bs_path,
+            )
+        elif args.command == "dq-src-person":
+            run_dq_src_person(
+                start_date=args.start_date,
+                src_person_path=args.src_person_path,
             )
         elif args.command == "build-move-event":
             run_build_move_event(report_date=args.report_date)

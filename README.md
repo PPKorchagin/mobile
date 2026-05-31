@@ -18,4 +18,7 @@
 | 13            | build-src-bs         | Генерация синтетического справочника базовых станций | —                                                                                       | [Документ](documents/src/build_src_bs.md)         |
 | 14            | dq-src-bs            | Проверка качества справочника базовых станций        | --src-bs-path data/src/bs.parquet                                                       | [Документ](documents/dq/src/dq_src_bs.md)         |
 | 15            | nb-src-bs            | Визуализация метрик DQ и карта базовых станций       | —                                                                                       | —                                                 |
+| 16            | build-src-person     | Генерация синтетической витрины абонентов            | --target-per-operator 50000                                                             | [Документ](documents/src/build_src_person.md)     |
+| 17            | dq-src-person        | Проверка качества витрины абонентов                  | --start-date 2025-01-01 --src-person-path data/src/person                               | [Документ](documents/dq/src/dq_src_person.md)     |
+| 18            | nb-src-person        | Визуализация метрик DQ витрины абонентов             | —                                                                                       | —                                                 |
 
