@@ -6,12 +6,12 @@ import argparse
 import logging
 import subprocess
 import sys
+from calendar import monthrange
 from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
 
 from mobile.cli_defaults import (
-    DEFAULT_DQ_SRC_PERSON_START_DATE,
     DEFAULT_PARQUET_COMPRESSION,
     DEFAULT_SRC_END_DATE,
     DEFAULT_SRC_START_DATE,
@@ -76,7 +76,6 @@ from mobile.project_paths import (
     mobile_datacenter_ids,
     mobile_datacenter_root,
     mobile_mart_paths,
-    calendar_month_end,
     resolve_oktmo_layout,
     stg_bs_output_path,
     stg_event_dds_output_path,
@@ -765,29 +764,86 @@ def run_dq_src_bs(
     )
 
 
+def _dq_src_person_month_passes(lo: date, hi: date) -> list[tuple[date, date]]:
+    """Разбить период на проходы по календарным месяцам (пересечение с [lo, hi])."""
+    if lo > hi:
+        return []
+    passes: list[tuple[date, date]] = []
+    cursor = lo
+    while cursor <= hi:
+        last_dom = monthrange(cursor.year, cursor.month)[1]
+        month_end = date(cursor.year, cursor.month, last_dom)
+        pass_end = min(month_end, hi)
+        passes.append((cursor, pass_end))
+        if pass_end >= hi:
+            break
+        cursor = pass_end + timedelta(days=1)
+    return passes
+
+
+def dq_src_person_run(
+    *,
+    start_date: date,
+    end_date: date,
+    person_root: Path | None = None,
+) -> dict:
+    root = Path(person_root) if person_root else DEFAULT_SRC_PERSON_OUTPUT_ROOT
+    return dq_src_person.run_dq(
+        start_date=start_date,
+        end_date=end_date,
+        person_root=root,
+    )
+
+
 def run_dq_src_person(
     *,
     start_date: date | None = None,
+    end_date: date | None = None,
     src_person_path: str | None = None,
 ) -> None:
-    """DQ витрины src_person: период месяца от start_date, корень data/src/person."""
-    period_start = start_date or DEFAULT_DQ_SRC_PERSON_START_DATE
-    period_end = calendar_month_end(period_start)
-    person_root = Path(src_person_path) if src_person_path else DEFAULT_SRC_PERSON_OUTPUT_ROOT
+    """DQ src_person: 3 месячных прохода по умолчанию или один период по флагам."""
+    person_root = (
+        Path(src_person_path) if src_person_path else DEFAULT_SRC_PERSON_OUTPUT_ROOT
+    )
+
+    if start_date is not None:
+        if src_person_path is None:
+            raise SystemExit("dq-src-person: --src-person-path is required with --start-date")
+        lo = start_date
+        hi = end_date if end_date is not None else start_date
+        if lo > hi:
+            raise ValueError(f"Invalid date range: {lo} > {hi}")
+        passes = [(lo, hi)]
+    else:
+        if end_date is not None:
+            raise SystemExit("dq-src-person: --start-date is required with --end-date")
+        passes = _dq_src_person_month_passes(DEFAULT_SRC_START_DATE, DEFAULT_SRC_END_DATE)
+        if not passes:
+            raise ValueError(
+                f"Invalid default SRC period: {DEFAULT_SRC_START_DATE} > {DEFAULT_SRC_END_DATE}"
+            )
+
     logger.info(
-        "Starting dq-src-person period=%s .. %s person_root=%s",
-        period_start.isoformat(),
-        period_end.isoformat(),
+        "Starting dq-src-person: passes=%s person_root=%s",
+        len(passes),
         person_root,
     )
-    run_timed_command(
-        "dq-src-person",
-        lambda: dq_src_person.run_dq(
-            start_date=period_start,
-            end_date=period_end,
-            person_root=person_root,
-        ),
-    )
+    for idx, (lo, hi) in enumerate(passes, start=1):
+        logger.info(
+            "dq-src-person pass %s/%s: %s .. %s",
+            idx,
+            len(passes),
+            lo.isoformat(),
+            hi.isoformat(),
+        )
+        run_timed_command(
+            f"dq-src-person-{lo.isoformat()}_{hi.isoformat()}",
+            lambda l=lo, h=hi: dq_src_person_run(
+                start_date=l,
+                end_date=h,
+                person_root=person_root,
+            ),
+        )
 
 
 def run_dq_src_excl(
@@ -912,7 +968,18 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help=f"dq-src-person: начало периода (по умолчанию {DEFAULT_DQ_SRC_PERSON_START_DATE}; end — последний день месяца start)",
+        help=(
+            f"dq-src-person: начало периода (обязателен с --src-person-path); "
+            f"без флага — {len(_dq_src_person_month_passes(DEFAULT_SRC_START_DATE, DEFAULT_SRC_END_DATE))} "
+            f"прохода {DEFAULT_SRC_START_DATE}..{DEFAULT_SRC_END_DATE} по календарным месяцам"
+        ),
+    )
+    parser.add_argument(
+        "--end-date",
+        type=_parse_day,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="dq-src-person: конец периода (по умолчанию = --start-date или DEFAULT_SRC_END_DATE)",
     )
     parser.add_argument(
         "--dc",
@@ -1033,7 +1100,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--src-person-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person / dq-src-person: корень src_person (по умолчанию {DEFAULT_SRC_PERSON_OUTPUT_ROOT})",
+        help=f"dq-src-person: корень src_person (обязателен с --start-date; по умолчанию {DEFAULT_SRC_PERSON_OUTPUT_ROOT})",
     )
     parser.add_argument(
         "--stg-tac-path",
@@ -1110,6 +1177,7 @@ def main() -> None:
         elif args.command == "dq-src-person":
             run_dq_src_person(
                 start_date=args.start_date,
+                end_date=args.end_date,
                 src_person_path=args.src_person_path,
             )
         elif args.command == "dq-src-excl":

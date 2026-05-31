@@ -1,6 +1,6 @@
 # dq-src-person
 
-**Витрина:** `src_person` · **Команда:** `dq-src-person` · **Режим:** read-only DQ по календарному диапазону (процесс не падает при failed checks).
+**Витрина:** `src_person` · **Команда:** `dq-src-person` · **Режим:** read-only DQ по календарным дням (процесс не падает при failed checks).
 
 Референс: [`pipelines/dq/src/person.py`](../../../src/mobile/pipelines/dq/src/person.py). Сборка витрины: [`build_src_person.md`](../../src/build_src_person.md).
 
@@ -29,22 +29,37 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(start_date, end_date, person_root)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-src-person`). Конец периода (`end_date`) **не передаётся в CLI** — вычисляется как последний день месяца из `start_date` ([`calendar_month_end`](../../../src/mobile/project_paths.py)).
+Вызов pipeline: `run_dq(start_date, end_date, person_root)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-src-person`).
 
 | Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
 |------------|-----|----------------|----------------------|----------|
-| `start_date` | date | Нет | `2025-01-01` | Начало периода DQ (`--start-date`) |
-| `person_root` | path | Нет | `data/src/person` | Корень суточных каталогов (`--src-person-path`) |
+| `start_date` | date | **Да** | см. проходы ниже | Начало периода (`--start-date`) |
+| `end_date` | date | Нет | `start_date` | Конец периода (`--end-date`) |
+| `person_root` | path | **Да** | `data/src/person` | Корень суточных каталогов (`--src-person-path`) |
+
+**Без флагов** — **3 прохода** по календарным месяцам дефолтного SRC-периода ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)):
+
+| # | `start_date` | `end_date` | `person_root` |
+|---|--------------|------------|---------------|
+| 1 | `2024-12-25` | `2024-12-31` | `data/src/person` |
+| 2 | `2025-01-01` | `2025-01-31` | `data/src/person` |
+| 3 | `2025-02-01` | `2025-02-05` | `data/src/person` |
+
+**С `--start-date`** — один проход; `--src-person-path` обязателен в CLI. `--end-date` опционален (один день или диапазон). Метрики `period.*` считаются в рамках каждого прохода.
+
+**Предусловие:** `uv run mobile build-src-person`.
 
 Локальный запуск:
 
 ```bash
+uv run mobile build-src-person
 uv run mobile dq-src-person
 uv run mobile dq-src-person --start-date 2025-01-01 --src-person-path data/src/person
+uv run mobile dq-src-person --start-date 2025-01-01 --end-date 2025-01-07 --src-person-path data/src/person
 uv run mobile nb-src-person
 ```
 
-Логи: `data/logs/mobile.log` (тег `DQ_SRC_PERSON`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-src-person`.
+Логи: `data/logs/mobile.log` (тег `DQ_SRC_PERSON`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-src-person` или `dq-src-person-{start}_{end}`.
 
 ---
 
@@ -75,10 +90,9 @@ uv run mobile nb-src-person
 
 ### Шаг 0. Инициализация
 
-1. Резолв `start_date` (по умолчанию `2025-01-01`) и `end_date` = последний день месяца `start_date`.
-2. Резолв `person_root` (по умолчанию `data/src/person`).
-3. Обход каталогов `load_year=*/load_month=*/load_day=*` под корнем.
-4. Фильтрация дней по периоду → `dataset_filter`, `period.calendar_coverage`.
+1. Резолв `start_date`, `end_date`, `person_root` (без флагов CLI — 3 месячных прохода; с `--start-date` — один проход).
+2. Обход каталогов `load_year=*/load_month=*/load_day=*` под корнем.
+3. Фильтрация дней по периоду → `dataset_filter`, `period.calendar_coverage`.
 
 ### Шаг 1. Покрытие каталогов (весь диапазон)
 
