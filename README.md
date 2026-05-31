@@ -15,4 +15,7 @@
 | 10            | build-stg-oksm       | Генерация справочника ОКСМ                           | --csv-path src/mobile/raw_data/oksm_v001.csv --output-path data/stg/oksm.parquet        | [Документ](documents/stg/build_stg_oksm.md)       |
 | 11            | dq-stg-oksm          | Проверка качества справочника ОКСМ                   | --oksm-path data/stg/oksm.parquet                                                       | [Документ](documents/dq/stg/dq_stg_oksm.md)       |
 | 12            | nb-stg-oksm          | Визуализация метрик DQ и сводка справочника ОКСМ     | —                                                                                       | —                                                 |
+| 13            | build-src-bs         | Генерация синтетического справочника базовых станций | —                                                                                       | [Документ](documents/src/build_src_bs.md)         |
+| 14            | dq-src-bs            | Проверка качества справочника базовых станций        | --src-bs-path data/src/bs.parquet                                                       | [Документ](documents/dq/src/dq_src_bs.md)         |
+| 15            | nb-src-bs            | Визуализация метрик DQ и карта базовых станций       | —                                                                                       | —                                                 |
 

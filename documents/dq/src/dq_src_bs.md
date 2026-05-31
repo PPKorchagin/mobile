@@ -25,7 +25,6 @@
 ## TODO
 
 1. При необходимости вынести пороги `contract.range.*` и `stg_contract.*` в конфиг.
-2. Добавить notebook-визуализацию `DQ_SRC_BS` (динамика распределений между запусками).
 
 ---
 
@@ -64,8 +63,7 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
-| 1 | Витрина `src_bs` | `data/src/bs.parquet` | Объект DQ-проверок |
-| 2 | Константы операторов/дат | `src/mobile/cli_defaults.py` | Доменные проверки (`MNC`, open sentinel) |
+| 1 | Витрина `src_bs` | `data/src/bs.parquet` (`--src-bs-path`) | Единственный вход DQ: все метрики считаются по фактическим данным parquet |
 
 ---
 
@@ -100,11 +98,11 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 1. **`key_integrity`:** уникальность `(mcc,mnc,lac,cell)` в смысле бизнес-ключа; дубликаты активных строк → **warning**/**failed**.
 2. **`contract.cgi_duplicate_rows`:** число строк с одинаковым CGI и пересекающимися `[date_on, date_off]`.
 3. **Temporal:**
-   - `temporal_consistency` — `date_off >= date_on`;
-   - `temporal_open_date_off` — доля открытых интервалов;
-   - `contract.date_on_not_future`, `contract.date_off_after_on` — пороги на аномалии.
+   - `temporal_consistency` — `date_off >= date_on`, min/max `date_on` / `date_off`, длительность интервалов;
+   - `temporal_date_off_tail` — хвост `date_off`: max, p95, доля строк на максимальном `date_off`;
+   - `distribution.date_on_month`, `distribution.date_off_month` — помесячные профили.
 4. **Spatial:** `spatial_ranges` — `coord_x`/`coord_y` (lon/lat) в диапазонах; `contract.coords_null`, `contract.coords_out_of_range`.
-5. **Радио:** `contract.range.*` — clip-диапазоны azimuth, power, height, …; `contract.generation_vocab`; список допустимых `frequency`.
+5. **Радио:** `contract.range.*`, `contract.generation_vocab`, `contract.azimuth_semantics`, `contract.frequency_list.*`; профили `radio.profile.*` и полнота `radio.presence.*` по фактическим данным.
 6. **`stg_contract.*`:** сравнение имён/типов с ожидаемым маппингом в [`build-stg-bs`](../../stg/build_stg_bs.md) (покрытие полей, которые должны пережить трансформацию).
 7. Каждый check логируется: `{"tag":"DQ_SRC_BS","check":"...","status":"...","metrics":{...}}`.
 
@@ -124,70 +122,80 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 ## Проверки
 
-Статусы: **ok** / **warning** / **failed**.
+Статусы: **ok** / **warning** / **failed** (`nulls.*`, `cardinality.*`, профили распределений — всегда **ok**).
 
 ### Базовые проверки датасета
 
-| Check | Статус при сбое | Смысл |
-|-------|------------------|-------|
-| `dataset_presence` | **failed** | Нет parquet-файла |
-| `report_scope` | **failed/warning** | **failed** если нет `date_on`/`date_off`; **warning** если витрина пуста |
-| `dataset_basic` | **warning** | Пустая витрина (`row_count=0`) |
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `dataset_presence` | **failed** | Parquet по `--src-bs-path` не найден | Без файла витрины DQ и downstream (`build-stg-bs`, `build-src-mobile`) не имеют входа |
+| `report_scope` | **failed/warning** | **failed** если нет `date_on`/`date_off`; **warning** если витрина пуста | Temporal-колонки обязательны для SCD-логики и трансформации в `stg_bs` |
+| `dataset_basic` | **warning** | Пустая витрина (`row_count=0`) | Фиксация объёма среза; пустой справочник блокирует geo/mobile-пайплайны |
 
 ### Профили полей
 
-| Check | Статус | Смысл |
-|-------|--------|-------|
-| `nulls.*` | **ok** | Null count/ratio по полю |
-| `cardinality.*` | **ok** | `nunique` и относительная кардинальность |
-| `unique_values.*` | **ok** | Таблица значений (для низкой кардинальности) |
-| `numeric_profile.*` | **ok** | min/p50/p95/max/mean/std + non-numeric |
-| `distribution.*` | **ok** | Top-N распределения и доли |
-| `distribution.date_on_month`, `distribution.date_off_month` | **ok** | Помесячное распределение temporal-полей |
-| `field_profile_coverage` | **ok** | Сколько полей профилировано |
+| Check | Статус | Смысл | Обоснование |
+|-------|--------|-------|-------------|
+| `nulls.*` | **ok** | Null count/ratio по полю | Доля пропусков — базовый профиль полноты для калибровки генератора |
+| `cardinality.*` | **ok** | `nunique` и относительная кардинальность | Число distinct значений — выбросы и неожиданная кардинальность |
+| `unique_values.*` | **ok** | Таблица значений (низкая кардинальность) | Полный перечень редких категорий без отдельного эталона |
+| `numeric_profile.*` | **ok** | min/p50/p95/max/mean/std + non-numeric | Статистический профиль числовых полей для сравнения прогонов |
+| `distribution.*` | **ok** | Top-N распределения и доли | Фактическое распределение категорий и дискретных numeric |
+| `distribution.date_on_month`, `distribution.date_off_month` | **ok** | Помесячное распределение temporal-полей | Профиль календарного покрытия без привязки к константам периода |
+| `field_profile_coverage` | **ok** | Сколько колонок parquet профилировано | Контроль полноты DQ-прогона по всем полям витрины |
 
 ### Ключи, temporal, spatial
 
-| Check | Статус при сбое | Смысл |
-|-------|------------------|-------|
-| `key_integrity` | **warning** | Дубли по `(mcc,mnc,lac,cell,date_on)` |
-| `temporal_consistency` | **warning** | Строки с `date_off < date_on` |
-| `temporal_open_date_off` | **ok** | Доля открытых записей относительно open sentinel |
-| `spatial_ranges` | **warning** | Координаты вне допустимых диапазонов |
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `key_integrity` | **warning** | Дубли по `(mcc,mnc,lac,cell,date_on)` | Бизнес-ключ сектора; дубликаты ломают джойны и SCD в `stg_bs` |
+| `temporal_consistency` | **warning** | Строки с `date_off < date_on`; min/max temporal-полей | Интервал активности БС должен быть логически согласован |
+| `temporal_date_off_tail` | **ok** | Хвост `date_off`: max, p95, доля строк на max | Профиль «открытых» интервалов по факту данных, без внешнего sentinel |
+| `spatial_ranges` | **warning** | Координаты вне lon/lat диапазонов | Невалидные координаты недопустимы для geo-джойнов и карт |
 
 ### STG-контракт (`stg_contract.*`)
 
-| Check | Статус при сбое | Условие |
-|-------|------------------|---------|
-| `stg_contract.columns` | **failed** | Нет критичных полей для STG-контракта |
-| `stg_contract.lac_cell` | **failed/warning** | Доля валидных `lac/cell` ниже порогов |
-| `stg_contract.coords` | **failed/warning** | Доля валидных координат ниже порогов |
-| `stg_contract.temporal_order` | **failed/warning** | Доля корректного порядка дат ниже порогов |
-| `stg_contract.generation_present` | **failed/warning** | Низкая доля непустой `generation` |
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `stg_contract.columns` | **failed** | Нет критичных полей для STG-контракта | `build-stg-bs` ожидает фиксированный набор колонок из `src_bs` |
+| `stg_contract.lac_cell` | **failed/warning** | Доля валидных `lac/cell` ниже порогов | LAC/Cell — часть CGI; без них сектор не идентифицируется |
+| `stg_contract.coords` | **failed/warning** | Доля валидных координат ниже порогов | Координаты нужны для `stg_bs` и последующих geo-витрин |
+| `stg_contract.temporal_order` | **failed/warning** | Доля корректного порядка дат ниже порогов | STG переносит интервалы as-is; инверсия дат — дефект источника |
+| `stg_contract.generation_present` | **failed/warning** | Низкая доля непустой `generation` | Поколение RAT используется в профиле и фильтрах downstream |
 
 ### Доменные контракты (`contract.*`)
 
-| Check | Статус при сбое | Смысл |
-|-------|------------------|-------|
-| `contract.mcc_rf` | **failed/warning** | Доля `mcc=250` |
-| `contract.mnc_valid` | **warning** | Негативные/пустые `mnc` |
-| `contract.lac_cell_non_negative` | **failed/warning** | Неотрицательные `lac/cell` |
-| `contract.cgi_duplicate_rows` | **warning** | Дубликаты CGI |
-| `contract.date_off_present` | **failed** | Пустые `date_off` |
-| `contract.active_vs_closed` | **ok** | Баланс открытых/закрытых интервалов |
-| `contract.coords_present` | **failed/warning** | Полнота координат |
-| `contract.cells_per_coordinate` | **ok** | Секторов на координату |
-| `contract.generation_vocab` | **failed/warning** | Значения `generation` вне словаря |
-| `contract.azimuth_semantics` | **failed/warning** | Семантика азимута и indoor/omni |
-| `contract.range.*` | **failed/warning** | Диапазоны numeric/int полей |
-| `contract.frequency_list.*` | **warning** | Формат списков частот |
-| `contract.border_boolean` | **warning** | Значения `border` вне boolean-семантики |
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `contract.mcc_rf` | **failed/warning** | Доля `mcc=250`; top MCC | RF — домашний MCC для российских БС; отклонения — профиль качества |
+| `contract.mnc_valid` | **warning** | Негативные/пустые `mnc`; `distinct_mnc` | MNC идентифицирует оператора; распределение — в `distribution.mnc` |
+| `contract.lac_cell_non_negative` | **failed/warning** | Неотрицательные `lac/cell` | Отрицательные идентификаторы недопустимы в сетевой модели |
+| `contract.cgi_duplicate_rows` | **warning** | Дубликаты полного CGI | Один CGI не должен повторяться как независимая запись |
+| `contract.date_off_present` | **failed** | Пустые `date_off` | Закрытие интервала обязательно для SCD и temporal-джойнов |
+| `contract.coords_present` | **failed/warning** | Полнота координат | Пропуски координат снижают пригодность для geo-пайплайнов |
+| `contract.cells_per_coordinate` | **ok** | Секторов на одну точку (p50/p95/max) | Профиль плотности секторов на площадке — sanity для генератора |
+| `contract.generation_vocab` | **failed/warning** | `generation` вне `{2G,3G,4G,LTE,5G}`; `unknown_count` | Нормализованный словарь RAT; распределение — в `distribution.generation` |
+| `contract.azimuth_semantics` | **failed/warning** | Азимут, omnidirectional, indoor | Семантика направления сектора влияет на radio-модель |
+| `contract.range.*` | **failed/warning** | Numeric/int поля в доменных диапазонах | Clip-диапазоны из профиля OpenCellID; выход — аномалия генерации |
+| `contract.frequency_list.*` | **warning** | Формат списков частот `frequency_in/out` | Частоты — списки band ID; битый формат ломает парсинг |
+| `contract.border_boolean` | **warning** | `border` вне boolean-семантики | Признак приграничной БС должен быть нормализуемым bool |
+
+### Радио-показатели (`radio.*`)
+
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `radio.profile.{field}` | **warning** | min/p50/p95/max/mean, null_count для `power`, `height`, `frequency`, `tilt`, `el_tilt`, `mech_tilt`, `amplification`, `polarization`, `raster`, `thickness` | Фактический профиль числовых radio-полей для калибровки генератора |
+| `radio.profile.frequency` | **warning** | + `sentinel_minus_one_count`, `positive_count` | Несущая частота: sentinel `-1` и положительные значения |
+| `radio.profile.azimuth` | **ok** | Профиль азимута + `omnidirectional_*`, `directional_*` | Доля секторов без направленности vs направленных |
+| `radio.profile.power_height` | **ok** | Совместная полнота `power`/`height`; p50 обоих | Мощность и высота подвеса — базовая radio-модель |
+| `radio.profile.generation_bs_type` | **ok** | Совместная полнота `generation`/`bs_type`; distinct обоих | Связка RAT и типа площадки для профиля сети |
+| `radio.presence.{field}` | **ok** | Полнота `bs_type`, `location`, `rad_class`, `bcch`, `controllernum`, `frequency_in/out` | Фактическая доля пропусков категориальных radio-полей |
 
 ### Итог
 
-| Check | Смысл |
-|-------|--------|
-| `summary` | `total_checks`, `warning_checks`, `failed_checks`; итоговый статус run |
+| Check | Смысл | Обоснование |
+|-------|-------|-------------|
+| `summary` | `total_checks`, `warning_checks`, `failed_checks`; итоговый статус run | Сводка прогона для мониторинга, сравнения прогонов и CI |
 
 CLI не завершается с ненулевым exit code при failed checks (read-only DQ).
 

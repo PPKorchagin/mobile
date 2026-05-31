@@ -23,6 +23,7 @@ from mobile.command_timing import command_run_scope, run_timed_command
 from mobile.logging_config import setup_logging
 from mobile.notebook_runner import (
     run_nb_perf_metrics,
+    run_nb_src_bs,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -97,6 +98,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-time-zones": run_nb_stg_time_zones,
     "nb-stg-tac": run_nb_stg_tac,
     "nb-stg-oksm": run_nb_stg_oksm,
+    "nb-src-bs": run_nb_src_bs,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 

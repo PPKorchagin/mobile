@@ -13,7 +13,9 @@ from branca.colormap import StepColormap
 from IPython.display import display
 from shapely import wkt
 
+from folium.plugins import FastMarkerCluster
 from mobile.project_paths import (
+    DEFAULT_BS_LAYOUT,
     DEFAULT_STG_OKSM_OUTPUT_PATH,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
@@ -744,6 +746,243 @@ def display_oksm_parquet_summary(root: Path) -> None:
     if "alpha2" in df.columns:
         print("\n--- sample alpha2 ---")
         display(df["alpha2"].value_counts().head(15).to_frame("rows"))
+
+
+def distribution_counts_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, check)
+    counts = metrics.get("distribution_counts")
+    if not isinstance(counts, dict):
+        return pd.DataFrame(columns=["metric", "count"])
+    rows = [{"metric": str(key), "count": int(value)} for key, value in counts.items()]
+    return pd.DataFrame(rows).sort_values("count", ascending=False)
+
+
+def null_ratio_key_fields_frame(latest: pd.DataFrame, fields: tuple[str, ...]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for field in fields:
+        metrics = _metrics_for_check(latest, f"nulls.{field}")
+        if not metrics:
+            continue
+        rows.append(
+            {
+                "field": field,
+                "null_count": int(metrics.get("null_count") or 0),
+                "null_ratio": float(metrics.get("null_ratio") or 0),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def radio_profile_p50_frame(
+    latest: pd.DataFrame,
+    fields: tuple[str, ...] = ("power", "height", "frequency", "tilt", "amplification"),
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for field in fields:
+        metrics = _metrics_for_check(latest, f"radio.profile.{field}")
+        if not metrics or metrics.get("p50") is None:
+            continue
+        rows.append({"metric": field, "count": float(metrics["p50"])})
+    return pd.DataFrame(rows)
+
+
+def temporal_date_off_tail_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "temporal_date_off_tail")
+    if not metrics:
+        return pd.DataFrame(columns=["metric", "count"])
+    rows: list[dict[str, Any]] = []
+    for key, label in (
+        ("rows_at_max", "at max date_off"),
+        ("rows_below_max", "below max date_off"),
+    ):
+        if key in metrics:
+            rows.append({"metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def plot_metric_values(values: pd.DataFrame, *, title: str, ax: plt.Axes | None = None, color: str = "#2563eb") -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if values.empty:
+        ax.set_title(f"{title}\n(нет данных)")
+        ax.axis("off")
+        return fig
+    work = values.sort_values("count", ascending=True)
+    ax.barh(work["metric"].astype(str), work["count"], color=color, alpha=0.88)
+    ax.set_xlabel("value")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(
+        null_ratio_key_fields_frame(
+            latest,
+            ("generation", "power", "height", "coord_x", "coord_y", "mnc", "azimuth"),
+        ),
+        ax=axes[0, 2],
+    )
+    plot_count_bars(
+        distribution_counts_frame(latest, "distribution.generation"),
+        title="generation (DQ log)",
+        ax=axes[1, 0],
+        color="#7c3aed",
+    )
+    plot_metric_values(
+        radio_profile_p50_frame(latest),
+        title="radio.profile p50",
+        ax=axes[1, 1],
+        color="#059669",
+    )
+    plot_count_bars(
+        temporal_date_off_tail_frame(latest),
+        title="temporal_date_off_tail",
+        ax=axes[1, 2],
+        color="#8c564b",
+    )
+    if basic:
+        tail = _metrics_for_check(latest, "temporal_date_off_tail")
+        date_off_max = tail.get("date_off_max")
+        fig.suptitle(
+            f"DQ SRC BS — rows={int(basic.get('row_count') or 0):,}, "
+            f"date_off_max={date_off_max}",
+            fontsize=13,
+            y=1.02,
+        )
+    else:
+        fig.suptitle("DQ SRC BS — обзор метрик", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def display_src_bs_parquet_summary(root: Path) -> None:
+    bs_parquet = _resolve_parquet(root, DEFAULT_BS_LAYOUT)
+    if not bs_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
+    df = pd.read_parquet(bs_parquet)
+    try:
+        rel = bs_parquet.relative_to(root)
+    except ValueError:
+        rel = bs_parquet
+    print(f"src_bs rows: {len(df):,} | файл: {rel}")
+    if "generation" in df.columns:
+        display(df["generation"].value_counts().head(12).to_frame("rows"))
+    if "subject" in df.columns:
+        print("\n--- top subjects ---")
+        display(df["subject"].value_counts().head(10).to_frame("rows"))
+
+
+def render_src_bs_folium_map(root: Path) -> folium.Map:
+    """Карта ``src_bs``: кластер точек, слои по generation и контуры ОКТМО level=1."""
+    bs_parquet = _resolve_parquet(root, DEFAULT_BS_LAYOUT)
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+    if not bs_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
+
+    bs = pd.read_parquet(bs_parquet)
+    required = ["coord_x", "coord_y", "mcc", "mnc", "lac", "cell", "generation", "subject"]
+    missing = [col for col in required if col not in bs.columns]
+    if missing:
+        raise ValueError(f"В src_bs нет ожидаемых колонок: {missing}")
+
+    pts = bs.loc[bs["coord_x"].notna() & bs["coord_y"].notna()].copy()
+    pts = pts[pts["coord_x"].between(-180, 180) & pts["coord_y"].between(-90, 90)].copy()
+    pts["generation"] = pts["generation"].astype("string").fillna("unknown")
+    pts["subject"] = pts["subject"].astype("string").fillna("unknown")
+
+    try:
+        rel = bs_parquet.relative_to(root)
+    except ValueError:
+        rel = bs_parquet
+    print(f"src_bs rows: {len(bs):,} | файл: {rel}")
+    print(f"valid points: {len(pts):,}")
+    if pts.empty:
+        raise ValueError("Нет валидных coord_x/coord_y для карты src_bs")
+
+    display(
+        pts.groupby("generation", as_index=False)
+        .agg(rows=("lac", "count"))
+        .sort_values("rows", ascending=False)
+    )
+
+    center_lat = float(pts["coord_y"].mean())
+    center_lon = float(pts["coord_x"].mean())
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=5, tiles="CartoDB positron")
+
+    all_points = pts[["coord_y", "coord_x"]].astype(float).values.tolist()
+    fg_all = folium.FeatureGroup(name=f"Все БС (FastMarkerCluster): {len(all_points):,}", show=True)
+    FastMarkerCluster(data=all_points).add_to(fg_all)
+    fg_all.add_to(m)
+
+    gen_colors = {
+        "2G": "#1f77b4",
+        "3G": "#2ca02c",
+        "4G": "#ff7f0e",
+        "LTE": "#e377c2",
+        "5G": "#d62728",
+        "unknown": "#6b7280",
+    }
+    detail_per_gen_max = 2500
+    for gen, group in pts.groupby("generation", dropna=False):
+        gen_name = str(gen)
+        color = gen_colors.get(gen_name, "#9467bd")
+        sample = group if len(group) <= detail_per_gen_max else group.sample(detail_per_gen_max, random_state=42)
+        fg_gen = folium.FeatureGroup(
+            name=f"generation={gen_name}: {len(sample):,}/{len(group):,}",
+            show=False,
+        )
+        for row in sample.itertuples(index=False):
+            tip = (
+                f"<b>{row.mcc}-{row.mnc}-{row.lac}-{row.cell}</b><br>"
+                f"subject={row.subject}<br>gen={gen_name}"
+            )
+            folium.CircleMarker(
+                location=[float(row.coord_y), float(row.coord_x)],
+                radius=2,
+                color=color,
+                weight=1,
+                fill=True,
+                fill_opacity=0.7,
+                tooltip=folium.Tooltip(tip, sticky=False),
+            ).add_to(fg_gen)
+        fg_gen.add_to(m)
+
+    subjects = sorted(pts["subject"].dropna().unique().tolist())
+    if subjects and oktmo_parquet.exists():
+        oktmo_df = pd.read_parquet(oktmo_parquet)
+        if {"level", "name", "WKT"}.issubset(oktmo_df.columns):
+            oktmo_l1 = oktmo_df.loc[(oktmo_df["level"] == 1) & (oktmo_df["name"].isin(subjects))].copy()
+            if not oktmo_l1.empty:
+                oktmo_style = {"color": "#b45309", "weight": 2, "fillColor": "#b45309", "fillOpacity": 0.0}
+                fg_oktmo = folium.FeatureGroup(
+                    name=f"ОКТМО level=1 (субъекты в src_bs): {len(oktmo_l1):,}",
+                    show=True,
+                )
+                bad = 0
+                for row in oktmo_l1.itertuples(index=False):
+                    try:
+                        geom = wkt.loads(str(row.WKT))
+                    except Exception:
+                        bad += 1
+                        continue
+                    folium.GeoJson(
+                        data=geom.__geo_interface__,
+                        style_function=lambda _: oktmo_style,
+                        tooltip=folium.Tooltip(f"<b>{row.name}</b><br>ОКТМО {row.code}", sticky=True),
+                    ).add_to(fg_oktmo)
+                fg_oktmo.add_to(m)
+                if bad:
+                    print(f"ОКТМО WKT пропущено: {bad}")
+
+    folium.LayerControl(collapsed=False).add_to(m)
+    return m
 
 
 def _collect_centroids(df: pd.DataFrame, wkt_col: str) -> tuple[list[tuple[float, float]], int]:

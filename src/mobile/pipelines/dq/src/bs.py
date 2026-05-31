@@ -9,7 +9,6 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.cli_defaults import OPEN_BS_DATE_OFF, OPERATORS
 from mobile.project_paths import resolve_project_path
 
 logger = logging.getLogger(__name__)
@@ -42,9 +41,31 @@ _BS_STG_CRITICAL_COLUMNS = (
 )
 
 RF_MCC = 250
-CORE_MNC = frozenset(OPERATORS.values())
 GENERATION_VALUES = frozenset({"2G", "3G", "4G", "LTE", "5G"})
 LOCATION_INDOOR = frozenset({"indoor", "underground", "small cell", "indoor/small cell"})
+
+_RADIO_PROFILE_FIELDS = (
+    "power",
+    "height",
+    "frequency",
+    "tilt",
+    "el_tilt",
+    "mech_tilt",
+    "amplification",
+    "polarization",
+    "raster",
+    "thickness",
+)
+
+_RADIO_PRESENCE_FIELDS = (
+    "bs_type",
+    "location",
+    "rad_class",
+    "bcch",
+    "controllernum",
+    "frequency_out",
+    "frequency_in",
+)
 
 _NUMERIC_RANGES: dict[str, tuple[float, float]] = {
     "azimuth": (-1.0, 998.0),
@@ -200,17 +221,10 @@ def _run_dq_checks(
                 "active_days_p95": float(active_days_valid.quantile(0.95)) if len(active_days_valid) else None,
             },
         )
-        open_threshold = OPEN_BS_DATE_OFF - pd.Timedelta(days=1)
-        open_rows = int((date_off >= open_threshold).sum())
-        row_n = max(len(data), 1)
         emit(
-            "temporal_open_date_off",
+            "temporal_date_off_tail",
             "ok",
-            {
-                "open_date_off_rows": open_rows,
-                "open_date_off_ratio": round(open_rows / row_n, 4),
-                "open_sentinel": str(OPEN_BS_DATE_OFF),
-            },
+            _date_off_tail_metrics(date_off, row_count=len(data)),
         )
         for ts_col in ("date_on", "date_off"):
             parsed = pd.to_datetime(data[ts_col], errors="coerce")
@@ -538,6 +552,7 @@ def _emit_domain_contract_checks(
     _emit_temporal_contract_checks(emit, data)
     _emit_spatial_contract_checks(emit, data)
     _emit_radio_contract_checks(emit, data)
+    _emit_radio_profile_checks(emit, data)
     _emit_frequency_list_checks(emit, data)
 
 
@@ -568,7 +583,6 @@ def _emit_identity_checks(
                 "negative_count": negative,
                 "null_count": int((~non_null).sum()),
                 "distinct_mnc": int(mnc.nunique(dropna=True)),
-                "core_mnc_coverage_pct": round(_core_mnc_row_pct(data) * 100, 4),
             },
         )
 
@@ -628,20 +642,30 @@ def _emit_temporal_contract_checks(
         },
     )
 
-    open_threshold = OPEN_BS_DATE_OFF - pd.Timedelta(days=1)
-    open_rows = int((date_off >= open_threshold).sum())
-    closed_rows = row_n - open_rows
-    emit(
-        "contract.active_vs_closed",
-        "ok",
-        {
-            "open_rows": open_rows,
-            "closed_rows": closed_rows,
-            "open_ratio": round(open_rows / row_n, 4),
-            "closed_ratio": round(closed_rows / row_n, 4),
-            "open_sentinel": str(OPEN_BS_DATE_OFF),
-        },
-    )
+
+def _date_off_tail_metrics(date_off: pd.Series, *, row_count: int) -> dict[str, Any]:
+    valid = date_off.dropna()
+    row_n = max(row_count, 1)
+    if valid.empty:
+        return {
+            "date_off_max": None,
+            "date_off_p95": None,
+            "rows_at_max": 0,
+            "rows_at_max_ratio": 0.0,
+            "rows_below_max": 0,
+            "rows_below_max_ratio": 0.0,
+        }
+    max_val = valid.max()
+    at_max = int((date_off == max_val).sum())
+    below_max = row_count - at_max - int(date_off.isna().sum())
+    return {
+        "date_off_max": str(max_val),
+        "date_off_p95": str(valid.quantile(0.95)),
+        "rows_at_max": at_max,
+        "rows_at_max_ratio": round(at_max / row_n, 4),
+        "rows_below_max": below_max,
+        "rows_below_max_ratio": round(below_max / row_n, 4),
+    }
 
 
 def _emit_spatial_contract_checks(
@@ -688,12 +712,15 @@ def _emit_radio_contract_checks(
         gen = data["generation"].astype("string").str.strip()
         known = gen.isin(GENERATION_VALUES)
         rate = float(known.mean())
+        unknown = gen[~known & gen.notna() & (gen != "")]
         emit(
             "contract.generation_vocab",
             _status_from_rate(rate, failed_below=0.95, warn_below=0.99),
             {
                 "known_generation_rate": round(rate, 6),
-                "unknown_top": _string_value_counts_top(gen[~known], top_n=8),
+                "unknown_count": int(unknown.shape[0]),
+                "unknown_ratio": round(int(unknown.shape[0]) / max(len(data), 1), 4),
+                "distinct_unknown": int(unknown.nunique()) if len(unknown) else 0,
             },
         )
 
@@ -768,6 +795,117 @@ def _emit_radio_contract_checks(
         )
 
 
+def _numeric_radio_profile(series: pd.Series, *, row_count: int) -> dict[str, Any]:
+    num = pd.to_numeric(series, errors="coerce")
+    null_count = int(num.isna().sum())
+    valid = num.dropna()
+    out: dict[str, Any] = {
+        "null_count": null_count,
+        "null_ratio": round(null_count / max(row_count, 1), 4),
+        "non_null_count": int(valid.count()),
+    }
+    if valid.empty:
+        return out
+    return {
+        **out,
+        "min": _safe_float(valid.min()),
+        "p50": _safe_float(valid.quantile(0.5)),
+        "p95": _safe_float(valid.quantile(0.95)),
+        "max": _safe_float(valid.max()),
+        "mean": _safe_float(valid.mean()),
+    }
+
+
+def _categorical_presence_metrics(series: pd.Series, *, row_count: int) -> dict[str, Any]:
+    text = series.astype("string").str.strip()
+    empty = text.isna() | (text == "")
+    empty_count = int(empty.sum())
+    present = text[~empty]
+    return {
+        "empty_count": empty_count,
+        "empty_ratio": round(empty_count / max(row_count, 1), 4),
+        "present_count": int(present.shape[0]),
+        "distinct_values": int(present.nunique()) if len(present) else 0,
+    }
+
+
+def _emit_radio_profile_checks(
+    emit: Callable[[str, str, dict[str, Any]], None],
+    data: pd.DataFrame,
+) -> None:
+    if data.empty:
+        return
+
+    row_count = len(data)
+
+    for field in _RADIO_PROFILE_FIELDS:
+        if field not in data.columns:
+            continue
+        metrics = _numeric_radio_profile(data[field], row_count=row_count)
+        if field == "frequency":
+            freq = pd.to_numeric(data[field], errors="coerce")
+            metrics["sentinel_minus_one_count"] = int((freq == -1).sum())
+            metrics["positive_count"] = int((freq > 0).sum())
+        status = "warning" if metrics.get("non_null_count", 0) == 0 else "ok"
+        emit(f"radio.profile.{field}", status, metrics)
+
+    if "azimuth" in data.columns:
+        az = pd.to_numeric(data["azimuth"], errors="coerce")
+        omnidirectional = int((az == -1).sum())
+        directional = int(az.between(0, 360, inclusive="both").sum())
+        emit(
+            "radio.profile.azimuth",
+            "ok",
+            {
+                **_numeric_radio_profile(data["azimuth"], row_count=row_count),
+                "omnidirectional_rows": omnidirectional,
+                "omnidirectional_ratio": round(omnidirectional / max(row_count, 1), 4),
+                "directional_rows": directional,
+                "directional_ratio": round(directional / max(row_count, 1), 4),
+            },
+        )
+
+    for field in _RADIO_PRESENCE_FIELDS:
+        if field not in data.columns:
+            continue
+        metrics = _categorical_presence_metrics(data[field], row_count=row_count)
+        emit(
+            f"radio.presence.{field}",
+            "ok",
+            metrics,
+        )
+
+    if {"power", "height"}.issubset(data.columns):
+        power = pd.to_numeric(data["power"], errors="coerce")
+        height = pd.to_numeric(data["height"], errors="coerce")
+        both = power.notna() & height.notna()
+        emit(
+            "radio.profile.power_height",
+            "ok",
+            {
+                "both_present_rows": int(both.sum()),
+                "both_present_ratio": round(float(both.mean()), 4),
+                "power_p50": _safe_float(power.quantile(0.5)) if power.notna().any() else None,
+                "height_p50": _safe_float(height.quantile(0.5)) if height.notna().any() else None,
+            },
+        )
+
+    if {"generation", "bs_type"}.issubset(data.columns):
+        gen = data["generation"].astype("string").str.strip()
+        bs_type = data["bs_type"].astype("string").str.strip()
+        both = gen.notna() & gen.ne("") & bs_type.notna() & bs_type.ne("")
+        emit(
+            "radio.profile.generation_bs_type",
+            "ok",
+            {
+                "both_present_rows": int(both.sum()),
+                "both_present_ratio": round(float(both.mean()), 4),
+                "distinct_generation": int(gen[both].nunique()) if both.any() else 0,
+                "distinct_bs_type": int(bs_type[both].nunique()) if both.any() else 0,
+            },
+        )
+
+
 def _emit_frequency_list_checks(
     emit: Callable[[str, str, dict[str, Any]], None],
     data: pd.DataFrame,
@@ -792,11 +930,6 @@ def _emit_frequency_list_checks(
                 "bands_per_row_p95": _safe_float(band_counts.quantile(0.95)) if len(band_counts) else None,
             },
         )
-
-
-def _core_mnc_row_pct(data: pd.DataFrame) -> float:
-    mnc = pd.to_numeric(data["mnc"], errors="coerce")
-    return float(mnc.isin(CORE_MNC).mean())
 
 
 def _value_counts_top(series: pd.Series, *, top_n: int) -> dict[str, int]:
