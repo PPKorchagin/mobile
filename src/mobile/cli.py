@@ -25,6 +25,7 @@ from mobile.logging_config import setup_logging
 from mobile.notebook_runner import (
     run_nb_perf_metrics,
     run_nb_src_bs,
+    run_nb_src_excl,
     run_nb_src_person,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
@@ -33,6 +34,7 @@ from mobile.notebook_runner import (
 )
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
+from mobile.pipelines.dq.src import excl as dq_src_excl
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.dq.src import person as dq_src_person
 from mobile.pipelines.stg import event as stg_event
@@ -53,6 +55,9 @@ from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as d
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
+    DEFAULT_SRC_EXCL_IMEI_OUTPUT,
+    DEFAULT_SRC_EXCL_IMSI_OUTPUT,
+    DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
     DEFAULT_SRC_PERSON_OUTPUT_ROOT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
@@ -105,6 +110,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-oksm": run_nb_stg_oksm,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
+    "nb-src-excl": run_nb_src_excl,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -124,6 +130,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "dq-src-mobile",
     "dq-src-bs",
     "dq-src-person",
+    "dq-src-excl",
     "build-stg-event",
     "build-stg-geo-all",
     "build-stg-geo-intervals",
@@ -783,6 +790,32 @@ def run_dq_src_person(
     )
 
 
+def run_dq_src_excl(
+    *,
+    src_imsi_path: str | None = None,
+    src_imei_path: str | None = None,
+    src_msisdn_path: str | None = None,
+) -> None:
+    """DQ витрин src_imsi, src_imei, src_msisdn по parquet-путям."""
+    imsi_path = Path(src_imsi_path) if src_imsi_path else DEFAULT_SRC_EXCL_IMSI_OUTPUT
+    imei_path = Path(src_imei_path) if src_imei_path else DEFAULT_SRC_EXCL_IMEI_OUTPUT
+    msisdn_path = Path(src_msisdn_path) if src_msisdn_path else DEFAULT_SRC_EXCL_MSISDN_OUTPUT
+    logger.info(
+        "Starting dq-src-excl: imsi=%s imei=%s msisdn=%s",
+        imsi_path,
+        imei_path,
+        msisdn_path,
+    )
+    run_timed_command(
+        "dq-src-excl",
+        lambda: dq_src_excl.run_dq(
+            src_imsi_path=imsi_path,
+            src_imei_path=imei_path,
+            src_msisdn_path=msisdn_path,
+        ),
+    )
+
+
 def _run_build(command: str) -> None:
     fn, config_path = _BUILD_COMMANDS[command]
     logger.info("Starting %s (config=%s)", command, config_path)
@@ -899,6 +932,24 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=f"build-stg-bs / dq-src-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
+    )
+    parser.add_argument(
+        "--src-imsi-path",
+        default=None,
+        metavar="PATH",
+        help=f"dq-src-excl: parquet src_imsi (по умолчанию {DEFAULT_SRC_EXCL_IMSI_OUTPUT})",
+    )
+    parser.add_argument(
+        "--src-imei-path",
+        default=None,
+        metavar="PATH",
+        help=f"dq-src-excl: parquet src_imei (по умолчанию {DEFAULT_SRC_EXCL_IMEI_OUTPUT})",
+    )
+    parser.add_argument(
+        "--src-msisdn-path",
+        default=None,
+        metavar="PATH",
+        help=f"dq-src-excl: parquet src_msisdn (по умолчанию {DEFAULT_SRC_EXCL_MSISDN_OUTPUT})",
     )
     parser.add_argument(
         "--csv-path",
@@ -1060,6 +1111,12 @@ def main() -> None:
             run_dq_src_person(
                 start_date=args.start_date,
                 src_person_path=args.src_person_path,
+            )
+        elif args.command == "dq-src-excl":
+            run_dq_src_excl(
+                src_imsi_path=args.src_imsi_path,
+                src_imei_path=args.src_imei_path,
+                src_msisdn_path=args.src_msisdn_path,
             )
         elif args.command == "build-move-event":
             run_build_move_event(report_date=args.report_date)

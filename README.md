@@ -21,4 +21,7 @@
 | 16            | build-src-person     | Генерация синтетической витрины абонентов            | --target-per-operator 50000                                                             | [Документ](documents/src/build_src_person.md)     |
 | 17            | dq-src-person        | Проверка качества витрины абонентов                  | --start-date 2025-01-01 --src-person-path data/src/person                               | [Документ](documents/dq/src/dq_src_person.md)     |
 | 18            | nb-src-person        | Визуализация метрик DQ витрины абонентов             | —                                                                                       | —                                                 |
+| 19            | build-src-excl       | Генерация списков исключений (IMSI, IMEI, MSISDN)    | —                                                                                       | [Документ](documents/src/build_src_excl.md)       |
+| 20            | dq-src-excl          | Проверка качества списков исключений                 | --src-imsi-path data/src/excl/src_imsi.parquet --src-imei-path data/src/excl/src_imei.parquet --src-msisdn-path data/src/excl/src_msisdn.parquet | [Документ](documents/dq/src/dq_src_excl.md)       |
+| 21            | nb-src-excl          | Визуализация метрик DQ списков исключений            | —                                                                                       | —                                                 |
 

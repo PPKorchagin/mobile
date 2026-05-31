@@ -1624,3 +1624,192 @@ def render_src_person_month_distributions(latest: pd.DataFrame) -> plt.Figure:
     fig.suptitle("distribution_*_month (snapshot day, DQ)", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
+
+
+# --- src excl DQ charts ---
+
+_SRC_EXCL_MARTS = ("src_imsi", "src_imei", "src_msisdn")
+_SRC_EXCL_MART_LABELS = {
+    "src_imsi": "IMSI",
+    "src_imei": "IMEI",
+    "src_msisdn": "MSISDN",
+}
+_SRC_EXCL_MART_CHECKS = ("dataset_presence", "dataset_basic", "schema_columns", "totals")
+
+
+def src_excl_totals_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for mart in _SRC_EXCL_MARTS:
+        metrics = _metrics_for_check(latest, f"{mart}.totals")
+        if not metrics:
+            continue
+        row_count = int(metrics.get("row_count") or 0)
+        unique_count = int(metrics.get("unique_count") or 0)
+        null_count = int(metrics.get("null_count") or 0)
+        rows.append(
+            {
+                "mart": mart,
+                "label": _SRC_EXCL_MART_LABELS[mart],
+                "row_count": row_count,
+                "unique_count": unique_count,
+                "null_count": null_count,
+                "unique_ratio": (unique_count / row_count) if row_count else 0.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def src_excl_mart_status_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for mart in _SRC_EXCL_MARTS:
+        for check in _SRC_EXCL_MART_CHECKS:
+            full = f"{mart}.{check}"
+            hit = latest[latest["check"] == full]
+            status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+            rows.append({"mart": mart, "label": _SRC_EXCL_MART_LABELS[mart], "check": check, "status": status})
+    return pd.DataFrame(rows)
+
+
+def _plot_src_excl_totals_bars(totals: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if totals.empty:
+        ax.set_title("totals.* — нет данных в логе")
+        ax.axis("off")
+        return fig
+    x = range(len(totals))
+    width = 0.35
+    ax.bar([i - width / 2 for i in x], totals["row_count"], width=width, label="row_count", color="#1f77b4")
+    ax.bar([i + width / 2 for i in x], totals["unique_count"], width=width, label="unique_count", color="#ff7f0e")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(totals["label"])
+    ax.set_ylabel("count")
+    ax.set_title("Размеры списков (totals)")
+    ax.legend(fontsize=8)
+    for i, row in enumerate(totals.itertuples()):
+        ax.text(i - width / 2, row.row_count, f"{row.row_count:,}", ha="center", va="bottom", fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_src_excl_null_counts(totals: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+    else:
+        fig = ax.figure
+    if totals.empty:
+        ax.set_title("null_count — нет totals")
+        ax.axis("off")
+        return fig
+    colors = ["#d62728" if n > 0 else "#2ca02c" for n in totals["null_count"]]
+    ax.bar(totals["label"], totals["null_count"], color=colors, alpha=0.88)
+    ax.set_ylabel("null_count")
+    ax.set_title("Пустые значения в колонке value")
+    fig.tight_layout()
+    return fig
+
+
+def _plot_src_excl_unique_ratio(totals: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+    else:
+        fig = ax.figure
+    if totals.empty:
+        ax.set_title("unique / row — нет totals")
+        ax.axis("off")
+        return fig
+    pct = totals["unique_ratio"] * 100
+    ax.bar(totals["label"], pct, color="#9467bd", alpha=0.88)
+    ax.axhline(100, color="gray", ls="--", lw=0.8)
+    ax.set_ylim(0, 105)
+    ax.set_ylabel("unique / row, %")
+    ax.set_title("Уникальность значений (ожидается 100%)")
+    for i, value in enumerate(pct):
+        ax.text(i, value, f"{value:.1f}%", ha="center", va="bottom", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_src_excl_mart_status_grid(status_df: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 3.5))
+    else:
+        fig = ax.figure
+    if status_df.empty:
+        ax.set_title("Статусы проверок — нет данных")
+        ax.axis("off")
+        return fig
+    pivot = status_df.pivot(index="label", columns="check", values="status")
+    pivot = pivot.reindex(columns=list(_SRC_EXCL_MART_CHECKS))
+    codes = {"failed": 0, "warning": 1, "ok": 2, "missing": 3}
+    matrix = pivot.map(lambda status: codes.get(str(status), 3)).to_numpy(dtype=float)
+    im = ax.imshow(matrix, aspect="auto", cmap=plt.cm.RdYlGn, vmin=0, vmax=2)
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=25, ha="right")
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            ax.text(j, i, pivot.iloc[i, j], ha="center", va="center", fontsize=8, color="black")
+    ax.set_title("Статус проверок по витринам")
+    fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02, ticks=[0, 1, 2], label="failed → ok")
+    fig.tight_layout()
+    return fig
+
+
+def _plot_src_excl_summary_metrics(latest: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 3))
+    else:
+        fig = ax.figure
+    metrics = _metrics_for_check(latest, "summary")
+    if not metrics:
+        ax.set_title("summary — нет в логе")
+        ax.axis("off")
+        return fig
+    labels = ["total_checks", "warning_checks", "failed_checks"]
+    values = [int(metrics.get(key) or 0) for key in labels]
+    colors = ["#bcbd22", "#ff7f0e", "#d62728"]
+    ax.bar(labels, values, color=colors, alpha=0.9)
+    ax.set_ylabel("count")
+    ax.set_title("Итог прогона (summary)")
+    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
+    for i, value in enumerate(values):
+        ax.text(i, value, str(value), ha="center", va="bottom", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_excl_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    totals = src_excl_totals_frame(latest)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    _plot_src_excl_totals_bars(totals, ax=axes[0, 1])
+    _plot_src_excl_unique_ratio(totals, ax=axes[1, 0])
+    _plot_src_excl_null_counts(totals, ax=axes[1, 1])
+    fig.suptitle("DQ SRC EXCL — обзор (метрики лога)", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_src_excl_dq_marts(latest: pd.DataFrame) -> plt.Figure:
+    totals = src_excl_totals_frame(latest)
+    status_df = src_excl_mart_status_frame(latest)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
+    _plot_src_excl_mart_status_grid(status_df, ax=axes[0])
+    _plot_src_excl_summary_metrics(latest, ax=axes[1])
+    if not totals.empty and totals["row_count"].nunique() == 1:
+        row_count = int(totals["row_count"].iloc[0])
+        axes[1].text(
+            0.5,
+            -0.22,
+            f"Синхронность размеров: все три списка по {row_count:,} строк",
+            transform=axes[1].transAxes,
+            ha="center",
+            fontsize=9,
+        )
+    fig.suptitle("Витрины и итог DQ", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
