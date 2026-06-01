@@ -50,3 +50,12 @@ def normalize_imei(series: pd.Series | None) -> pd.Series:
     digits = digits.mask(digits == "", pd.NA)
     ok = digits.notna() & digits.str.len().ge(IMEI_MIN_LEN) & digits.str.len().le(IMEI_MAX_LEN)
     return digits.where(ok)
+
+
+def to_digit_string_series(series: pd.Series | None) -> pd.Series:
+    """Числовые идентификаторы из parquet → string (без дробной части)."""
+    if series is None:
+        return pd.Series(dtype="string")
+    num = pd.to_numeric(series, errors="coerce")
+    out = num.astype("Int64").astype("string")
+    return out.mask(out == "<NA>", pd.NA)

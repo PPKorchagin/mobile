@@ -35,6 +35,7 @@ from mobile.notebook_runner import (
     run_nb_stg_msisdn_imei,
     run_nb_stg_msisdn_imsi_operator,
     run_nb_stg_geo_intervals,
+    run_nb_stg_person,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -94,6 +95,7 @@ from mobile.project_paths import (
     stg_geo_intervals_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
+    stg_person_output_path,
     resolve_stg_daily_parquet_path,
     resolve_stg_monthly_parquet_path,
 )
@@ -124,6 +126,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-msisdn-imei": run_nb_stg_msisdn_imei,
     "nb-stg-msisdn-imsi-operator": run_nb_stg_msisdn_imsi_operator,
     "nb-stg-geo-intervals": run_nb_stg_geo_intervals,
+    "nb-stg-person": run_nb_stg_person,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
@@ -815,6 +818,9 @@ def run_build_stg_person(
     src_person_path: str | None,
     stg_msisdn_imsi_path: str | None,
     stg_msisdn_imei_path: str | None,
+    src_excl_imsi_path: str | None,
+    src_excl_imei_path: str | None,
+    src_excl_msisdn_path: str | None,
     stg_tac_path: str | None,
     stg_oksm_path: str | None,
     output_path: str | None,
@@ -837,6 +843,9 @@ def run_build_stg_person(
             src_person_path=src,
             stg_msisdn_imsi_path=imsi,
             stg_msisdn_imei_path=imei,
+            src_excl_imsi_path=src_excl_imsi_path,
+            src_excl_imei_path=src_excl_imei_path,
+            src_excl_msisdn_path=src_excl_msisdn_path,
             stg_tac_path=tac,
             stg_oksm_path=oksm,
             output_path=out,
@@ -1210,29 +1219,61 @@ def run_dq_stg_person(
     *,
     report_date: date | None,
     stg_person_path: str | None,
-    stg_person_sim_path: str | None,
     stg_oksm_path: str | None,
-    stg_person_ledger_path: str | None,
 ) -> None:
-    """DQ ``stg_person`` / ``stg_person_sim`` за месяц (read-only проверки)."""
-    if report_date is None:
-        raise SystemExit("dq-stg-person: --report-date is required")
-    if report_date.day != 1:
-        raise SystemExit(f"dq-stg-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
-    person_path = Path(stg_person_path) if stg_person_path else None
-    sim_path = Path(stg_person_sim_path) if stg_person_sim_path else None
-    oksm_path = Path(stg_oksm_path) if stg_oksm_path else None
-    ledger_path = Path(stg_person_ledger_path) if stg_person_ledger_path else None
-    run_timed_command(
-        "dq-stg-person",
-        lambda: dq_stg_person.run_dq(
-            report_date=report_date,
-            stg_person_path=person_path,
-            stg_person_sim_path=sim_path,
-            stg_oksm_path=oksm_path,
-            stg_person_ledger_path=ledger_path,
-        ),
+    """DQ ``stg_person``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по месяцам."""
+    explicit = any((report_date, stg_person_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_person_path is None:
+            missing.append("--stg-person-path")
+        if missing:
+            raise SystemExit(
+                "dq-stg-person: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        month = report_month_start(report_date)
+        path = resolve_stg_monthly_parquet_path(stg_person_path, month)
+        oksm = resolve_project_path(stg_oksm_path) if stg_oksm_path else None
+        run_timed_command(
+            f"dq-stg-person-{month.isoformat()}",
+            lambda m=month, p=path, o=oksm: dq_stg_person.run_dq(
+                report_date=m,
+                stg_person_path=p,
+                stg_oksm_path=o,
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    seen_months: set[date] = set()
+    logger.info(
+        "Starting dq-stg-person: days=%s (%s .. %s)",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
     )
+    for day in days:
+        month = report_month_start(day)
+        if month in seen_months:
+            continue
+        out = stg_person_output_path(month)
+        if not out.exists():
+            continue
+        seen_months.add(month)
+        run_timed_command(
+            f"dq-stg-person-{month.isoformat()}",
+            lambda m=month, p=out: dq_stg_person.run_dq(
+                report_date=m,
+                stg_person_path=p,
+            ),
+        )
+    logger.info("dq-stg-person completed successfully")
 
 
 def run_dq_src_mobile(
@@ -1549,19 +1590,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--src-imsi-path",
         default=None,
         metavar="PATH",
-        help=f"dq-src-excl: parquet src_imsi (по умолчанию {DEFAULT_SRC_EXCL_IMSI_OUTPUT})",
+        help=(
+            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_imsi "
+            f"(по умолчанию {DEFAULT_SRC_EXCL_IMSI_OUTPUT})"
+        ),
     )
     parser.add_argument(
         "--src-imei-path",
         default=None,
         metavar="PATH",
-        help=f"dq-src-excl: parquet src_imei (по умолчанию {DEFAULT_SRC_EXCL_IMEI_OUTPUT})",
+        help=(
+            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_imei "
+            f"(по умолчанию {DEFAULT_SRC_EXCL_IMEI_OUTPUT})"
+        ),
     )
     parser.add_argument(
         "--src-msisdn-path",
         default=None,
         metavar="PATH",
-        help=f"dq-src-excl: parquet src_msisdn (по умолчанию {DEFAULT_SRC_EXCL_MSISDN_OUTPUT})",
+        help=(
+            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_msisdn "
+            f"(по умолчанию {DEFAULT_SRC_EXCL_MSISDN_OUTPUT})"
+        ),
     )
     parser.add_argument(
         "--csv-path",
@@ -1696,19 +1746,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-person-path",
         default=None,
         metavar="PATH",
-        help="dq-stg-person: входной stg_person parquet (по умолчанию data/stg/person/{YYYY-MM-01}.parquet)",
-    )
-    parser.add_argument(
-        "--stg-person-sim-path",
-        default=None,
-        metavar="PATH",
-        help="dq-stg-person: входной stg_person_sim parquet (по умолчанию data/stg/person_sim/{YYYY-MM-01}.parquet)",
-    )
-    parser.add_argument(
-        "--stg-person-ledger-path",
-        default=None,
-        metavar="PATH",
-        help="dq-stg-person: входной stg_person_id_ledger parquet (по умолчанию data/stg/person_id_ledger/{YYYY-MM-01}.parquet)",
+        help=(
+            "dq-stg-person: входной stg_person parquet или каталог "
+            "(явный прогон: обязателен вместе с --report-date)"
+        ),
     )
     parser.add_argument(
         "--event-dds-path",
@@ -1851,6 +1892,9 @@ def main() -> None:
                 src_person_path=args.src_person_path,
                 stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
                 stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+                src_excl_imsi_path=args.src_imsi_path,
+                src_excl_imei_path=args.src_imei_path,
+                src_excl_msisdn_path=args.src_msisdn_path,
                 stg_tac_path=args.stg_tac_path,
                 stg_oksm_path=args.stg_oksm_path,
                 output_path=args.output_path,
@@ -1874,9 +1918,7 @@ def main() -> None:
             run_dq_stg_person(
                 report_date=args.report_date,
                 stg_person_path=args.stg_person_path,
-                stg_person_sim_path=args.stg_person_sim_path,
                 stg_oksm_path=args.stg_oksm_path,
-                stg_person_ledger_path=args.stg_person_ledger_path,
             )
         elif args.command == "build-stg-bs":
             run_build_stg_bs(

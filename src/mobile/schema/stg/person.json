@@ -1,10 +1,10 @@
 {
     "table": "stg_person",
-    "description": "Месячный профиль физлиц: кластер ID+bio+contract+SIM+bindings+MNP",
+    "description": "Месячный профиль физлиц: кластер ID+bio+SIM+bindings+MNP",
     "fields": [
         { "name": "report_date", "type": "date", "comment": "1-е число отчетного месяца (YYYY-MM-01)" },
         { "name": "person_id", "type": "string", "comment": "prs_ + SHA256(person_cluster_key); стабилен через ledger" },
-        { "name": "person_cluster_key", "type": "string", "comment": "Канонический ключ кластера (bio/contract/iccid/tech)" },
+        { "name": "person_cluster_key", "type": "string", "comment": "Канонический ключ кластера (bio/iccid/tech)" },
         { "name": "person_confidence", "type": "string", "comment": "high / medium / low — сила идентификации" },
         { "name": "sim_count", "type": "long", "comment": "Число distinct SIM (imsi|iccid) у персоны в месяце" },
         { "name": "msisdn", "type": "string", "comment": "Основной MSISDN (последний интервал)" },

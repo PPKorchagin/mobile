@@ -1,10 +1,10 @@
 # build-stg-person
 
-**Витрины:** `stg_person`, `stg_person_sim`, `stg_person_id_ledger` · **Команда:** `build-stg-person` · **Режим:** месячный профиль физлиц с устойчивым `person_id`.
+**Витрина:** `stg_person` · **Команда:** `build-stg-person` · **Режим:** один месячный срез физлиц с устойчивым `person_id`.
 
-Референс: [`pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py), [`person_identity.py`](../../src/mobile/pipelines/stg/person_identity.py).
+Референс: [`pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py).
 
-Схемы: [`person.json`](../../src/mobile/schema/stg/person.json), [`person_sim.json`](../../src/mobile/schema/stg/person_sim.json), [`person_id_ledger.json`](../../src/mobile/schema/stg/person_id_ledger.json).
+Схема: [`person.json`](../../src/mobile/schema/stg/person.json).
 
 ---
 
@@ -15,22 +15,23 @@
 | 1 | Принять `report_date` = 1-е число отчётного месяца | `2025-01-01` |
 | 2 | `src_person` — **последний** `load_day` с `_SUCCESS` (профиль) | `person.parquet` |
 | 3 | `stg_oksm` → `OksmLookup` | `citizenship` = `numeric_code` или `U` |
-| 4 | `stg_msisdn_imsi` — **все** срезы месяца (MNP) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` |
-| 5 | Месячные binding (ежедневный инкремент) | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet`, `msisdn_imei` |
-| 6 | Исключить M2M по `stg_tac` | Без IoT SIM |
-| 7 | Union-find: `bio`, `contract`, `iccid`, ID + bindings + operator | Кластер персоны |
-| 8 | `person_id` + ledger прошлого месяца | Стабильный ID между месяцами |
-| 9 | `stg_person` (1 строка) + `stg_person_sim` (N SIM) + ledger | Профиль, подписки, узлы |
+| 4 | Синхронизация месячных `stg_msisdn_imsi` / `stg_msisdn_imei` из `stg_geo_all` по дням месяца | `{YYYY-MM-01}.parquet` для обеих binding-витрин |
+| 5 | Чтение месячных binding + обогащение `src_person` | MSISDN↔IMSI, MSISDN↔IMEI, MNP на интервалах |
+| 6 | Исключения: `src_imsi` / `src_imei` / `src_msisdn` + M2M по `stg_tac` | Строки excl и IoT не попадают в кластеризацию |
+| 7 | Union-find: `bio`, `iccid`, ID + binding + operator | `person_cluster_key` |
+| 8 | `person_id` из прошлого `stg_person` по `person_cluster_key` | Стабильный ID между месяцами |
+| 9 | Запись `stg_person` | 1 строка на персону, поле `sim_count` |
 
-**Бизнес-назначение:** стабильный месячный слой персон (идентификатор + демография + мульти-SIM) для джойнов с geo/event.
+**Бизнес-назначение:** стабильный месячный слой персон (идентификатор + демография + основная подписка) для джойнов с geo/event.
 
-**В scope:** кластеризация по био/договору/ICCID и техническим ID; MNP через operator-витрину; одна строка на персону + детализация SIM.
+**В scope:** кластеризация по био/ICCID и техническим ID; месячные binding-витрины; исключения из [`build-src-excl`](../src/build_src_excl.md). Номер договора (`contract_number`) **не** участвует в графе.
 
 **Предусловия:**
 
+- [`build-src-excl`](../src/build_src_excl.md) → `data/src/excl/src_{imsi,imei,msisdn}.parquet`.
 - [`build-stg-tac`](build_stg_tac.md) → `data/stg/tac.parquet` (иначе M2M-фильтр пропускается с warning).
 - [`build-stg-oksm`](build_stg_oksm.md) → `data/stg/oksm.parquet` (обязателен для `citizenship`).
-- Ежедневные [`build-stg-msisdn-imei`](./build_stg_msisdn_imei.md) и [`build-stg-msisdn-imsi-operator`](./build_stg_msisdn_imsi_operator.md) по дням месяца (или авто-`refresh` из `stg_geo_all` при `build_bindings_month=true`).
+- [`build-stg-geo-all`](build_stg_geo_all.md) по дням месяца (pipeline дополняет binding-витрины при `sync_bindings_from_geo=true`, по умолчанию).
 
 ---
 
@@ -50,50 +51,38 @@
 | `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI за месяц |
 | `stg_tac_path` | path | Нет | `data/stg/tac.parquet` | M2M по TAC |
 | `stg_oksm_path` | path | Нет | `data/stg/oksm.parquet` | Справочник ОКСМ для `citizenship` |
-| `output_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | `stg_person` |
-| `person_sim_path` | path | Нет | `data/stg/person_sim/{YYYY-MM-01}.parquet` | `stg_person_sim` |
-| `person_ledger_path` | path | Нет | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | ledger узлов |
-| `build_bindings_month` | bool | Нет | `true` | `_refresh_month_bindings_from_geo` в `person.py`, если нет month parquet |
-| `build_operator_vitrine` | bool | Нет | `true` | Пересобрать `stg_msisdn_imsi` из всех срезов `src_person` (MNP) |
+| `src_excl_imsi_path` | path | Нет | `data/src/excl/src_imsi.parquet` | Список исключений IMSI |
+| `src_excl_imei_path` | path | Нет | `data/src/excl/src_imei.parquet` | Список исключений IMEI |
+| `src_excl_msisdn_path` | path | Нет | `data/src/excl/src_msisdn.parquet` | Список исключений MSISDN |
+| `output_path` | path | Нет | `data/stg/person/{YYYY-MM-01}.parquet` | Выход `stg_person` |
 
 ### Выбор `src_person` (профиль)
 
-Режим **`latest_snapshot`** ([`src_person_month.py`](../../src/mobile/pipelines/stg/src_person_month.py)):
+Режим **`latest_snapshot`** (в [`person.py`](../../src/mobile/pipelines/stg/person.py), `_read_src_person_latest_snapshot`):
 
 1. Период: с `report_date` по последний день месяца.
 2. Каталоги `load_day=*` с `_SUCCESS` и `person.parquet`.
 3. Взять **максимальный** `load_day`.
 4. Прочитать один `person.parquet`.
 
-Для **MNP** отдельно читаются **все** срезы месяца (`all_snapshots`) — `build_imsi_intervals_from_src` в [`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py).
+MNP и смена IMSI учитываются через интервалы в месячной `stg_msisdn_imsi` (наблюдения из `stg_geo_all` по дням месяца).
 
 ```bash
+uv run mobile build-src-excl
 uv run mobile build-stg-person --report-date 2025-01-01
 ```
 
-Опционально до person — прогнать binding по дням месяца или один раз:
-
-```bash
-uv run mobile build-stg-msisdn-imei --report-date 2025-01-01 \
-  --stg-geo-all-path data/stg/geo_all/2025-01-01.parquet \
-  --output-path data/stg/msisdn_imei/2025-01-01.parquet
-uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
-  --stg-geo-all-path data/stg/geo_all/2025-01-01.parquet \
-  --output-path data/stg/msisdn_imsi/2025-01-01.parquet
-# … по дням месяца; либо build-stg-person вызовет refresh при отсутствии month parquet
-```
+Binding-витрины можно собрать заранее по дням (`build-stg-msisdn-imei`, `build-stg-msisdn-imsi-operator`) или положиться на синхронизацию внутри `build-stg-person` из `stg_geo_all`.
 
 Логи: `data/logs/mobile.log`. Метрики: `data/qa/command_timing.jsonl`, `command=build-stg-person`.
 
 ---
 
-## Структура генерируемых витрин
+## Структура витрины
 
 | Витрина | Путь | Гранулярность |
 |---------|------|----------------|
-| `stg_person` | `data/stg/person/{YYYY-MM-01}.parquet` | 1 строка на `person_id` |
-| `stg_person_sim` | `data/stg/person_sim/{YYYY-MM-01}.parquet` | 1 строка на подписку/SIM-интервал |
-| `stg_person_id_ledger` | `data/stg/person_id_ledger/{YYYY-MM-01}.parquet` | Узлы графа → `person_id` |
+| `stg_person` | `data/stg/person/{YYYY-MM-01}.parquet` | 1 строка на `person_id` (основная подписка + `sim_count`) |
 
 Формат: Parquet, `snappy`.
 
@@ -116,28 +105,20 @@ uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
 | 13 | `actually_from` | timestamp | Начало интервала основной SIM |
 | 14 | `actually_to` | timestamp | Конец интервала |
 
-### Поля `stg_person_sim`
-
-`person_id`, `msisdn`, `imsi`, `imei`, `iccid`, `operator_id`, `contract_number`, `actually_from`, `actually_to`, `is_primary` — см. [`person_sim.json`](../../src/mobile/schema/stg/person_sim.json).
-
-### Поля `stg_person_id_ledger`
-
-`person_id`, `person_cluster_key`, `node` (`bio:`, `contract:`, `iccid:`, `msisdn:`, …) — см. [`person_id_ledger.json`](../../src/mobile/schema/stg/person_id_ledger.json).
-
 ---
 
 ## Источники витрины
 
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
-| 1 | `src_person` (latest) | `data/src/person/.../person.parquet` | Профиль, bio, contract, iccid |
-| 2 | `src_person` (all snapshots) | те же `load_day` | MNP → operator-витрина |
-| 3 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | MSISDN + IMSI + operator (MNP из src) |
-| 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMSI (месяц, daily upsert) |
-| 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Связи MSISDN↔IMEI |
-| 6 | `stg_tac` | `data/stg/tac.parquet` | M2M |
-| 7 | `stg_oksm` | `data/stg/oksm.parquet` | Коды гражданства |
-| 8 | ledger (прошлый месяц) | `data/stg/person_id_ledger/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
+| 1 | `src_person` (latest) | `data/src/person/.../person.parquet` | Профиль, bio, iccid |
+| 2 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | MSISDN↔IMSI + `operator_id`, MNP |
+| 3 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI |
+| 4 | `src_imsi` / `src_imei` / `src_msisdn` | `data/src/excl/*.parquet` | Исключения из анализа |
+| 5 | `stg_tac` | `data/stg/tac.parquet` | M2M по TAC |
+| 6 | `stg_oksm` | `data/stg/oksm.parquet` | Коды гражданства |
+| 7 | `stg_person` (прошлый месяц) | `data/stg/person/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
+| 8 | `stg_geo_all` (по дням) | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Инкремент binding внутри pipeline |
 
 Документация вспомогательных сборок:
 
@@ -158,17 +139,13 @@ uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
 1. Валидация: `report_date.day == 1` (`_validate_report_month`).
 2. Период месяца: `period_start = report_date`, `period_end` = последний календарный день.
 3. `month_start` / `month_end` как `pd.Timestamp` (конец месяца 23:59:59 для фильтров).
-4. Разрешение путей:
-   - `person_out` → `data/stg/person/{YYYY-MM-01}.parquet`;
-   - `sim_out` → `person_sim/…`;
-   - `ledger_out` → `person_id_ledger/…`;
-   - `operator_out`, `imsi_month_path`, `imei_month_path`.
+4. Разрешение путей: `person_out`, месячные `stg_msisdn_imsi` / `stg_msisdn_imei`, списки excl.
 5. Загрузка контракта полей из [`person.json`](../../src/mobile/schema/stg/person.json).
-6. Старт `timed_stage` и счётчиков (`src_rows_before_exclusions`, `excluded_m2m_tac_rows`, …).
+6. Старт `timed_stage` и счётчиков (`src_rows_read`, `excluded_excl_rows`, `binding_days_synced`, …).
 
 ### Шаг 1. Чтение `src_person` (профиль)
 
-1. `read_src_person_month(..., mode="latest_snapshot")`:
+1. `_read_src_person_latest_snapshot(...)`:
    - обход `load_day=*` в `[period_start, period_end]` с `_SUCCESS`;
    - выбор **максимального** `load_day`;
    - один `person.parquet` (не concat всех срезов).
@@ -219,7 +196,7 @@ uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
 2. **Пересечение с месяцем:** `actually_from <= month_end` и `actually_to >= month_start`; `actually_to` без значения → `2999-12-31`.
 3. **Нормализация ID:**
    - `msisdn` ← `normalize_msisdn(isdn)`;
-   - `imsi`, `imei`, `iccid`, `contract_number` — строковые поля;
+   - `imsi`, `imei`, `iccid` — строковые поля;
    - `operator_id` ← `operator_Id`.
 4. **Binding-fill** на момент `binding_at` = конец последнего дня месяца (`_enrich_identifiers_from_bindings`):
    - для пустого `imsi` — lookup по `msisdn` в `stg_msisdn_imsi` (интервал содержит `at`);
@@ -234,13 +211,13 @@ uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
 2. **Узлы co-occurrence** на каждой строке `src_person`:
    - `_unite_pair_column`: `msisdn↔imsi`, `msisdn↔imei`, `msisdn↔iccid`;
    - `bio_key` = `bio:фамилия|имя|отчество|дата_рождения|цифры_документа` (casefold, только при валидном ФИО+ДР);
-   - `msisdn↔bio`, `msisdn↔contract:{номер}`.
+   - `msisdn↔bio`.
 3. **Рёбра из binding** (`binding_edges_in_month`):
    - все пары `(msisdn, imsi)` / `(msisdn, imei)`, у которых `[valid_from, valid_to]` пересекает `[month_start, month_end]`.
 4. **Рёбра MNP** (`operator_observation_edges`):
    - для каждой строки operator-витрины: `union(msisdn:…, imsi:…)` если IMSI не пуст.
 5. **Канонический ключ кластера** (`canonical_cluster_key`):
-   - приоритет: первый лексикографически `bio:` → `contract:` → `iccid:` → иначе `min(все узлы кластера)`.
+   - приоритет: первый лексикографически `bio:` → `iccid:` → иначе `min(все узлы кластера)`.
 6. Для каждой строки: `roots` = `find()` по всем узлам строки; `person_cluster_key` = canonical корня `min(roots)`; `person_confidence` по типам узлов в кластере.
 
 ### Шаг 9. Назначение `person_id` (`assign_person_ids_with_ledger`)
@@ -306,8 +283,8 @@ uv run mobile build-stg-msisdn-imsi-operator --report-date 2025-01-01 \
 | Артефакт | Путь |
 |----------|------|
 | ETL | [`person.py`](../../src/mobile/pipelines/stg/person.py) |
-| Граф / ID | [`person_identity.py`](../../src/mobile/pipelines/stg/person_identity.py) |
-| Чтение src | [`src_person_month.py`](../../src/mobile/pipelines/stg/src_person_month.py) |
-| DQ | [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) |
+| Граф / ID | [`person.py`](../../src/mobile/pipelines/stg/person.py) (`_UnionFind`, `_assign_person_ids`) |
+| Чтение src | [`person.py`](../../src/mobile/pipelines/stg/person.py) (`_read_src_person_latest_snapshot`) |
+| DQ | [`dq_stg_person.md`](../dq/stg/dq_stg_person.md) · `uv run mobile dq-stg-person` |
 | Источник | [`build_src_person.md`](../src/build_src_person.md) |
 | Пути | [`project_paths.py`](../../src/mobile/project_paths.py) |

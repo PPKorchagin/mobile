@@ -1,4 +1,4 @@
-"""DQ витрин ``stg_person`` и ``stg_person_sim`` за отчётный месяц."""
+"""DQ месячной витрины ``stg_person``."""
 
 from __future__ import annotations
 
@@ -11,13 +11,12 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.person import STG_PERSON_FIELDS, STG_PERSON_SIM_FIELDS
+from mobile.pipelines.stg.person import STG_PERSON_FIELDS
 from mobile.project_paths import (
     DEFAULT_STG_OKSM_OUTPUT_PATH,
+    report_month_start,
     resolve_project_path,
-    stg_person_id_ledger_output_path,
-    stg_person_output_path,
-    stg_person_sim_output_path,
+    resolve_stg_monthly_parquet_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,11 +27,9 @@ _DIGITS_RE = re.compile(r"^\d+$")
 _CITIZENSHIP_RE = re.compile(r"^\d{3}$")
 _GENDER_VALUES = frozenset({"M", "F", "U"})
 _CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
-_NODE_PREFIXES = ("bio:", "contract:", "iccid:", "msisdn:", "imsi:", "imei:")
 _LOW_CONFIDENCE_WARN_RATIO = 0.30
 
 _PERSON_COLUMNS = [field["name"] for field in STG_PERSON_FIELDS]
-_PERSON_SIM_COLUMNS = [field["name"] for field in STG_PERSON_SIM_FIELDS]
 _PERSON_CRITICAL_NULLS = (
     "person_id",
     "person_cluster_key",
@@ -48,20 +45,13 @@ _PERSON_DEMO_NULLS = ("gender", "age", "citizenship")
 def run_dq(
     *,
     report_date: date,
-    stg_person_path: str | Path | None = None,
-    stg_person_sim_path: str | Path | None = None,
+    stg_person_path: str | Path,
     stg_oksm_path: str | Path | None = None,
-    stg_person_ledger_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Read-only DQ ``stg_person`` / ``stg_person_sim`` (и опционально ledger) за ``report_date``."""
-    person_path = _resolve_person_path(report_date, stg_person_path)
-    sim_path = _resolve_sim_path(report_date, stg_person_sim_path)
+    """Read-only DQ ``stg_person``; ``report_date`` и ``stg_person_path`` обязательны (пути задаёт CLI)."""
+    report_month = report_month_start(report_date)
+    person_path = _resolve_source_path(report_date=report_month, stg_person_path=stg_person_path)
     oksm_path = resolve_project_path(stg_oksm_path or DEFAULT_STG_OKSM_OUTPUT_PATH)
-    ledger_path = (
-        resolve_project_path(stg_person_ledger_path)
-        if stg_person_ledger_path is not None
-        else stg_person_id_ledger_output_path(report_date)
-    )
 
     checks = 0
     warnings = 0
@@ -76,60 +66,39 @@ def run_dq(
             failed += 1
         _emit_log(check, status, metrics)
 
+    base: dict[str, Any] = {
+        "report_date": report_month.isoformat(),
+        "stg_person_path": str(person_path),
+    }
+    if report_date != report_month:
+        base["report_date_input"] = report_date.isoformat()
+
     if not person_path.exists():
         emit(
             "dataset_presence",
             "failed",
-            {
-                "reason": "parquet_not_found",
-                "report_date": report_date.isoformat(),
-                "stg_person_path": str(person_path),
-            },
+            {**base, "reason": "parquet_not_found"},
         )
         _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
-        return _result(
-            report_date=report_date,
-            person_path=person_path,
-            sim_path=sim_path,
-            checks=checks,
-            warnings=warnings,
-            failed=failed,
-        )
+        return {
+            "status": "failed",
+            "total_checks": checks,
+            "warning_checks": warnings,
+            "failed_checks": failed,
+            **base,
+        }
 
     person = pd.read_parquet(person_path)
     emit(
         "dataset_basic",
         "ok",
         {
-            "report_date": report_date.isoformat(),
-            "stg_person_path": str(person_path),
+            **base,
             "row_count": int(len(person)),
             "column_count": int(len(person.columns)),
             "distinct_person_id": int(person["person_id"].nunique()) if "person_id" in person.columns else 0,
         },
     )
-
-    if not sim_path.exists():
-        emit(
-            "person_sim_presence",
-            "failed",
-            {
-                "reason": "parquet_not_found",
-                "stg_person_sim_path": str(sim_path),
-            },
-        )
-        sim = pd.DataFrame(columns=_PERSON_SIM_COLUMNS)
-    else:
-        sim = pd.read_parquet(sim_path)
-        emit(
-            "person_sim_basic",
-            "ok",
-            {
-                "stg_person_sim_path": str(sim_path),
-                "row_count": int(len(sim)),
-                "column_count": int(len(sim.columns)),
-            },
-        )
 
     missing_columns = [col for col in _PERSON_COLUMNS if col not in person.columns]
     extra_columns = [col for col in person.columns if col not in _PERSON_COLUMNS]
@@ -142,19 +111,6 @@ def run_dq(
             "extra_columns": extra_columns,
         },
     )
-
-    sim_missing = [col for col in _PERSON_SIM_COLUMNS if col not in sim.columns]
-    sim_extra = [col for col in sim.columns if col not in _PERSON_SIM_COLUMNS] if len(sim.columns) else []
-    if sim_path.exists():
-        emit(
-            "schema_columns_sim",
-            "failed" if sim_missing else ("warning" if sim_extra else "ok"),
-            {
-                "expected_columns": _PERSON_SIM_COLUMNS,
-                "missing_columns": sim_missing,
-                "extra_columns": sim_extra,
-            },
-        )
 
     for field in _PERSON_CRITICAL_NULLS:
         if field not in person.columns:
@@ -178,15 +134,14 @@ def run_dq(
 
     if person.empty:
         _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
-        return _result(
-            report_date=report_date,
-            person_path=person_path,
-            sim_path=sim_path,
-            checks=checks,
-            warnings=warnings,
-            failed=failed,
-            row_count=0,
-        )
+        return {
+            "status": "failed" if failed else ("warning" if warnings else "ok"),
+            "total_checks": checks,
+            "warning_checks": warnings,
+            "failed_checks": failed,
+            **base,
+            "row_count": 0,
+        }
 
     if "person_id" in person.columns:
         pid = person["person_id"].astype("string")
@@ -210,25 +165,14 @@ def run_dq(
     if "report_date" in person.columns:
         rd = pd.to_datetime(person["report_date"], errors="coerce").dt.date
         distinct = rd.dropna().unique().tolist()
-        single = len(distinct) == 1 and distinct[0] == report_date
+        single = len(distinct) == 1 and distinct[0] == report_month
         emit(
             "key.report_date_single",
             "failed" if not single else "ok",
             {
                 "distinct_report_date": [d.isoformat() for d in distinct],
-                "expected_report_date": report_date.isoformat(),
+                "expected_report_date": report_month.isoformat(),
             },
-        )
-
-    if "person_id" in person.columns and "person_id" in sim.columns and not sim.empty:
-        person_ids = set(person["person_id"].astype("string").dropna())
-        sim_ids = set(sim["person_id"].astype("string").dropna())
-        orphans = sim_ids - person_ids
-        orphan_rows = int(sim["person_id"].astype("string").isin(orphans).sum()) if orphans else 0
-        emit(
-            "key.person_sim_orphans",
-            "failed" if orphan_rows > 0 else "ok",
-            {"orphan_sim_rows": orphan_rows, "orphan_person_id_count": len(orphans)},
         )
 
     if "gender" in person.columns:
@@ -319,139 +263,19 @@ def run_dq(
             {f"invalid_{col}_count": invalid},
         )
 
-    if (
-        not sim.empty
-        and {"person_id", "sim_count"}.issubset(person.columns)
-        and {"person_id", "imsi", "iccid"}.issubset(sim.columns)
-    ):
-        sim_keys = sim.copy()
-        sim_keys["sim_key"] = sim_keys["imsi"].astype("string") + "|" + sim_keys["iccid"].astype("string").fillna(
-            ""
-        )
-        agg = sim_keys.groupby("person_id", as_index=False).agg(
-            sim_rows=("person_id", "size"),
-            distinct_sim_keys=("sim_key", "nunique"),
-        )
-        merged = person[["person_id", "sim_count"]].merge(agg, on="person_id", how="left")
-        merged["sim_count"] = pd.to_numeric(merged["sim_count"], errors="coerce")
-        mismatch = int((merged["sim_count"] != merged["distinct_sim_keys"]).sum())
-        emit(
-            "sim_count_consistency",
-            "warning" if mismatch > 0 else "ok",
-            {"mismatch_person_count": mismatch},
-        )
-
-    if not sim.empty and {"person_id", "is_primary"}.issubset(sim.columns):
-        primary_counts = sim.groupby("person_id")["is_primary"].apply(
-            lambda values: int(values.fillna(False).astype(bool).sum())
-        )
-        zero_or_many = int((primary_counts != 1).sum())
-        emit(
-            "primary_sim",
-            "failed" if zero_or_many > 0 else "ok",
-            {"person_ids_without_exactly_one_primary": zero_or_many},
-        )
-
-        if {"msisdn", "imsi", "imei"}.issubset(person.columns) and {"msisdn", "imsi", "imei"}.issubset(sim.columns):
-            prim = sim.loc[sim["is_primary"].fillna(False)].copy()
-            prim = prim.drop_duplicates(subset=["person_id"], keep="first")
-            prof = person[["person_id", "msisdn", "imsi", "imei"]].copy()
-            joined = prof.merge(
-                prim[["person_id", "msisdn", "imsi", "imei"]],
-                on="person_id",
-                how="left",
-                suffixes=("_person", "_sim"),
-            )
-            mismatches = 0
-            for col in ("msisdn", "imsi", "imei"):
-                left = _norm_series(joined[f"{col}_person"])
-                right = _norm_series(joined[f"{col}_sim"])
-                both = left.notna() & right.notna()
-                mismatches += int((both & (left != right)).sum())
-            emit(
-                "primary_matches_profile",
-                "warning" if mismatches > 0 else "ok",
-                {"mismatched_identifier_fields": mismatches},
-            )
-
-    if ledger_path.exists() and not person.empty:
-        ledger = pd.read_parquet(ledger_path)
-        emit(
-            "ledger_basic",
-            "ok",
-            {
-                "stg_person_ledger_path": str(ledger_path),
-                "row_count": int(len(ledger)),
-            },
-        )
-        if {"person_id", "node"}.issubset(ledger.columns):
-            ledger_pids = set(ledger["person_id"].astype("string").dropna())
-            person_pids = set(person["person_id"].astype("string").dropna())
-            missing_ledger = person_pids - ledger_pids
-            emit(
-                "ledger.person_coverage",
-                "warning" if missing_ledger else "ok",
-                {"person_ids_without_ledger_nodes": len(missing_ledger)},
-            )
-            nodes = ledger["node"].astype("string").dropna()
-            invalid_nodes = int((~nodes.str.startswith(_NODE_PREFIXES)).sum())
-            emit(
-                "ledger.node_prefix",
-                "warning" if invalid_nodes > 0 else "ok",
-                {"invalid_node_prefix_count": invalid_nodes},
-            )
-
     _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
-    return _result(
-        report_date=report_date,
-        person_path=person_path,
-        sim_path=sim_path,
-        checks=checks,
-        warnings=warnings,
-        failed=failed,
-        row_count=int(len(person)),
-    )
-
-
-def _resolve_person_path(report_date: date, path: str | Path | None) -> Path:
-    if path is None:
-        return stg_person_output_path(report_date)
-    return resolve_project_path(path)
-
-
-def _resolve_sim_path(report_date: date, path: str | Path | None) -> Path:
-    if path is None:
-        return stg_person_sim_output_path(report_date)
-    return resolve_project_path(path)
-
-
-def _norm_series(series: pd.Series) -> pd.Series:
-    return series.astype("string").str.strip().where(series.notna(), pd.NA)
-
-
-def _result(
-    *,
-    report_date: date,
-    person_path: Path,
-    sim_path: Path,
-    checks: int,
-    warnings: int,
-    failed: int,
-    row_count: int | None = None,
-) -> dict[str, Any]:
-    status = "failed" if failed else ("warning" if warnings else "ok")
-    out: dict[str, Any] = {
-        "status": status,
-        "report_date": report_date.isoformat(),
-        "stg_person_path": str(person_path),
-        "stg_person_sim_path": str(sim_path),
+    return {
+        "status": "failed" if failed else ("warning" if warnings else "ok"),
         "total_checks": checks,
         "warning_checks": warnings,
         "failed_checks": failed,
+        **base,
+        "row_count": int(len(person)),
     }
-    if row_count is not None:
-        out["row_count"] = row_count
-    return out
+
+
+def _resolve_source_path(*, report_date: date, stg_person_path: str | Path) -> Path:
+    return resolve_stg_monthly_parquet_path(stg_person_path, report_date)
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:

@@ -30,6 +30,7 @@ from mobile.project_paths import (
     stg_geo_intervals_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
+    stg_person_output_path,
 )
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
@@ -3710,5 +3711,163 @@ def render_stg_geo_intervals_parquet_profile(root: Path, report_date: date) -> p
     else:
         axes[2].axis("off")
     fig.suptitle(f"Профиль parquet stg_geo_intervals ({report_date.isoformat()})", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+_STG_PERSON_GATE_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("key.person_id_unique", "duplicate_person_id_count", "duplicate person_id"),
+    ("key.person_id_format", "invalid_person_id_count", "invalid person_id"),
+    ("domain.gender", "invalid_gender_count", "invalid gender"),
+    ("domain.age", "invalid_age_count", "invalid age"),
+    ("domain.citizenship", "empty_citizenship_count", "empty citizenship"),
+    ("domain.citizenship_oksm", "unknown_citizenship_code_count", "unknown ОКСМ"),
+    ("domain.person_confidence", "invalid_person_confidence_count", "invalid confidence"),
+    ("domain.sim_count", "sim_count_below_one", "sim_count < 1"),
+    ("domain.msisdn_digits", "invalid_msisdn_count", "invalid msisdn"),
+    ("domain.imsi_digits", "invalid_imsi_count", "invalid imsi"),
+    ("domain.imei_digits", "invalid_imei_count", "invalid imei"),
+)
+
+
+def _stg_person_report_month(latest: pd.DataFrame | None) -> date:
+    if latest is not None:
+        for check in ("dataset_basic", "dataset_presence"):
+            metrics = _metrics_for_check(latest, check)
+            raw = metrics.get("report_date")
+            if raw:
+                return date.fromisoformat(str(raw))
+    parent = stg_person_output_path(DEFAULT_SRC_END_DATE).parent
+    if parent.is_dir():
+        files = sorted(parent.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if files:
+            try:
+                return date.fromisoformat(files[0].stem)
+            except ValueError:
+                pass
+    return DEFAULT_SRC_END_DATE.replace(day=1)
+
+
+def render_stg_person_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(null_ratio_frame(latest), ax=axes[1, 0])
+    gates = _binding_gate_counts_frame(latest, _STG_PERSON_GATE_SPECS)
+    if gates.empty:
+        axes[1, 1].set_title("Gate counts — нет данных")
+        axes[1, 1].axis("off")
+    else:
+        colors = [
+            "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+            for s in gates["status"]
+        ]
+        work = gates.sort_values("count", ascending=True)
+        axes[1, 1].barh(work["metric"], work["count"], color=colors, alpha=0.88)
+        axes[1, 1].set_xlabel("count")
+        axes[1, 1].set_title("Gate-проверки (DQ)")
+    rows = int(basic.get("row_count") or 0)
+    persons = int(basic.get("distinct_person_id") or 0)
+    conf = _metrics_for_check(latest, "distribution.person_confidence")
+    low = conf.get("low_confidence_ratio")
+    suffix = f", low_conf={low}" if low is not None else ""
+    month = basic.get("report_date", "")
+    fig.suptitle(
+        f"DQ STG PERSON — month={month}, rows={rows:,}, person_id={persons:,}{suffix}",
+        fontsize=12,
+        y=1.02,
+    )
+    fig.tight_layout()
+    return fig
+
+
+def display_stg_person_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, stg_person_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet)
+    try:
+        rel = parquet.relative_to(root)
+    except ValueError:
+        rel = parquet
+    print(f"stg_person ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    if df.empty:
+        print("distinct person_id: 0")
+        return
+    print(f"distinct person_id: {df['person_id'].nunique():,}")
+    if "person_confidence" in df.columns:
+        display(
+            df["person_confidence"]
+            .astype("string")
+            .str.lower()
+            .value_counts()
+            .to_frame("rows")
+        )
+    if "sim_count" in df.columns:
+        sim = pd.to_numeric(df["sim_count"], errors="coerce")
+        print(
+            f"sim_count: min={int(sim.min())}, median={float(sim.median()):.1f}, max={int(sim.max())}"
+        )
+    if "gender" in df.columns:
+        print("\n--- gender ---")
+        display(df["gender"].astype("string").value_counts().to_frame("rows"))
+    if "operator_id" in df.columns:
+        print("\n--- operator_id (top) ---")
+        display(df["operator_id"].value_counts().head(12).to_frame("rows"))
+
+
+def render_stg_person_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, stg_person_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    import pyarrow.parquet as pq
+
+    available = set(pq.read_schema(parquet).names)
+    read_cols = [c for c in ("gender", "person_confidence", "sim_count", "operator_id") if c in available]
+    df = pd.read_parquet(parquet, columns=read_cols) if read_cols else pd.read_parquet(parquet)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    if df.empty:
+        for ax in axes.flat:
+            ax.set_title("нет данных (пустой parquet)")
+            ax.axis("off")
+        fig.suptitle(f"stg_person — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.tight_layout()
+        return fig
+    if "gender" in df.columns:
+        g = df["gender"].astype("string").value_counts()
+        axes[0, 0].pie(g.values, labels=g.index.astype(str), autopct="%1.1f%%", startangle=90)
+        axes[0, 0].set_title("gender")
+    else:
+        axes[0, 0].axis("off")
+    if "person_confidence" in df.columns:
+        c = df["person_confidence"].astype("string").str.lower().value_counts()
+        colors = {"high": "#2ca02c", "medium": "#ff7f0e", "low": "#d62728"}
+        bar_colors = [colors.get(str(lbl), "#9467bd") for lbl in c.index.astype(str)]
+        axes[0, 1].bar(c.index.astype(str), c.values, color=bar_colors, alpha=0.88)
+        axes[0, 1].set_title("person_confidence")
+        plt.setp(axes[0, 1].get_xticklabels(), rotation=15, ha="right")
+    else:
+        axes[0, 1].axis("off")
+    if "sim_count" in df.columns:
+        sim = pd.to_numeric(df["sim_count"], errors="coerce").dropna()
+        if len(sim):
+            bins = sorted(set([1, 2, 3, 5, 10, 20, max(int(sim.max()), 21)]))
+            axes[1, 0].hist(sim, bins=bins, color="#1f77b4", alpha=0.85, edgecolor="white")
+            axes[1, 0].set_xlabel("sim_count")
+            axes[1, 0].set_ylabel("persons")
+            axes[1, 0].set_title("SIM на персону")
+        else:
+            axes[1, 0].axis("off")
+    else:
+        axes[1, 0].axis("off")
+    if "operator_id" in df.columns:
+        op = df["operator_id"].value_counts().head(10)
+        axes[1, 1].barh(op.index.astype(str), op.values, color="#9467bd", alpha=0.88)
+        axes[1, 1].set_xlabel("persons")
+        axes[1, 1].set_title("Top operator_id")
+    else:
+        axes[1, 1].axis("off")
+    fig.suptitle(f"stg_person — {report_month.isoformat()}", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig

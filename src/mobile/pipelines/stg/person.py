@@ -1,44 +1,43 @@
-"""Сборка ``stg_person``, ``stg_person_sim``, ``stg_person_id_ledger`` за месяц."""
+"""Сборка месячной витрины ``stg_person`` из ``src_person``, binding-витрин и списков исключений."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.pipelines.stg import msisdn_imei, msisdn_imsi
-from mobile.pipelines.stg.person_identity import (
-    UnionFind,
-    assign_person_ids_with_ledger,
-    binding_edges_in_month,
-    canonical_cluster_key,
-    node,
-    operator_observation_edges,
-    person_confidence_for_nodes,
-    str_field,
+from mobile.pipelines.stg.oksm import OksmLookup, load_lookup
+from mobile.pipelines.stg.subscriber_ids import (
+    normalize_imei,
+    normalize_imsi,
+    normalize_msisdn,
     to_digit_string_series,
 )
-from mobile.pipelines.stg.oksm import OksmLookup, load_lookup
-from mobile.pipelines.stg.src_person_month import read_src_person_month
-from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_imsi, normalize_msisdn
 from mobile.project_paths import (
+    DEFAULT_SRC_EXCL_IMEI_OUTPUT,
+    DEFAULT_SRC_EXCL_IMSI_OUTPUT,
+    DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
     DEFAULT_STG_OKSM_OUTPUT_PATH,
     DEFAULT_STG_PERSON_SCHEMA_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
+    SRC_PERSON_LAYOUT_TEMPLATE,
+    SRC_PERSON_SUCCESS_FLAG,
     resolve_project_path,
+    resolve_stg_monthly_parquet_path,
     stg_geo_all_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
-    stg_person_id_ledger_output_path,
     stg_person_output_path,
-    stg_person_sim_output_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,19 +46,288 @@ _OPEN_ACTUALLY_TO = pd.Timestamp("2999-12-31 23:59:59")
 
 STG_PERSON_TABLE = "stg_person"
 STG_PERSON_FIELDS: list[dict[str, str]] = []
-STG_PERSON_SIM_FIELDS: list[dict[str, str]] = [
-    {"name": "report_date", "type": "date"},
-    {"name": "person_id", "type": "string"},
-    {"name": "msisdn", "type": "string"},
-    {"name": "imsi", "type": "string"},
-    {"name": "imei", "type": "string"},
-    {"name": "iccid", "type": "string"},
-    {"name": "operator_id", "type": "long"},
-    {"name": "contract_number", "type": "string"},
-    {"name": "actually_from", "type": "timestamp"},
-    {"name": "actually_to", "type": "timestamp"},
-    {"name": "is_primary", "type": "bool"},
+
+
+def _identity_node(prefix: str, value: Any) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return f"{prefix}:{text}"
+
+
+def _str_field(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except TypeError:
+        pass
+    text = str(value).strip()
+    return "" if text.lower() in ("<na>", "nan", "none") else text
+
+
+class _UnionFind:
+    def __init__(self) -> None:
+        self._parent: dict[str, str] = {}
+
+    def find(self, item: str) -> str:
+        if item not in self._parent:
+            self._parent[item] = item
+        parent = self._parent[item]
+        if parent != item:
+            self._parent[item] = self.find(parent)
+        return self._parent[item]
+
+    def union(self, left: str, right: str) -> None:
+        root_left = self.find(left)
+        root_right = self.find(right)
+        if root_left == root_right:
+            return
+        if root_left < root_right:
+            self._parent[root_right] = root_left
+        else:
+            self._parent[root_left] = root_right
+
+    def members(self) -> dict[str, set[str]]:
+        clusters: dict[str, set[str]] = {}
+        for item in self._parent:
+            root = self.find(item)
+            clusters.setdefault(root, set()).add(item)
+        return clusters
+
+
+def _canonical_cluster_key(cluster_nodes: set[str]) -> str:
+    """Приоритет: bio → iccid → технические id."""
+    bios = sorted(n for n in cluster_nodes if n.startswith("bio:"))
+    if bios:
+        return bios[0]
+    iccids = sorted(n for n in cluster_nodes if n.startswith("iccid:"))
+    if iccids:
+        return iccids[0]
+    return min(cluster_nodes)
+
+
+def _person_confidence_for_nodes(nodes: set[str]) -> str:
+    if any(n.startswith("bio:") for n in nodes):
+        return "high"
+    if any(n.startswith("iccid:") for n in nodes):
+        return "medium"
+    return "low"
+
+
+def _build_person_id_from_cluster_key(cluster_key: str) -> str:
+    payload = str(cluster_key).strip()
+    if not payload:
+        return "prs_unknown"
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+    return f"prs_{digest}"
+
+
+def _assign_person_ids(
+    cluster_keys: pd.Series,
+    *,
+    previous_person: pd.DataFrame | None = None,
+) -> pd.Series:
+    key_to_person: dict[str, str] = {}
+    if previous_person is not None and not previous_person.empty:
+        if {"person_id", "person_cluster_key"}.issubset(previous_person.columns):
+            prev = previous_person[["person_id", "person_cluster_key"]].dropna().drop_duplicates(
+                subset=["person_cluster_key"], keep="first"
+            )
+            for row in prev.itertuples(index=False):
+                key_to_person[str(row.person_cluster_key)] = str(row.person_id)
+
+    person_ids: list[str] = []
+    for cluster_key in cluster_keys:
+        key = str(cluster_key)
+        assigned = key_to_person.get(key)
+        if assigned is None:
+            assigned = _build_person_id_from_cluster_key(key)
+        key_to_person[key] = assigned
+        person_ids.append(assigned)
+    return pd.Series(person_ids, index=cluster_keys.index, dtype="string")
+
+
+def _binding_edges_in_month(
+    binding: pd.DataFrame,
+    *,
+    left_kind: str,
+    right_kind: str,
+    month_start: pd.Timestamp,
+    month_end: pd.Timestamp,
+    open_actually_to: pd.Timestamp,
+) -> list[tuple[str, str]]:
+    if binding.empty:
+        return []
+    left_col, right_col = left_kind, right_kind
+    if left_col not in binding.columns or right_col not in binding.columns:
+        return []
+
+    use_cols = [left_col, right_col, "valid_from", "valid_to"]
+    frame = binding[use_cols].copy()
+    normalizers = {
+        "msisdn": normalize_msisdn,
+        "imsi": normalize_imsi,
+        "imei": normalize_imei,
+    }
+    frame[left_col] = normalizers[left_kind](frame[left_col].astype("string"))
+    frame[right_col] = normalizers[right_kind](frame[right_col].astype("string"))
+    frame["valid_from"] = pd.to_datetime(frame["valid_from"], errors="coerce")
+    frame["valid_to"] = pd.to_datetime(frame["valid_to"], errors="coerce").fillna(open_actually_to)
+    frame = frame.dropna(subset=[left_col, right_col, "valid_from", "valid_to"])
+    overlaps = (frame["valid_from"] <= month_end) & (frame["valid_to"] >= month_start)
+    frame = frame.loc[overlaps]
+    edges: list[tuple[str, str]] = []
+    for left_value, right_value in zip(frame[left_col], frame[right_col], strict=True):
+        left_node = _identity_node(left_kind, left_value)
+        right_node = _identity_node(right_kind, right_value)
+        if left_node is not None and right_node is not None:
+            edges.append((left_node, right_node))
+    return edges
+
+
+def _operator_observation_edges(
+    operator_binding: pd.DataFrame,
+    *,
+    month_start: pd.Timestamp,
+    month_end: pd.Timestamp,
+    open_actually_to: pd.Timestamp,
+) -> list[tuple[str, str]]:
+    if operator_binding.empty:
+        return []
+    frame = operator_binding.copy()
+    frame["msisdn"] = normalize_msisdn(to_digit_string_series(frame.get("msisdn")))
+    frame["imsi"] = normalize_imsi(to_digit_string_series(frame.get("imsi")))
+    frame["valid_from"] = pd.to_datetime(frame["valid_from"], errors="coerce")
+    frame["valid_to"] = pd.to_datetime(frame["valid_to"], errors="coerce").fillna(open_actually_to)
+    frame = frame.dropna(subset=["msisdn", "valid_from", "valid_to"])
+    overlaps = (frame["valid_from"] <= month_end) & (frame["valid_to"] >= month_start)
+    frame = frame.loc[overlaps]
+    edges: list[tuple[str, str]] = []
+    for row in frame.itertuples(index=False):
+        msisdn_node = _identity_node("msisdn", getattr(row, "msisdn", None))
+        if msisdn_node is None:
+            continue
+        imsi_val = getattr(row, "imsi", None)
+        if imsi_val is not None and not pd.isna(imsi_val):
+            imsi_node = _identity_node("imsi", imsi_val)
+            if imsi_node is not None:
+                edges.append((msisdn_node, imsi_node))
+    return edges
+
+
+_SRC_PERSON_READ_COLUMNS = [
+    "operator_Id",
+    "isdn",
+    "imsi",
+    "imei",
+    "iccid",
+    "contract_number",
+    "client_type",
+    "actually_from",
+    "actually_to",
+    "birth_day",
+    "first_name",
+    "second_name",
+    "last_name",
+    "dul_department",
+    "document",
 ]
+
+
+def _resolve_person_layout_root(layout: str) -> Path:
+    path = resolve_project_path(layout)
+    parts = path.parts
+    idx = next((i for i, part in enumerate(parts) if "{" in part and "}" in part), None)
+    if idx is None:
+        return path.parent if path.suffix else path
+    return Path(*parts[:idx])
+
+
+def _parse_src_person_load_day(day_dir: Path, *, year: int, month: int) -> date | None:
+    prefix = "load_day="
+    if not day_dir.name.startswith(prefix):
+        return None
+    try:
+        day_num = int(day_dir.name[len(prefix) :])
+    except ValueError:
+        return None
+    if day_num < 1 or day_num > 31:
+        return None
+    try:
+        return date(year, month, day_num)
+    except ValueError:
+        return None
+
+
+def _list_success_person_parquets_in_period(
+    *,
+    root: Path,
+    period_start: date,
+    period_end: date,
+) -> list[tuple[date, Path]]:
+    year, month = period_start.year, period_start.month
+    month_dir = root / f"load_year={year:04d}" / f"load_month={month:02d}"
+    if not month_dir.exists():
+        return []
+
+    candidates: list[tuple[date, Path]] = []
+    for day_dir in sorted(month_dir.glob("load_day=*")):
+        load_day = _parse_src_person_load_day(day_dir, year=year, month=month)
+        if load_day is None or load_day < period_start or load_day > period_end:
+            continue
+        if not (day_dir / SRC_PERSON_SUCCESS_FLAG).exists():
+            continue
+        parquet_path = day_dir / "person.parquet"
+        if parquet_path.exists():
+            candidates.append((load_day, parquet_path))
+    return candidates
+
+
+def _read_src_person_latest_snapshot(
+    *,
+    period_start: date,
+    period_end: date,
+    src_person_path: str | Path | None,
+) -> tuple[pd.DataFrame, list[date]]:
+    """Последний ``load_day`` с ``_SUCCESS`` за период (или один parquet-файл)."""
+    if src_person_path is not None:
+        resolved = resolve_project_path(src_person_path)
+        if resolved.is_file():
+            try:
+                frame = pd.read_parquet(resolved, columns=_SRC_PERSON_READ_COLUMNS)
+            except Exception:
+                logger.exception("build-stg-person: failed to read src_person at %s", resolved)
+                return pd.DataFrame(columns=_SRC_PERSON_READ_COLUMNS), []
+            return frame, []
+
+    root = (
+        _resolve_person_layout_root(SRC_PERSON_LAYOUT_TEMPLATE)
+        if src_person_path is None
+        else resolve_project_path(src_person_path)
+    )
+    candidates = _list_success_person_parquets_in_period(
+        root=root,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    if not candidates:
+        raise FileNotFoundError(
+            f"No src_person snapshots with {SRC_PERSON_SUCCESS_FLAG!r} for "
+            f"{period_start.isoformat()}..{period_end.isoformat()} under {root}"
+        )
+
+    latest_day, latest_path = max(candidates, key=lambda item: item[0])
+    latest = pd.read_parquet(latest_path, columns=_SRC_PERSON_READ_COLUMNS)
+    logger.info(
+        "build-stg-person: src_person load_day=%s rows=%s",
+        latest_day.isoformat(),
+        len(latest),
+    )
+    return latest, [latest_day]
 
 
 def _load_schema_contract(schema_path: Path) -> None:
@@ -98,13 +366,13 @@ def run_build(
     src_person_path: str | Path | None = None,
     stg_msisdn_imsi_path: str | Path | None = None,
     stg_msisdn_imei_path: str | Path | None = None,
+    src_excl_imsi_path: str | Path | None = None,
+    src_excl_imei_path: str | Path | None = None,
+    src_excl_msisdn_path: str | Path | None = None,
     stg_tac_path: str | Path | None = None,
     stg_oksm_path: str | Path | None = None,
     output_path: str | Path | None = None,
-    person_sim_path: str | Path | None = None,
-    person_ledger_path: str | Path | None = None,
-    build_bindings_month: bool = True,
-    build_operator_vitrine: bool = True,
+    sync_bindings_from_geo: bool = True,
 ) -> dict[str, Any]:
     command = "build-stg-person"
     perf: dict[str, Any] = {}
@@ -115,29 +383,7 @@ def run_build(
     month_end = _month_end_ts(report_month)
 
     person_out = resolve_project_path(output_path) if output_path else stg_person_output_path(report_month)
-    sim_out = resolve_project_path(person_sim_path) if person_sim_path else stg_person_sim_output_path(report_month)
-    ledger_out = resolve_project_path(person_ledger_path) if person_ledger_path else stg_person_id_ledger_output_path(
-        report_month
-    )
     field_names = [f["name"] for f in STG_PERSON_FIELDS]
-
-    with timed_stage("read_src_person_sec", perf):
-        raw, src_load_days = read_src_person_month(
-            report_month=report_month,
-            period_start=period_start,
-            period_end=period_end,
-            src_person_path=src_person_path,
-            mode="latest_snapshot",
-        )
-    src_rows_before_exclusions = int(len(raw))
-
-    tac_path = resolve_project_path(stg_tac_path) if stg_tac_path is not None else DEFAULT_STG_TAC_OUTPUT_PATH
-    oksm_path = resolve_project_path(stg_oksm_path) if stg_oksm_path is not None else DEFAULT_STG_OKSM_OUTPUT_PATH
-    with timed_stage("load_oksm_sec", perf):
-        oksm_lookup = load_lookup(oksm_path)
-    with timed_stage("exclusions_sec", perf):
-        m2m_tacs = _read_m2m_tac_set(tac_path)
-        raw, excluded_m2m_tac_rows = _exclude_m2m_by_tac(raw, m2m_tacs=m2m_tacs)
 
     imsi_month_path = _resolve_monthly_binding_path(
         report_month=report_month,
@@ -149,30 +395,51 @@ def run_build(
         kind="imei",
         explicit_path=stg_msisdn_imei_path,
     )
-    with timed_stage("load_bindings_sec", perf):
-        if build_bindings_month and (not imsi_month_path.exists() or not imei_month_path.exists()):
-            _refresh_month_bindings_from_geo(report_month)
 
-    with timed_stage("build_msisdn_imsi_mnp_sec", perf):
-        if build_operator_vitrine:
-            raw_operator, _ = read_src_person_month(
-                report_month=report_month,
-                period_start=period_start,
-                period_end=period_end,
-                src_person_path=src_person_path,
-                mode="all_snapshots",
+    binding_days_synced = 0
+    if sync_bindings_from_geo:
+        with timed_stage("sync_bindings_sec", perf):
+            binding_days_synced = _sync_monthly_bindings_from_geo(
+                report_month,
+                imsi_month_path=imsi_month_path,
+                imei_month_path=imei_month_path,
             )
-            raw_operator, _ = _exclude_m2m_by_tac(raw_operator, m2m_tacs=m2m_tacs)
-            imsi_mnp = msisdn_imsi.build_imsi_intervals_from_src(raw_operator, report_month=report_month)
-            imsi_month_path.parent.mkdir(parents=True, exist_ok=True)
-            imsi_mnp.to_parquet(imsi_month_path, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
+
+    with timed_stage("read_src_person_sec", perf):
+        raw, src_load_days = _read_src_person_latest_snapshot(
+            period_start=period_start,
+            period_end=period_end,
+            src_person_path=src_person_path,
+        )
+    src_rows_before_exclusions = int(len(raw))
+
+    tac_path = resolve_project_path(stg_tac_path) if stg_tac_path is not None else DEFAULT_STG_TAC_OUTPUT_PATH
+    oksm_path = resolve_project_path(stg_oksm_path) if stg_oksm_path is not None else DEFAULT_STG_OKSM_OUTPUT_PATH
+    excl_imsi_path = resolve_project_path(src_excl_imsi_path or DEFAULT_SRC_EXCL_IMSI_OUTPUT)
+    excl_imei_path = resolve_project_path(src_excl_imei_path or DEFAULT_SRC_EXCL_IMEI_OUTPUT)
+    excl_msisdn_path = resolve_project_path(src_excl_msisdn_path or DEFAULT_SRC_EXCL_MSISDN_OUTPUT)
+
+    with timed_stage("load_oksm_sec", perf):
+        oksm_lookup = load_lookup(oksm_path)
+    with timed_stage("exclusions_sec", perf):
+        excl_sets = _load_excl_sets(excl_imsi_path, excl_imei_path, excl_msisdn_path)
+        raw, excluded_excl_rows = _exclude_src_person_by_excl(raw, excl_sets=excl_sets)
+        m2m_tacs = _read_m2m_tac_set(tac_path)
+        raw, excluded_m2m_tac_rows = _exclude_m2m_by_tac(raw, m2m_tacs=m2m_tacs)
 
     with timed_stage("read_bindings_sec", perf):
-        imsi_binding = _read_binding_parquet(imsi_month_path, kind="imsi")
-        imei_binding = _read_binding_parquet(imei_month_path, kind="imei")
+        imsi_binding = _filter_binding_excl(
+            _read_binding_parquet(imsi_month_path, kind="imsi"),
+            kind="imsi",
+            excl_sets=excl_sets,
+        )
+        imei_binding = _filter_binding_excl(
+            _read_binding_parquet(imei_month_path, kind="imei"),
+            excl_sets=excl_sets,
+        )
     operator_binding = imsi_binding
 
-    prev_ledger = _load_previous_ledger(_previous_report_month(report_month))
+    previous_person = _load_previous_person(_previous_report_month(report_month))
 
     with timed_stage("transform_sec", perf):
         work, binding_fill, cluster_to_nodes = _prepare_subscriptions(
@@ -183,11 +450,10 @@ def run_build(
             imsi_binding=imsi_binding,
             imei_binding=imei_binding,
             operator_binding=operator_binding,
-            prev_ledger=prev_ledger,
+            previous_person=previous_person,
         )
-        person_df, sim_df, ledger_df = _build_outputs(
+        person_df = _build_person_output(
             work,
-            cluster_to_nodes=cluster_to_nodes,
             report_month=report_month,
             field_names=field_names,
             oksm_lookup=oksm_lookup,
@@ -196,10 +462,6 @@ def run_build(
     with timed_stage("write_sec", perf):
         person_out.parent.mkdir(parents=True, exist_ok=True)
         person_df.to_parquet(person_out, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
-        sim_out.parent.mkdir(parents=True, exist_ok=True)
-        sim_df.to_parquet(sim_out, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
-        ledger_out.parent.mkdir(parents=True, exist_ok=True)
-        ledger_df.to_parquet(ledger_out, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
 
     stats: dict[str, Any] = {
         "command": command,
@@ -209,16 +471,17 @@ def run_build(
         "period_end": period_end.isoformat(),
         "src_load_days": len(src_load_days),
         "src_rows_read": src_rows_before_exclusions,
-        "src_rows_after_m2m_exclusion": int(len(raw)),
+        "src_rows_after_excl": int(len(raw)),
+        "excluded_excl_rows": int(excluded_excl_rows),
         "excluded_m2m_tac_rows": int(excluded_m2m_tac_rows),
+        "binding_days_synced": int(binding_days_synced),
         "output_path": str(person_out),
-        "person_sim_path": str(sim_out),
-        "person_ledger_path": str(ledger_out),
         "stg_msisdn_imsi_path": str(imsi_month_path),
         "stg_msisdn_imei_path": str(imei_month_path),
+        "src_excl_imsi_path": str(excl_imsi_path),
+        "src_excl_imei_path": str(excl_imei_path),
+        "src_excl_msisdn_path": str(excl_msisdn_path),
         "stg_rows_written": int(len(person_df)),
-        "person_sim_rows": int(len(sim_df)),
-        "ledger_node_rows": int(len(ledger_df)),
         "distinct_person_id": int(person_df["person_id"].nunique()) if not person_df.empty else 0,
         "binding_imsi_filled": int(binding_fill.get("imsi", 0)),
         "binding_imei_filled": int(binding_fill.get("imei", 0)),
@@ -241,8 +504,13 @@ def _month_days(report_month: date) -> list[date]:
     return days
 
 
-def _refresh_month_bindings_from_geo(report_month: date) -> dict[str, int]:
-    """Пересобрать месячные binding из ``stg_geo_all`` по дням месяца (по одному дню)."""
+def _sync_monthly_bindings_from_geo(
+    report_month: date,
+    *,
+    imsi_month_path: Path,
+    imei_month_path: Path,
+) -> int:
+    """Инкремент месячных ``stg_msisdn_imsi`` / ``stg_msisdn_imei`` из ``stg_geo_all`` по дням месяца."""
     days_run = 0
     for day in _month_days(report_month):
         geo = stg_geo_all_output_path(day)
@@ -251,16 +519,16 @@ def _refresh_month_bindings_from_geo(report_month: date) -> dict[str, int]:
         msisdn_imsi.run_build(
             report_date=day,
             stg_geo_all_path=geo,
-            output_path=stg_msisdn_imsi_output_path(day),
+            output_path=imsi_month_path,
         )
         msisdn_imei.run_build(
             report_date=day,
             stg_geo_all_path=geo,
-            output_path=stg_msisdn_imei_output_path(day),
+            output_path=imei_month_path,
         )
         days_run += 1
-    logger.info("build-stg-person: refreshed bindings for %s days in %s", days_run, report_month.isoformat())
-    return {"binding_days_refreshed": days_run}
+    logger.info("build-stg-person: synced bindings for %s days in %s", days_run, report_month.isoformat())
+    return days_run
 
 
 def _resolve_monthly_binding_path(
@@ -270,10 +538,7 @@ def _resolve_monthly_binding_path(
     explicit_path: str | Path | None,
 ) -> Path:
     if explicit_path is not None:
-        resolved = resolve_project_path(explicit_path)
-        if resolved.is_dir():
-            return resolved / f"{report_month.isoformat()}.parquet"
-        return resolved
+        return resolve_stg_monthly_parquet_path(explicit_path, report_month)
     if kind == "imsi":
         return stg_msisdn_imsi_output_path(report_month)
     return stg_msisdn_imei_output_path(report_month)
@@ -297,11 +562,11 @@ def _read_binding_parquet(path: Path, *, kind: str) -> pd.DataFrame:
     return out.dropna(subset=["msisdn", value_col, "valid_from", "valid_to"]).reset_index(drop=True)
 
 
-def _load_previous_ledger(prev_month: date) -> pd.DataFrame | None:
-    path = stg_person_id_ledger_output_path(prev_month)
+def _load_previous_person(prev_month: date) -> pd.DataFrame | None:
+    path = stg_person_output_path(prev_month)
     if not path.exists():
         return None
-    return pd.read_parquet(path, columns=["person_id", "person_cluster_key", "node"])
+    return pd.read_parquet(path, columns=["person_id", "person_cluster_key"])
 
 
 def _read_m2m_tac_set(tac_path: Path) -> set[str]:
@@ -323,6 +588,60 @@ def _exclude_m2m_by_tac(raw: pd.DataFrame, *, m2m_tacs: set[str]) -> tuple[pd.Da
     return raw.loc[~m2m_mask].copy(), excluded_rows
 
 
+@dataclass(frozen=True)
+class _ExclSets:
+    msisdn: set[str]
+    imsi: set[str]
+    imei: set[str]
+
+
+def _load_excl_sets(imsi_path: Path, imei_path: Path, msisdn_path: Path) -> _ExclSets:
+    return _ExclSets(
+        msisdn=_load_excl_value_set(msisdn_path, normalize=normalize_msisdn),
+        imsi=_load_excl_value_set(imsi_path, normalize=normalize_imsi),
+        imei=_load_excl_value_set(imei_path, normalize=normalize_imei),
+    )
+
+
+def _load_excl_value_set(path: Path, *, normalize: Callable[[pd.Series | None], pd.Series]) -> set[str]:
+    if not path.exists():
+        logger.warning("build-stg-person: excl list not found at %s", path)
+        return set()
+    frame = pd.read_parquet(path, columns=["value"])
+    values = normalize(to_digit_string_series(frame.get("value")))
+    return set(values.dropna().astype("string"))
+
+
+def _exclude_src_person_by_excl(raw: pd.DataFrame, *, excl_sets: _ExclSets) -> tuple[pd.DataFrame, int]:
+    if raw.empty:
+        return raw, 0
+    msisdn = normalize_msisdn(to_digit_string_series(raw.get("isdn")))
+    imsi = normalize_imsi(to_digit_string_series(raw.get("imsi")))
+    imei = normalize_imei(to_digit_string_series(raw.get("imei")))
+    mask = pd.Series(False, index=raw.index)
+    if excl_sets.msisdn:
+        mask |= msisdn.isin(excl_sets.msisdn)
+    if excl_sets.imsi:
+        mask |= imsi.isin(excl_sets.imsi)
+    if excl_sets.imei:
+        mask |= imei.isin(excl_sets.imei)
+    excluded_rows = int(mask.sum())
+    return raw.loc[~mask].copy(), excluded_rows
+
+
+def _filter_binding_excl(binding: pd.DataFrame, *, kind: str, excl_sets: _ExclSets) -> pd.DataFrame:
+    if binding.empty:
+        return binding
+    out = binding.copy()
+    if excl_sets.msisdn:
+        out = out.loc[~out["msisdn"].isin(excl_sets.msisdn)]
+    value_col = "imsi" if kind == "imsi" else "imei"
+    excl_values = excl_sets.imsi if kind == "imsi" else excl_sets.imei
+    if excl_values and value_col in out.columns:
+        out = out.loc[~out[value_col].isin(excl_values)]
+    return out.reset_index(drop=True)
+
+
 def _prepare_subscriptions(
     *,
     raw: pd.DataFrame,
@@ -332,7 +651,7 @@ def _prepare_subscriptions(
     imsi_binding: pd.DataFrame,
     imei_binding: pd.DataFrame,
     operator_binding: pd.DataFrame,
-    prev_ledger: pd.DataFrame | None,
+    previous_person: pd.DataFrame | None,
 ) -> tuple[pd.DataFrame, dict[str, int], dict[str, set[str]]]:
     if raw.empty:
         return pd.DataFrame(), {"imsi": 0, "imei": 0, "msisdn": 0}, {}
@@ -350,7 +669,6 @@ def _prepare_subscriptions(
     work["imsi"] = normalize_imsi(to_digit_string_series(work.get("imsi")))
     work["imei"] = normalize_imei(to_digit_string_series(work.get("imei")))
     work["iccid"] = _norm_str(work.get("iccid"))
-    work["contract_number"] = _norm_str(work.get("contract_number"))
     binding_at = month_end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     work, fill_stats = _enrich_identifiers_from_bindings(
         work=work,
@@ -379,10 +697,9 @@ def _prepare_subscriptions(
     work = work[work["person_cluster_key"].notna()].copy()
     if work.empty:
         return work, fill_stats, cluster_to_nodes
-    work["person_id"] = assign_person_ids_with_ledger(
+    work["person_id"] = _assign_person_ids(
         work["person_cluster_key"],
-        cluster_to_nodes,
-        ledger_nodes=prev_ledger,
+        previous_person=previous_person,
     )
     return work, fill_stats, cluster_to_nodes
 
@@ -409,14 +726,14 @@ def _vectorized_bio_key(work: pd.DataFrame) -> pd.Series:
     return key.where(valid, pd.NA)
 
 
-def _unite_pair_column(uf: UnionFind, frame: pd.DataFrame, left_kind: str, right_kind: str) -> None:
+def _unite_pair_column(uf: _UnionFind, frame: pd.DataFrame, left_kind: str, right_kind: str) -> None:
     left_col, right_col = left_kind, right_kind
     if left_col not in frame.columns or right_col not in frame.columns:
         return
     pairs = frame[[left_col, right_col]].dropna().drop_duplicates()
     for left_value, right_value in zip(pairs[left_col], pairs[right_col], strict=True):
-        left_node = node(left_kind, left_value)
-        right_node = node(right_kind, right_value)
+        left_node = _identity_node(left_kind, left_value)
+        right_node = _identity_node(right_kind, right_value)
         if left_node is not None and right_node is not None:
             uf.union(left_node, right_node)
 
@@ -430,7 +747,7 @@ def _assign_clusters(
     month_start: pd.Timestamp,
     month_end: pd.Timestamp,
 ) -> tuple[pd.DataFrame, dict[str, set[str]]]:
-    uf = UnionFind()
+    uf = _UnionFind()
     work = work.copy()
     work["bio_key"] = _vectorized_bio_key(work)
     _unite_pair_column(uf, work, "msisdn", "imsi")
@@ -438,12 +755,8 @@ def _assign_clusters(
     _unite_pair_column(uf, work, "msisdn", "iccid")
     bio_frame = work.loc[work["bio_key"].notna(), ["msisdn", "bio_key"]].rename(columns={"bio_key": "bio"})
     _unite_pair_column(uf, bio_frame, "msisdn", "bio")
-    if "contract_number" in work.columns:
-        contract_frame = work.loc[work["contract_number"].notna(), ["msisdn", "contract_number"]].copy()
-        contract_frame["contract"] = "contract:" + contract_frame["contract_number"].astype("string")
-        _unite_pair_column(uf, contract_frame, "msisdn", "contract")
 
-    for left, right in binding_edges_in_month(
+    for left, right in _binding_edges_in_month(
         imsi_binding,
         left_kind="msisdn",
         right_kind="imsi",
@@ -452,7 +765,7 @@ def _assign_clusters(
         open_actually_to=_OPEN_ACTUALLY_TO,
     ):
         uf.union(left, right)
-    for left, right in binding_edges_in_month(
+    for left, right in _binding_edges_in_month(
         imei_binding,
         left_kind="msisdn",
         right_kind="imei",
@@ -461,7 +774,7 @@ def _assign_clusters(
         open_actually_to=_OPEN_ACTUALLY_TO,
     ):
         uf.union(left, right)
-    for left, right in operator_observation_edges(
+    for left, right in _operator_observation_edges(
         operator_binding,
         month_start=month_start,
         month_end=month_end,
@@ -474,7 +787,7 @@ def _assign_clusters(
     root_to_nodes: dict[str, set[str]] = {}
     canonical_to_nodes: dict[str, set[str]] = {}
     for root, nodes in members.items():
-        root_to_canonical[root] = canonical_cluster_key(nodes)
+        root_to_canonical[root] = _canonical_cluster_key(nodes)
         root_to_nodes[root] = nodes
         canon = root_to_canonical[root]
         canonical_to_nodes[canon] = canonical_to_nodes.get(canon, set()) | nodes
@@ -482,19 +795,16 @@ def _assign_clusters(
     def roots_for_row(row: pd.Series) -> list[str]:
         nodes = []
         for prefix, col in (("imsi", "imsi"), ("imei", "imei"), ("msisdn", "msisdn")):
-            item = node(prefix, row.get(col))
+            item = _identity_node(prefix, row.get(col))
             if item is not None:
                 nodes.append(item)
         bio_val = row.get("bio_key")
         if bio_val is not None and not pd.isna(bio_val):
             nodes.append(str(bio_val))
-        contract = str_field(row.get("contract_number"))
-        if contract:
-            nodes.append(f"contract:{contract}")
         iccid_val = row.get("iccid")
-        iccid_node = node("iccid", iccid_val)
-        if iccid_node is not None:
-            nodes.append(iccid_node)
+        iccid_item = _identity_node("iccid", iccid_val)
+        if iccid_item is not None:
+            nodes.append(iccid_item)
         return [uf.find(item) for item in nodes]
 
     cluster_keys: list[str | None] = []
@@ -509,7 +819,7 @@ def _assign_clusters(
         root = min(roots)
         canon = root_to_canonical.get(root, root)
         cluster_keys.append(canon)
-        confidences.append(person_confidence_for_nodes(root_to_nodes.get(root, set())))
+        confidences.append(_person_confidence_for_nodes(root_to_nodes.get(root, set())))
 
     out = work.copy()
     out["person_cluster_key"] = cluster_keys
@@ -517,44 +827,20 @@ def _assign_clusters(
     return out.drop(columns=["bio_key"], errors="ignore"), canonical_to_nodes
 
 
-def _build_outputs(
+def _build_person_output(
     work: pd.DataFrame,
     *,
-    cluster_to_nodes: dict[str, set[str]],
     report_month: date,
     field_names: list[str],
     oksm_lookup: OksmLookup,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     if work.empty:
-        empty_person = pd.DataFrame(columns=field_names)
-        empty_sim = pd.DataFrame(columns=[f["name"] for f in STG_PERSON_SIM_FIELDS])
-        empty_ledger = pd.DataFrame(columns=["report_date", "person_id", "person_cluster_key", "node"])
-        return empty_person, empty_sim, empty_ledger
+        return pd.DataFrame(columns=field_names)
 
     month_start = pd.Timestamp(report_month)
     primary_idx = work.sort_values(["person_id", "actually_from"], ascending=[True, False]).groupby(
         "person_id", sort=False
     ).head(1).index
-
-    sim = work.copy()
-    sim["report_date"] = pd.Timestamp(report_month).date()
-    sim["is_primary"] = sim.index.isin(primary_idx)
-    sim_cols = [f["name"] for f in STG_PERSON_SIM_FIELDS]
-    sim_out = sim[
-        [
-            "report_date",
-            "person_id",
-            "msisdn",
-            "imsi",
-            "imei",
-            "iccid",
-            "operator_id",
-            "contract_number",
-            "actually_from",
-            "actually_to",
-            "is_primary",
-        ]
-    ].reset_index(drop=True)
 
     work["sim_key"] = work["imsi"].astype("string") + "|" + work["iccid"].astype("string").fillna("")
     sim_counts = work.groupby("person_id")["sim_key"].nunique(dropna=True)
@@ -574,28 +860,7 @@ def _build_outputs(
     for col in field_names:
         if col not in person_out.columns:
             person_out[col] = pd.NA
-    person_out = person_out[field_names].reset_index(drop=True)
-
-    ledger_rows: list[dict[str, str]] = []
-    for cluster_key, nodes in cluster_to_nodes.items():
-        person_rows = work.loc[work["person_cluster_key"] == cluster_key, "person_id"]
-        if person_rows.empty:
-            continue
-        person_id = str(person_rows.iloc[0])
-        for item in sorted(nodes):
-            ledger_rows.append(
-                {
-                    "report_date": report_month.isoformat(),
-                    "person_id": person_id,
-                    "person_cluster_key": str(cluster_key),
-                    "node": item,
-                }
-            )
-    ledger_df = pd.DataFrame(ledger_rows)
-    if not ledger_df.empty:
-        ledger_df["report_date"] = pd.to_datetime(ledger_df["report_date"]).dt.date
-
-    return person_out, sim_out, ledger_df
+    return person_out[field_names].reset_index(drop=True)
 
 
 def _enrich_identifiers_from_bindings(
@@ -668,10 +933,8 @@ def _norm_str(series: pd.Series | None) -> pd.Series:
 
 
 def _derive_gender(row: pd.Series) -> str:
-    from mobile.pipelines.stg.person_identity import str_field
-
-    first_name = str_field(row.get("first_name")).lower()
-    second_name = str_field(row.get("second_name")).lower()
+    first_name = _str_field(row.get("first_name")).lower()
+    second_name = _str_field(row.get("second_name")).lower()
     if second_name.endswith(("вна", "ична", "кызы", "оглыкызы")):
         return "F"
     if second_name.endswith(("вич", "оглы")):
@@ -713,11 +976,9 @@ def _derive_citizenship(
     last_name: Any = None,
     oksm_lookup: OksmLookup,
 ) -> str:
-    from mobile.pipelines.stg.person_identity import str_field
-
-    dept = str_field(dul_department).lower()
-    doc = str_field(document).lower()
-    name_blob = " ".join(str_field(x).lower() for x in (last_name, first_name, second_name)).strip()
+    dept = _str_field(dul_department).lower()
+    doc = _str_field(document).lower()
+    name_blob = " ".join(_str_field(x).lower() for x in (last_name, first_name, second_name)).strip()
     combined = " ".join(part for part in (dept, doc, name_blob) if part)
 
     if dept and (hit := oksm_lookup.match_text_tokens(dept, _DEPT_MAP)):
