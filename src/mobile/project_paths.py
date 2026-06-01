@@ -274,6 +274,8 @@ DEFAULT_NB_STG_MSISDN_IMEI_NOTEBOOK_PATH = _NB / "12_stg_msisdn_imei.ipynb"
 DEFAULT_NB_STG_MSISDN_IMEI_EXECUTED_PATH = _DATA_NOTEBOOKS / "12_stg_msisdn_imei.executed.ipynb"
 DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_NOTEBOOK_PATH = _NB / "13_stg_msisdn_imsi_operator.ipynb"
 DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_EXECUTED_PATH = _DATA_NOTEBOOKS / "13_stg_msisdn_imsi_operator.executed.ipynb"
+DEFAULT_NB_STG_GEO_INTERVALS_NOTEBOOK_PATH = _NB / "14_stg_geo_intervals.ipynb"
+DEFAULT_NB_STG_GEO_INTERVALS_EXECUTED_PATH = _DATA_NOTEBOOKS / "14_stg_geo_intervals.executed.ipynb"
 DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
@@ -322,6 +324,23 @@ def stg_msisdn_imei_output_path(day: date) -> Path:
 def stg_bs_output_path() -> Path:
     """``data/stg/bs.parquet``."""
     return PROJECT_ROOT / STG_BS_LAYOUT_TEMPLATE
+
+
+def resolve_stg_daily_parquet_path(base: str | Path, day: date) -> Path:
+    """Файл ``{day}.parquet`` в каталоге или сам ``base``, если передан ``.parquet``."""
+    resolved = resolve_project_path(base)
+    if resolved.suffix.lower() == ".parquet":
+        return resolved
+    return resolved / f"{day.isoformat()}.parquet"
+
+
+def resolve_stg_monthly_parquet_path(base: str | Path, day: date) -> Path:
+    """Файл ``{YYYY-MM-01}.parquet`` в каталоге или сам ``base``, если передан ``.parquet``."""
+    resolved = resolve_project_path(base)
+    if resolved.suffix.lower() == ".parquet":
+        return resolved
+    month = report_month_start(day)
+    return resolved / f"{month.isoformat()}.parquet"
 
 
 def stg_geo_all_output_path(day: date) -> Path:

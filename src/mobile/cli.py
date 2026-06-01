@@ -10,6 +10,7 @@ from calendar import monthrange
 from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 from mobile.cli_defaults import (
     DEFAULT_PARQUET_COMPRESSION,
@@ -33,6 +34,7 @@ from mobile.notebook_runner import (
     run_nb_stg_geo_all,
     run_nb_stg_msisdn_imei,
     run_nb_stg_msisdn_imsi_operator,
+    run_nb_stg_geo_intervals,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -89,8 +91,11 @@ from mobile.project_paths import (
     stg_event_dds_output_path,
     stg_event_output_path,
     stg_geo_all_output_path,
+    stg_geo_intervals_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
+    resolve_stg_daily_parquet_path,
+    resolve_stg_monthly_parquet_path,
 )
 
 _BUILD_STG_EVENT_DC_WORKERS = 2
@@ -118,6 +123,7 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-geo-all": run_nb_stg_geo_all,
     "nb-stg-msisdn-imei": run_nb_stg_msisdn_imei,
     "nb-stg-msisdn-imsi-operator": run_nb_stg_msisdn_imsi_operator,
+    "nb-stg-geo-intervals": run_nb_stg_geo_intervals,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
@@ -587,6 +593,27 @@ def run_build_stg_geo_all(
     logger.info("build-stg-geo-all completed successfully")
 
 
+def _geo_intervals_run_build_kwargs(
+    report_date: date,
+    *,
+    stg_geo_all_path: str | Path,
+    stg_bs_path: str | Path,
+    time_zones_path: str | Path,
+    stg_msisdn_imsi_path: str | Path,
+    stg_msisdn_imei_path: str | Path,
+    output_path: str | Path,
+) -> dict[str, Any]:
+    return {
+        "report_date": report_date,
+        "stg_geo_all_path": resolve_stg_daily_parquet_path(stg_geo_all_path, report_date),
+        "stg_bs_path": resolve_project_path(stg_bs_path),
+        "time_zones_path": resolve_project_path(time_zones_path),
+        "stg_msisdn_imsi_path": resolve_stg_monthly_parquet_path(stg_msisdn_imsi_path, report_date),
+        "stg_msisdn_imei_path": resolve_stg_monthly_parquet_path(stg_msisdn_imei_path, report_date),
+        "output_path": resolve_stg_daily_parquet_path(output_path, report_date),
+    }
+
+
 def run_build_stg_geo_intervals(
     *,
     report_date: date | None,
@@ -597,27 +624,103 @@ def run_build_stg_geo_intervals(
     stg_msisdn_imei_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-geo-intervals: интервалы пребывания из stg_geo_all."""
-    if report_date is None:
-        raise SystemExit("build-stg-geo-intervals: --report-date is required")
-    geo_all = Path(stg_geo_all_path) if stg_geo_all_path else None
-    bs = Path(stg_bs_path) if stg_bs_path else None
-    tz = Path(time_zones_path) if time_zones_path else None
-    imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
-    imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
-    out = Path(output_path) if output_path else None
-    run_timed_command(
-        "build-stg-geo-intervals",
-        lambda: stg_geo_intervals.run_build(
-            report_date=report_date,
-            stg_geo_all_path=geo_all,
+    """build-stg-geo-intervals: явный прогон (7 параметров) или цикл DEFAULT_SRC_* по дням."""
+    explicit = any(
+        (
+            report_date,
+            stg_geo_all_path,
+            stg_bs_path,
+            time_zones_path,
+            stg_msisdn_imsi_path,
+            stg_msisdn_imei_path,
+            output_path,
+        )
+    )
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_geo_all_path is None:
+            missing.append("--stg-geo-all-path")
+        if stg_bs_path is None:
+            missing.append("--stg-bs-path")
+        if time_zones_path is None:
+            missing.append("--time-zones-path")
+        if stg_msisdn_imsi_path is None:
+            missing.append("--stg-msisdn-imsi-path")
+        if stg_msisdn_imei_path is None:
+            missing.append("--stg-msisdn-imei-path")
+        if output_path is None:
+            missing.append("--output-path")
+        if missing:
+            raise SystemExit(
+                "build-stg-geo-intervals: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        kwargs = _geo_intervals_run_build_kwargs(
+            report_date,
+            stg_geo_all_path=stg_geo_all_path,
+            stg_bs_path=stg_bs_path,
+            time_zones_path=time_zones_path,
+            stg_msisdn_imsi_path=stg_msisdn_imsi_path,
+            stg_msisdn_imei_path=stg_msisdn_imei_path,
+            output_path=output_path,
+        )
+        run_timed_command(
+            f"build-stg-geo-intervals-{report_date.isoformat()}",
+            lambda kw=kwargs: stg_geo_intervals.run_build(**kw),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    bs = stg_bs_output_path()
+    tz = DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+    geo_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT
+    imsi_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imsi"
+    imei_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imei"
+    out_root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    if not bs.exists():
+        raise SystemExit(f"build-stg-geo-intervals: stg_bs not found: {bs}")
+    if not tz.exists():
+        raise SystemExit(f"build-stg-geo-intervals: time_zones not found: {tz}")
+
+    logger.info(
+        "Starting build-stg-geo-intervals: days=%s (%s .. %s)",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+    )
+    for day in days:
+        geo_file = stg_geo_all_output_path(day)
+        if not geo_file.exists():
+            continue
+        imsi_file = stg_msisdn_imsi_output_path(day)
+        imei_file = stg_msisdn_imei_output_path(day)
+        if not imsi_file.exists() or not imei_file.exists():
+            logger.info(
+                "build-stg-geo-intervals: skip %s (binding missing imsi=%s imei=%s)",
+                day.isoformat(),
+                imsi_file.exists(),
+                imei_file.exists(),
+            )
+            continue
+        kwargs = _geo_intervals_run_build_kwargs(
+            day,
+            stg_geo_all_path=geo_root,
             stg_bs_path=bs,
             time_zones_path=tz,
-            stg_msisdn_imsi_path=imsi,
-            stg_msisdn_imei_path=imei,
-            output_path=out,
-        ),
-    )
+            stg_msisdn_imsi_path=imsi_root,
+            stg_msisdn_imei_path=imei_root,
+            output_path=out_root,
+        )
+        run_timed_command(
+            f"build-stg-geo-intervals-{day.isoformat()}",
+            lambda kw=kwargs: stg_geo_intervals.run_build(**kw),
+        )
+    logger.info("build-stg-geo-intervals completed successfully")
 
 
 def _run_build_stg_geo_binding(
@@ -1054,14 +1157,53 @@ def run_dq_stg_geo_intervals(
     report_date: date | None,
     stg_geo_intervals_path: str | None,
 ) -> None:
-    """DQ ``stg_geo_intervals`` за день (read-only проверки)."""
-    if report_date is None:
-        raise SystemExit("dq-stg-geo-intervals: --report-date is required")
-    path = Path(stg_geo_intervals_path) if stg_geo_intervals_path else None
-    run_timed_command(
-        "dq-stg-geo-intervals",
-        lambda: dq_stg_geo_intervals.run_dq(report_date=report_date, stg_geo_intervals_path=path),
+    """DQ ``stg_geo_intervals``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по дням."""
+    explicit = any((report_date, stg_geo_intervals_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_geo_intervals_path is None:
+            missing.append("--stg-geo-intervals-path")
+        if missing:
+            raise SystemExit(
+                "dq-stg-geo-intervals: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        path = resolve_stg_daily_parquet_path(stg_geo_intervals_path, report_date)
+        run_timed_command(
+            f"dq-stg-geo-intervals-{report_date.isoformat()}",
+            lambda rd=report_date, p=path: dq_stg_geo_intervals.run_dq(
+                report_date=rd,
+                stg_geo_intervals_path=p,
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    logger.info(
+        "Starting dq-stg-geo-intervals: days=%s (%s .. %s) stg_geo_intervals_root=%s",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+        root,
     )
+    for day in days:
+        out = stg_geo_intervals_output_path(day)
+        if not out.exists():
+            continue
+        run_timed_command(
+            f"dq-stg-geo-intervals-{day.isoformat()}",
+            lambda d=day, p=out: dq_stg_geo_intervals.run_dq(
+                report_date=d,
+                stg_geo_intervals_path=p,
+            ),
+        )
+    logger.info("dq-stg-geo-intervals completed successfully")
 
 
 def run_dq_stg_person(

@@ -20,12 +20,14 @@ from mobile.cli_defaults import DEFAULT_SRC_END_DATE
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
+    DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_STG_OKSM_OUTPUT_PATH,
     stg_bs_output_path,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
     stg_geo_all_output_path,
+    stg_geo_intervals_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
 )
@@ -3460,5 +3462,253 @@ def render_stg_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> pl
         axes[1].set_xlabel("interval rows")
         axes[1].set_title("Top operator_id")
     fig.suptitle(f"stg_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+_STG_GEO_INTERVALS_CARDINALITY_FOCUS = (
+    "msisdn",
+    "imsi",
+    "imei",
+    "bs_type",
+    "timezone",
+    "oktmo_code_1",
+    "oktmo_code_2",
+)
+_STG_GEO_INTERVALS_BS_COLORS = {
+    "m": "#1f77b4",
+    "f": "#ff7f0e",
+    "i": "#2ca02c",
+    "x": "#d62728",
+    "o": "#9467bd",
+}
+
+
+def _stg_geo_intervals_report_date(latest: pd.DataFrame | None) -> date:
+    if latest is not None:
+        for check in ("dataset_basic", "dataset_presence"):
+            metrics = _metrics_for_check(latest, check)
+            raw = metrics.get("report_date")
+            if raw:
+                return date.fromisoformat(str(raw))
+    root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    if root.is_dir():
+        files = sorted(root.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if files:
+            try:
+                return date.fromisoformat(files[0].stem)
+            except ValueError:
+                pass
+    return DEFAULT_SRC_END_DATE
+
+
+def stg_geo_intervals_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, record in latest.iterrows():
+        check = str(record["check"])
+        if not check.startswith("cardinality."):
+            continue
+        metrics = record.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        rows.append(
+            {
+                "field": check.removeprefix("cardinality."),
+                "nunique": int(metrics.get("nunique") or 0),
+            }
+        )
+    if not rows:
+        return pd.DataFrame(columns=["field", "nunique"])
+    out = pd.DataFrame(rows)
+    focus = [f for f in _STG_GEO_INTERVALS_CARDINALITY_FOCUS if f in set(out["field"])]
+    if focus:
+        out = pd.concat([out[out["field"].isin(focus)], out[~out["field"].isin(focus)]], ignore_index=True)
+    return out.head(20)
+
+
+def stg_geo_intervals_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    specs: tuple[tuple[str, str, str], ...] = (
+        ("required_fields_presence", "invalid_rows", "invalid required rows"),
+        ("temporal_order", "invalid_order_count", "invalid time order"),
+        ("coords_range", "invalid_sub_lat_count", "invalid lat"),
+        ("coords_range", "invalid_sub_lon_count", "invalid lon"),
+        ("bs_type_vocab", "invalid_bs_type_rows", "invalid bs_type"),
+        ("timezone_range", "invalid_timezone_rows", "invalid timezone"),
+        ("cgi_list_non_empty", "empty_cgi_list_rows", "empty cgi_list"),
+        ("duplicate_interval_key", "duplicate_rows", "duplicate interval key"),
+    )
+    rows: list[dict[str, Any]] = []
+    for check, key, label in specs:
+        metrics = _metrics_for_check(latest, check)
+        if key not in metrics:
+            continue
+        hit = latest[latest["check"] == check]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append({"metric": label, "count": int(metrics[key]), "status": status})
+    return pd.DataFrame(rows)
+
+
+def render_stg_geo_intervals_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    required = _metrics_for_check(latest, "required_fields_presence")
+    cgi_mix = stg_event_counts_frame(latest, "distribution.cgi_list_len")
+    report_date = basic.get("report_date") if basic else None
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    if cgi_mix.empty:
+        axes[1, 0].set_title("cgi_list_len — нет данных")
+        axes[1, 0].axis("off")
+    else:
+        work = cgi_mix.head(8)
+        axes[1, 0].pie(
+            work["count"],
+            labels=work["label"],
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            startangle=90,
+        )
+        axes[1, 0].set_title("distribution.cgi_list_len (DQ)")
+    ax = axes[1, 1]
+    if required:
+        invalid = int(required.get("invalid_rows") or 0)
+        ax.bar(["invalid_rows"], [invalid], color="#d62728", alpha=0.88)
+        ax.set_title("required_fields_presence (DQ)")
+        ax.text(0, invalid, str(invalid), ha="center", va="bottom", fontsize=9)
+    else:
+        plot_count_bars(stg_geo_intervals_gate_counts_frame(latest).head(6), title="Gate counts (DQ)", ax=ax)
+    title = (
+        f"DQ STG GEO INTERVALS — report_date={report_date}, rows={int(basic.get('row_count') or 0):,}"
+        if basic and report_date
+        else "DQ STG GEO INTERVALS — обзор метрик"
+    )
+    fig.suptitle(title, fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_intervals_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
+    nulls = null_ratio_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    if nulls.empty:
+        ax.set_title("nulls.* — нет данных в логе")
+        ax.axis("off")
+        return fig
+    plot_null_ratios(nulls, ax=ax)
+    fig.suptitle("Доля null по полям контракта (DQ)", fontsize=12)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_intervals_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
+    card = stg_geo_intervals_cardinality_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if card.empty:
+        ax.set_title("cardinality.* — нет данных")
+        ax.axis("off")
+        return fig
+    work = card.sort_values("nunique", ascending=True)
+    ax.barh(work["field"], work["nunique"], color="#17becf", alpha=0.88)
+    ax.set_xlabel("nunique (DQ log)")
+    ax.set_title("Кардинальность полей (top-20)")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_intervals_dq_gates(latest: pd.DataFrame) -> plt.Figure:
+    gates = stg_geo_intervals_gate_counts_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if gates.empty:
+        ax.set_title("Gate counts — нет данных")
+        ax.axis("off")
+        return fig
+    colors = [
+        "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+        for s in gates["status"]
+    ]
+    work = gates.sort_values("count", ascending=True)
+    ax.barh(work["metric"], work["count"], color=colors, alpha=0.88)
+    ax.set_xlabel("count")
+    ax.set_title("Gate-проверки stg_geo_intervals (DQ)")
+    fig.tight_layout()
+    return fig
+
+
+def display_stg_geo_intervals_parquet_summary(root: Path, report_date: date) -> None:
+    parquet = _resolve_parquet(root, stg_geo_intervals_output_path(report_date))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet)
+    try:
+        rel = parquet.relative_to(root)
+    except ValueError:
+        rel = parquet
+    print(f"stg_geo_intervals ({report_date.isoformat()}): {len(df):,} rows | файл: {rel}")
+    if df.empty:
+        print("distinct msisdn: 0")
+        _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
+        return
+    print(f"distinct msisdn: {df['msisdn'].nunique():,}")
+    per_msisdn = df.groupby("msisdn", sort=False).size()
+    _print_per_msisdn_interval_stats(per_msisdn)
+    if "bs_type" in df.columns:
+        display(df["bs_type"].astype("string").str.lower().value_counts().head(8).to_frame("interval_rows"))
+    if "timezone" in df.columns:
+        print("\n--- timezone ---")
+        display(pd.to_numeric(df["timezone"], errors="coerce").value_counts().head(12).to_frame("rows"))
+    if "cgi_list" in df.columns:
+        lens = df["cgi_list"].map(lambda v: len(v) if isinstance(v, (list, tuple)) or hasattr(v, "__len__") else 0)
+        print(f"\ncgi_list len: min={int(lens.min())}, median={float(lens.median()):.1f}, max={int(lens.max())}")
+
+
+def render_stg_geo_intervals_parquet_profile(root: Path, report_date: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, stg_geo_intervals_output_path(report_date))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    import pyarrow.parquet as pq
+
+    available = set(pq.read_schema(parquet).names)
+    profile_cols = [
+        c for c in ("bs_type", "timezone", "start_time_utc", "end_time_utc", "cgi_list") if c in available
+    ]
+    df = pd.read_parquet(parquet, columns=profile_cols) if profile_cols else pd.read_parquet(parquet)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    if "bs_type" in df.columns:
+        mix = df["bs_type"].astype("string").str.lower().value_counts().head(8)
+        axes[0].pie(
+            mix.values,
+            labels=mix.index.astype(str),
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            colors=[_STG_GEO_INTERVALS_BS_COLORS.get(lbl, "#9467bd") for lbl in mix.index.astype(str)],
+            startangle=90,
+        )
+        axes[0].set_title("bs_type")
+    else:
+        axes[0].axis("off")
+    if "timezone" in df.columns:
+        tz = pd.to_numeric(df["timezone"], errors="coerce").dropna().astype(int).value_counts().sort_index()
+        axes[1].bar(tz.index.astype(str), tz.values, color="#2563eb", alpha=0.88)
+        axes[1].set_xlabel("timezone")
+        axes[1].set_title("UTC offset (ч)")
+        plt.setp(axes[1].get_xticklabels(), rotation=25, ha="right")
+    else:
+        axes[1].axis("off")
+    if {"start_time_utc", "end_time_utc"}.issubset(df.columns):
+        start = pd.to_datetime(df["start_time_utc"], errors="coerce")
+        end = pd.to_datetime(df["end_time_utc"], errors="coerce")
+        dur_min = ((end - start).dt.total_seconds() / 60.0).dropna()
+        if len(dur_min):
+            axes[2].hist(dur_min.clip(upper=dur_min.quantile(0.99)), bins=30, color="#ff7f0e", alpha=0.88)
+            axes[2].set_xlabel("длительность, мин (≤ p99)")
+            axes[2].set_title("Длительность интервала")
+        else:
+            axes[2].axis("off")
+    elif "cgi_list" in df.columns:
+        lens = df["cgi_list"].map(lambda v: len(v) if isinstance(v, (list, tuple)) or hasattr(v, "__len__") else 0)
+        axes[2].hist(lens, bins=20, color="#ff7f0e", alpha=0.88)
+        axes[2].set_xlabel("|cgi_list|")
+        axes[2].set_title("Число CGI в интервале")
+    else:
+        axes[2].axis("off")
+    fig.suptitle(f"Профиль parquet stg_geo_intervals ({report_date.isoformat()})", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig

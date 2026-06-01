@@ -24,31 +24,50 @@
 
 ## TODO
 
-1. Добавить DQ-команду `dq-stg-geo-intervals`.
-2. Добавить метрики качества интервалов (длина, число cgi в интервале, доля merged).
+1. Добавить метрики качества интервалов (длина, число cgi в интервале, доля merged).
 
 ---
 
 ## Параметры запуска
 
-Вызов: `run_build(report_date, stg_geo_all_path, stg_bs_path, time_zones_path, output_path)` ([`cli.py`](../../src/mobile/cli.py) → `build-stg-geo-intervals`).
+Вызов: `run_build(...)` ([`cli.py`](../../src/mobile/cli.py) → `build-stg-geo-intervals`). **Все семь параметров обязательны** — pipeline не подставляет пути; их резолвит CLI (файл или каталог + суффикс даты/месяца).
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да | — | Отчётный день |
-| `stg_geo_all_path` | path | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной `stg_geo_all` (файл или каталог) |
-| `stg_bs_path` | path | Нет | `data/stg/bs.parquet` | Входной `stg_bs` lookup |
-| `time_zones_path` | path | Нет | `data/stg/time_zones.parquet` | Полигоны часовых поясов |
-| `stg_msisdn_imsi_path` | path | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Месячный binding (1-е число месяца `report_date`) |
-| `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Месячный binding |
-| `output_path` | path | Нет | `data/stg/geo_intervals/{report_date}.parquet` | Выходной parquet |
+| Переменная | Тип | Обязательность | Описание |
+|------------|-----|----------------|----------|
+| `report_date` | date | **Да** | Отчётный день |
+| `stg_geo_all_path` | path | **Да** | `stg_geo_all`: файл `{YYYY-MM-DD}.parquet` или каталог `geo_all/` |
+| `stg_bs_path` | path | **Да** | `stg_bs.parquet` (общий справочник) |
+| `time_zones_path` | path | **Да** | `stg_time_zones.parquet` |
+| `stg_msisdn_imsi_path` | path | **Да** | Месячный `stg_msisdn_imsi`: файл `{YYYY-MM-01}.parquet` или каталог (месяц от `report_date`) |
+| `stg_msisdn_imei_path` | path | **Да** | Месячный `stg_msisdn_imei`: файл `{YYYY-MM-01}.parquet` или каталог |
+| `output_path` | path | **Да** | Выход: файл `{YYYY-MM-DD}.parquet` или каталог `geo_intervals/` |
+
+### CLI
+
+| Режим | Поведение |
+|-------|-----------|
+| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE`; на каждый день с `stg_geo_all` и binding за месяц — `build-stg-geo-intervals-{date}` |
+| Все 7 явно | `--report-date`, `--stg-geo-all-path`, `--stg-bs-path`, `--time-zones-path`, `--stg-msisdn-imsi-path`, `--stg-msisdn-imei-path`, `--output-path` |
+
+**Фильтрация по дням (оркестратор):** пропуск дня, если нет `geo_all/{date}.parquet` или нет месячных `msisdn_imsi` / `msisdn_imei` за `{YYYY-MM-01}` этого дня.
+
+**Предусловия:** `build-stg-geo-all`, `build-stg-msisdn-imsi-operator`, `build-stg-msisdn-imei`, `build-stg-bs`, `build-stg-time-zones`.
 
 Локальный запуск:
 
 ```bash
-uv run mobile build-stg-geo-intervals --report-date 2025-01-01
-uv run mobile build-stg-geo-intervals --report-date 2025-01-01 --stg-geo-all-path data/stg/geo_all
-uv run mobile build-stg-geo-intervals --report-date 2025-01-01 --output-path data/stg/geo_intervals/2025-01-01.parquet
+uv run mobile build-stg-msisdn-imsi-operator
+uv run mobile build-stg-msisdn-imei
+uv run mobile build-stg-geo-intervals
+uv run mobile build-stg-geo-intervals \
+  --report-date 2025-01-15 \
+  --stg-geo-all-path data/stg/geo_all \
+  --stg-bs-path data/stg/bs.parquet \
+  --time-zones-path data/stg/time_zones.parquet \
+  --stg-msisdn-imsi-path data/stg/msisdn_imsi \
+  --stg-msisdn-imei-path data/stg/msisdn_imei \
+  --output-path data/stg/geo_intervals
+uv run mobile dq-stg-geo-intervals
 ```
 
 ---

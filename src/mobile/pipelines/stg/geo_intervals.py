@@ -20,13 +20,9 @@ from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_imsi, normalize_msisdn
 from mobile.project_paths import (
-    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
     resolve_project_path,
-    stg_bs_output_path,
-    stg_geo_all_output_path,
-    stg_geo_intervals_output_path,
-    stg_msisdn_imei_output_path,
-    stg_msisdn_imsi_output_path,
+    resolve_stg_daily_parquet_path,
+    resolve_stg_monthly_parquet_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,30 +55,22 @@ _OUTPUT_COLUMNS: tuple[str, ...] = (
 def run_build(
     *,
     report_date: date,
-    stg_geo_all_path: str | Path | None = None,
-    stg_bs_path: str | Path | None = None,
-    time_zones_path: str | Path | None = None,
-    stg_msisdn_imsi_path: str | Path | None = None,
-    stg_msisdn_imei_path: str | Path | None = None,
-    output_path: str | Path | None = None,
+    stg_geo_all_path: str | Path,
+    stg_bs_path: str | Path,
+    time_zones_path: str | Path,
+    stg_msisdn_imsi_path: str | Path,
+    stg_msisdn_imei_path: str | Path,
+    output_path: str | Path,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     perf: dict[str, Any] = {}
 
-    geo_all_file = _resolve_geo_all_path(report_date=report_date, stg_geo_all_path=stg_geo_all_path)
-    bs_file = resolve_project_path(stg_bs_path) if stg_bs_path is not None else stg_bs_output_path()
-    tz_file = resolve_project_path(time_zones_path) if time_zones_path is not None else DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
-    imsi_file = (
-        resolve_project_path(stg_msisdn_imsi_path)
-        if stg_msisdn_imsi_path is not None
-        else stg_msisdn_imsi_output_path(report_date)
-    )
-    imei_file = (
-        resolve_project_path(stg_msisdn_imei_path)
-        if stg_msisdn_imei_path is not None
-        else stg_msisdn_imei_output_path(report_date)
-    )
-    out_file = resolve_project_path(output_path) if output_path is not None else stg_geo_intervals_output_path(report_date)
+    geo_all_file = resolve_stg_daily_parquet_path(stg_geo_all_path, report_date)
+    bs_file = resolve_project_path(stg_bs_path)
+    tz_file = resolve_project_path(time_zones_path)
+    imsi_file = resolve_stg_monthly_parquet_path(stg_msisdn_imsi_path, report_date)
+    imei_file = resolve_stg_monthly_parquet_path(stg_msisdn_imei_path, report_date)
+    out_file = resolve_stg_daily_parquet_path(output_path, report_date)
 
     if not geo_all_file.exists():
         raise FileNotFoundError(f"stg_geo_all parquet not found: {geo_all_file}")
@@ -123,15 +111,6 @@ def run_build(
     append_command_metrics(command="build-stg-geo-intervals", metrics={**stats, **perf})
     logger.info("build-stg-geo-intervals completed: %s", stats)
     return {**stats, **perf}
-
-
-def _resolve_geo_all_path(*, report_date: date, stg_geo_all_path: str | Path | None) -> Path:
-    if stg_geo_all_path is None:
-        return stg_geo_all_output_path(report_date)
-    resolved = resolve_project_path(stg_geo_all_path)
-    if resolved.is_dir():
-        return resolved / f"{report_date.isoformat()}.parquet"
-    return resolved
 
 
 def _empty_df() -> pd.DataFrame:

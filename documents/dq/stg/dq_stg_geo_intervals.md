@@ -1,8 +1,8 @@
 # dq-stg-geo-intervals
 
-**Витрина:** `stg_geo_intervals` · **Команда:** `dq-stg-geo-intervals` · **Режим:** read-only DQ (процесс не падает при failed checks).
+**Витрина:** `stg_geo_intervals` · **Команда:** `dq-stg-geo-intervals` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py). Сборка витрины: [`build_stg_geo_intervals.md`](../../stg/build_stg_geo_intervals.md). Схема: [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json).
+Референс: [`pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py). Сборка: [`build_stg_geo_intervals.md`](../../stg/build_stg_geo_intervals.md). Схема: [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json).
 
 ---
 
@@ -12,40 +12,63 @@
 |---|--------|-----------|
 | 1 | Найти parquet `stg_geo_intervals` за `report_date` | Путь к дневному срезу |
 | 2 | Проверить контракт колонок и профили null/cardinality | Логи `DQ_STG_GEO_INTERVALS` |
-| 3 | Проверить временные, географические и ключевые ограничения | Gate-статусы |
+| 3 | Проверить временные, географические и ключевые ограничения | Gate-статусы `ok/warning/failed` |
 | 4 | Выдать `summary` | Счётчики checks |
 
-**Бизнес-назначение:** контроль качества интервального геослоя перед downstream-анализом треков и построением поведенческих признаков.
+**Бизнес-назначение:** контроль качества дневных интервалов пребывания после [`build-stg-geo-intervals`](../../stg/build_stg_geo_intervals.md) перед downstream-анализом треков и поведенческими признаками.
 
-**В scope:** проверка наличия набора, контракта, временных интервалов, координат, словаря `bs_type`, `cgi_list` и ключевых дубликатов.
+**В scope:** наличие файла, контракт `_EXPECTED_COLUMNS`, обязательные поля интервала, координаты, `bs_type`/`timezone`, непустой `cgi_list`, дубликаты ключа интервала.
 
 ---
 
 ## TODO
 
-1. Добавить baseline-пороги (warning/failed) для долей `nulls.timezone` и кардинальности `cgi_list`.
-2. Расширить профиль распределениями длительности интервала (`end_time_utc - start_time_utc`) и числа CGI.
+1. Добавить динамические пороги `warning/failed` по историческим baseline (доля null в `timezone`/`imsi`, длина `cgi_list`).
+2. Расширить профиль распределениями длительности интервала (`end_time_utc - start_time_utc`) и числа CGI в интервале.
 
 ---
 
 ## Параметры запуска
 
-Вызов: `run_dq(report_date, stg_geo_intervals_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-geo-intervals`).
+Вызов: `run_dq(report_date, stg_geo_intervals_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-geo-intervals`). **Оба параметра обязательны** — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да | — | Отчётный день |
-| `stg_geo_intervals_path` | path | Нет | `data/stg/geo_intervals/{report_date}.parquet` | Входной parquet или каталог `data/stg/geo_intervals` |
+| Переменная | Тип | Обязательность | Описание |
+|------------|-----|----------------|----------|
+| `report_date` | date | **Да** | Отчётный день |
+| `stg_geo_intervals_path` | path | **Да** | Входной parquet или каталог `data/stg/geo_intervals` (для каталога — файл `{report_date}.parquet`) |
 
-CLI:
+### CLI
+
+| Режим | Поведение |
+|-------|-----------|
+| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); на каждый день с существующим `stg_geo_intervals_output_path(day)` — `dq-stg-geo-intervals-{YYYY-MM-DD}` |
+| Оба явно | `--report-date` и `--stg-geo-intervals-path` (один прогон) |
+
+**Константы DQ в коде** ([`geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py), на вход job **не передаются**):
+
+| Константа | Значение |
+|-----------|----------|
+| `LOG_TAG` | `DQ_STG_GEO_INTERVALS` |
+| `_BS_TYPES` | `m`, `f`, `i`, `x`, `o` |
+| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+
+**Предусловие:** `uv run mobile build-stg-geo-intervals` за ту же `report_date` (и binding-витрины за месяц этого дня).
+
+Локальный запуск:
 
 ```bash
-uv run mobile dq-stg-geo-intervals --report-date 2025-01-01
-uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-path data/stg/geo_intervals
-uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-path data/stg/geo_intervals/2025-01-01.parquet
+uv run mobile build-stg-msisdn-imei
+uv run mobile build-stg-msisdn-imsi-operator
+uv run mobile build-stg-geo-intervals
+uv run mobile dq-stg-geo-intervals
+uv run mobile dq-stg-geo-intervals --report-date 2025-01-15 \
+  --stg-geo-intervals-path data/stg/geo_intervals/2025-01-15.parquet
+uv run mobile dq-stg-geo-intervals --report-date 2025-01-15 \
+  --stg-geo-intervals-path data/stg/geo_intervals
+uv run mobile nb-stg-geo-intervals
 ```
 
-Логи: `data/logs/mobile.log` (тег `DQ_STG_GEO_INTERVALS`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-geo-intervals`.
+Логи: `data/logs/mobile.log` (тег `DQ_STG_GEO_INTERVALS`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-geo-intervals` или `dq-stg-geo-intervals-{date}`. Визуализация: `nb-stg-geo-intervals` → `data/notebooks/14_stg_geo_intervals.executed.ipynb`.
 
 ---
 
@@ -53,9 +76,29 @@ uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-
 
 | Свойство | Значение |
 |----------|----------|
+| Имя таблицы | `stg_geo_intervals` — [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json) |
 | Путь по умолчанию | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` |
-| Формат | Parquet |
-| Контракт полей | [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json) |
+| Формат | Parquet (`snappy`) |
+| Календарный срез | `report_date` (поле `time_key`) |
+| Контракт полей | `_OUTPUT_COLUMNS` из [`pipelines/stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+
+### Поля (контракт)
+
+| # | Поле | Тип | Смысл |
+|---|------|-----|-------|
+| 1 | `msisdn` | long | MSISDN абонента |
+| 2 | `imsi` | long | IMSI (с дозаполнением из `stg_msisdn_imsi`) |
+| 3 | `imei` | long | IMEI (с дозаполнением из `stg_msisdn_imei`) |
+| 4 | `start_time_utc` | timestamp | Начало интервала в UTC |
+| 5 | `end_time_utc` | timestamp | Конец интервала в UTC |
+| 6 | `cgi_list` | list | Уникальные CGI в интервале |
+| 7 | `sub_lat` | double | Оценочная широта |
+| 8 | `sub_lon` | double | Оценочная долгота |
+| 9 | `bs_type` | string | Тип БС (`m`/`f`/`i`/`x`/`o`) |
+| 10 | `timezone` | int | Смещение от UTC, часы |
+| 11 | `oktmo_code_1` | string | Доминирующий ОКТМО уровня 1 |
+| 12 | `oktmo_code_2` | string | Доминирующий ОКТМО уровня 2 |
+| 13 | `time_key` | date | Календарный день среза |
 
 ---
 
@@ -63,7 +106,7 @@ uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-
 
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
-| 1 | `stg_geo_intervals` parquet | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` | Вход для DQ профиля |
+| 1 | `stg_geo_intervals` | `data/stg/geo_intervals/{YYYY-MM-DD}.parquet` | Дневной срез после `build-stg-geo-intervals` |
 
 ---
 
@@ -71,73 +114,55 @@ uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-
 
 ### Шаг 0. Инициализация
 
-1. Определить путь к parquet (`stg_geo_intervals_output_path(report_date)` или `--stg-geo-intervals-path`).
-2. Если передан каталог, взять файл `{report_date}.parquet`.
-3. Инициализировать счётчики `total/warning/failed` и правила gate-статусов.
+1. `_resolve_source_path(report_date, stg_geo_intervals_path)` — оба аргумента обязательны; `resolve_stg_daily_parquet_path`: каталог → `{report_date}.parquet`, иначе файл как есть.
+2. Счётчики `total_checks`, `warning_checks`, `failed_checks`.
 
 ### Шаг 1. Наличие набора
 
-1. Проверить существование файла.
-2. Если файл отсутствует:
-   - записать `dataset_presence=failed`,
-   - сформировать `summary`,
-   - вернуть статус без дальнейших шагов.
+Нет файла → `dataset_presence` (**failed**), `summary`, return.  
+Иначе `pd.read_parquet` → `dataset_basic` (**ok**).
 
-### Шаг 2. Базовый профиль
+### Шаг 2. Схема и профиль
 
-1. `dataset_basic`: число строк/колонок, путь.
-2. `schema_columns`: проверка контрактных полей.
-3. Для каждого поля: `nulls.<field>` и `cardinality.<field>`.
-4. На этом шаге формируется базовый профиль заполненности витрины.
+1. `schema_columns` — все поля `_EXPECTED_COLUMNS` (**failed** при пропусках).
+2. Для каждой колонки контракта: `nulls.{field}`, `cardinality.{field}` (**ok**).
 
 ### Шаг 3. Gate-проверки
 
-1. **`required_fields_presence`:** `msisdn`, `start_time_utc`, `end_time_utc`, `sub_lat`, `sub_lon`, `bs_type` — null_ratio = 0 для ключевых; иначе **failed**.
-2. **`temporal_order`:** `end_time_utc >= start_time_utc`; `inverted_count` → **failed**.
-3. **`coords_range`:** широта/долгота подписчика в физических пределах; NaN только для пустых интервалов без веса.
-4. **`bs_type_vocab`:** `bs_type ∈ {i,o,…}` по контракту [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json).
-5. **`timezone_range`:** `timezone` (UTC offset hours) ∈ [-12, 14]; выбросы → **warning**.
-6. **`cgi_list_non_empty`:** `cgi_list` не пустая строка / список; пустые → **failed** по доле.
-7. **`distribution.cgi_list_len`:** гистограмма числа CGI в интервале (info); аномально длинные списки → **warning**.
-8. **`duplicate_interval_key`:** дубликаты по `(imsi, imei, msisdn, start_time_utc, end_time_utc, bs_type)` → **warning**/**failed**.
-9. **`oktmo_dominance` (если есть):** согласованность `oktmo_code_1/2` с весами событий.
+1. `required_fields_presence` — `msisdn`, `start_time_utc`, `end_time_utc` без null (**failed**).
+2. `temporal_order` — `end_time_utc >= start_time_utc` (**failed**).
+3. `coords_range` — `sub_lat` ∈ [-90, 90], `sub_lon` ∈ [-180, 180] (**warning**).
+4. `bs_type_vocab` — `bs_type ∈ _BS_TYPES` (**warning**).
+5. `timezone_range` — `timezone` в [-12, 14] (**warning**).
+6. `cgi_list_non_empty` — у каждой строки непустой `cgi_list` (**failed**).
+7. `distribution.cgi_list_len` — распределение длины списка CGI (**ok**).
+8. `duplicate_interval_key` — дубли `(msisdn, imsi, imei, start_time_utc, end_time_utc, bs_type)` (**warning**).
 
 ### Шаг 4. Итог
 
-1. Сформировать `summary` с `total_checks`, `warning_checks`, `failed_checks`.
-2. Вернуть общий статус:
-   - `failed` при наличии failed-checks,
-   - `warning` при отсутствии failed и наличии warning,
-   - `ok` при полном прохождении checks.
-
-### Типовые ошибки
-
-| Ошибка/ситуация | Поведение |
-|-----------------|-----------|
-| Нет parquet за `report_date` | `dataset_presence=failed` |
-| Неполный контракт колонок | `schema_columns=failed` |
-| Пустые `cgi_list` | `cgi_list_non_empty=failed` |
+`summary` и return dict со статусом прогона. CLI не падает при failed checks.
 
 ---
 
 ## Проверки
 
-| Check | Уровень | Смысл |
-|-------|---------|-------|
-| `dataset_presence` | failed | parquet не найден |
-| `dataset_basic` | info | базовые размеры |
-| `schema_columns` | gate | полнота контракта колонок |
-| `nulls.*` | info | доли null по полям |
-| `cardinality.*` | info | кардинальность полей |
-| `required_fields_presence` | gate | обязательность ключевых полей |
-| `temporal_order` | gate | корректность интервалов времени |
-| `coords_range` | gate | диапазоны координат |
-| `bs_type_vocab` | gate | словарь `bs_type` |
-| `timezone_range` | gate | контроль timezone |
-| `cgi_list_non_empty` | gate | непустой список CGI |
-| `distribution.cgi_list_len` | info | распределение длины `cgi_list` |
-| `duplicate_interval_key` | gate | дубликаты ключа интервала |
-| `summary` | info | итоговый статус и счетчики |
+Формат лога: `{"tag":"DQ_STG_GEO_INTERVALS","check":"...","status":"...","metrics":{...}}`.
+
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `dataset_presence` | **failed** | Parquet за день не найден | Нет среза после [`build-stg-geo-intervals`](../../stg/build_stg_geo_intervals.md) |
+| `dataset_basic` | **ok** | `row_count`, `column_count`, путь | Базовый объём для сравнения прогонов |
+| `schema_columns` | **failed** | `missing_columns` | Контракт совпадает с ETL и [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json) |
+| `nulls.*` / `cardinality.*` | **ok** | профиль полей | Полнота и кардинальность без выгрузки PII |
+| `required_fields_presence` | **failed** | null в `msisdn` / границах интервала | Без MSISDN и времени интервал бесполезен |
+| `temporal_order` | **failed** | `end < start` | Некорректный интервал пребывания |
+| `coords_range` | **warning** | координаты вне диапазона | Гео-точка интервала и карты |
+| `bs_type_vocab` | **warning** | неизвестный `bs_type` | Согласованность с enrich `stg_bs` |
+| `timezone_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_time_zones` / fallback из БС |
+| `cgi_list_non_empty` | **failed** | пустой `cgi_list` | Интервал без сот — нарушение AGG_GEO_INTERVALS |
+| `distribution.cgi_list_len` | **ok** | counts по длине `cgi_list` | Профиль мобильности / handover |
+| `duplicate_interval_key` | **warning** | дубли ключа интервала | Риск двойного учёта в downstream |
+| `summary` | **ok** | счётчики checks | Сводка прогона |
 
 ---
 
@@ -145,7 +170,14 @@ uv run mobile dq-stg-geo-intervals --report-date 2025-01-01 --stg-geo-intervals-
 
 | Артефакт | Путь |
 |----------|------|
-| DQ ETL | [`src/mobile/pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py) |
-| Сборка `stg_geo_intervals` | [`documents/stg/build_stg_geo_intervals.md`](../../stg/build_stg_geo_intervals.md) |
-| CLI | [`src/mobile/cli.py`](../../../src/mobile/cli.py) |
-| Схема | [`src/mobile/schema/stg/geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json) |
+| DQ pipeline | [`pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py) |
+| DQ notebook | [`pipelines/nb/14_stg_geo_intervals.ipynb`](../../../src/mobile/pipelines/nb/14_stg_geo_intervals.ipynb) |
+| ETL build | [`pipelines/stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+| Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
+| CLI | [`cli.py`](../../../src/mobile/cli.py) |
+| Схема | [`geo_intervals.json`](../../../src/mobile/schema/stg/geo_intervals.json) |
+| Вход geo | [`build_stg_geo_all.md`](../../stg/build_stg_geo_all.md) |
+| Binding IMEI | [`dq_stg_msisdn_imei.md`](./dq_stg_msisdn_imei.md) |
+| Binding IMSI | [`dq_stg_msisdn_imsi_operator.md`](./dq_stg_msisdn_imsi_operator.md) |
+
+Сквозная цепочка: `build-stg-geo-all` → `build-stg-msisdn-imei` → `build-stg-msisdn-imsi-operator` → **`build-stg-geo-intervals`** → **`dq-stg-geo-intervals`** → **`nb-stg-geo-intervals`** → downstream.

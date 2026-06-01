@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.project_paths import resolve_project_path, stg_geo_intervals_output_path
+from mobile.project_paths import resolve_stg_daily_parquet_path
 
 logger = logging.getLogger(__name__)
 LOG_TAG = "DQ_STG_GEO_INTERVALS"
@@ -33,7 +33,8 @@ _EXPECTED_COLUMNS: tuple[str, ...] = (
 )
 
 
-def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path | None = None) -> dict[str, Any]:
+def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str, Any]:
+    """DQ ``stg_geo_intervals``; ``report_date`` и ``stg_geo_intervals_path`` обязательны (пути задаёт CLI)."""
     source_path = _resolve_source_path(report_date=report_date, stg_geo_intervals_path=stg_geo_intervals_path)
     checks = 0
     warnings = 0
@@ -167,13 +168,8 @@ def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path | None = Non
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_geo_intervals_path: str | Path | None) -> Path:
-    if stg_geo_intervals_path is None:
-        return stg_geo_intervals_output_path(report_date)
-    resolved = resolve_project_path(stg_geo_intervals_path)
-    if resolved.is_dir():
-        return resolved / f"{report_date.isoformat()}.parquet"
-    return resolved
+def _resolve_source_path(*, report_date: date, stg_geo_intervals_path: str | Path) -> Path:
+    return resolve_stg_daily_parquet_path(stg_geo_intervals_path, report_date)
 
 
 def _safe_nunique(series: pd.Series) -> int:
