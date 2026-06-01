@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_msisdn_imei` · **Команда:** `dq-fct-msisdn-imei` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/msisdn_imei.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imei.py). Сборка: [`build_fct_msisdn_imei.md`](../../fct/build_fct_msisdn_imei.md). Схема: [`msisdn_imei.json`](../../../src/mobile/schema/fct/msisdn_imei.json).
+Референс: [`pipelines/dq/fct/msisdn_imei.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imei.py). Сборка: [`build_fct_msisdn_imei.md`](../../fct/build_fct_msisdn_imei.md). Схема: [`msisdn_imei.json`](../../../src/mobile/schema/fct/msisdn_imei.json).
 
 ---
 
@@ -43,14 +43,14 @@
 | Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); **один прогон на календарный месяц**, если `fct_msisdn_imei_output_path(day)` существует; timed-run `dq-fct-msisdn-imei-{YYYY-MM-01}` |
 | Оба явно | `--report-date` (любой день, например `2025-01-15` → месяц `2025-01-01`) и `--fct-msisdn-imei-path` |
 
-**Константы DQ в коде** ([`msisdn_imei.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imei.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`msisdn_imei.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imei.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
 | `LOG_TAG` | `DQ_FCT_MSISDN_IMEI` |
-| `_EXPECTED_COLUMNS` | `msisdn`, `imei`, `valid_from`, `valid_to` из [`FCT_MSISDN_IMEI_FIELDS`](../../../src/mobile/pipelines/stg/msisdn_imei.py) |
+| `_EXPECTED_COLUMNS` | `msisdn`, `imei`, `valid_from`, `valid_to` из [`FCT_MSISDN_IMEI_FIELDS`](../../../src/mobile/pipelines/fct/msisdn_imei.py) |
 | `_REQUIRED_COLUMNS` | все поля контракта (null → **failed**) |
-| Длины MSISDN | `MSISDN_MIN_LEN`–`MSISDN_MAX_LEN` ([`subscriber_ids.py`](../../../src/mobile/pipelines/stg/subscriber_ids.py)) |
+| Длины MSISDN | `MSISDN_MIN_LEN`–`MSISDN_MAX_LEN` ([`subscriber_ids.py`](../../../src/mobile/pipelines/fct/subscriber_ids.py)) |
 | Длины IMEI | `IMEI_MIN_LEN`–`IMEI_MAX_LEN` |
 
 **Предусловие:** `uv run mobile build-fct-msisdn-imei` за дни месяца с `stg_geo_all`.
@@ -78,7 +78,7 @@ uv run mobile nb-fct-msisdn-imei
 | Путь по умолчанию | `data/fct/msisdn_imei/{YYYY-MM-01}.parquet` |
 | Формат | Parquet (`snappy`) |
 | Гранулярность | Месячный файл, пополняется ежедневно из `stg_geo_all` |
-| Контракт полей | `FCT_MSISDN_IMEI_FIELDS` из [`pipelines/stg/msisdn_imei.py`](../../../src/mobile/pipelines/stg/msisdn_imei.py) |
+| Контракт полей | `FCT_MSISDN_IMEI_FIELDS` из [`pipelines/fct/msisdn_imei.py`](../../../src/mobile/pipelines/fct/msisdn_imei.py) |
 
 ### Поля (контракт)
 
@@ -144,7 +144,7 @@ uv run mobile nb-fct-msisdn-imei
 | `schema_columns` | **failed** | `missing_columns` | Контракт совпадает с ETL и [`msisdn_imei.json`](../../../src/mobile/schema/fct/msisdn_imei.json) |
 | `nulls.*` | **failed** | null в обязательном поле | Интервал без MSISDN/IMEI/границ бесполезен для binding |
 | `temporal_order` | **failed** | `valid_to < valid_from` | Некорректный интервал привязки |
-| `msisdn_format` | **failed** | MSISDN вне допустимой длины/формата | Согласованность с [`subscriber_ids.py`](../../../src/mobile/pipelines/stg/subscriber_ids.py) |
+| `msisdn_format` | **failed** | MSISDN вне допустимой длины/формата | Согласованность с [`subscriber_ids.py`](../../../src/mobile/pipelines/fct/subscriber_ids.py) |
 | `imei_format` | **failed** | IMEI вне 14–16 цифр | Согласованность с ETL и TAC downstream |
 | `normalization_canonical` | **warning** | не канонический MSISDN/IMEI в файле | ETL должен писать уже нормализованные значения |
 | `duplicate_rows` | **warning** | полные дубликаты строк | Риск двойного учёта в person / geo-intervals |
@@ -158,10 +158,10 @@ uv run mobile nb-fct-msisdn-imei
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/msisdn_imei.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imei.py) |
+| DQ pipeline | [`pipelines/dq/fct/msisdn_imei.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imei.py) |
 | DQ notebook | [`pipelines/nb/12_fct_msisdn_imei.ipynb`](../../../src/mobile/pipelines/nb/12_fct_msisdn_imei.ipynb) |
-| ETL build | [`pipelines/stg/msisdn_imei.py`](../../../src/mobile/pipelines/stg/msisdn_imei.py) |
-| Нормализация ID | [`pipelines/stg/subscriber_ids.py`](../../../src/mobile/pipelines/stg/subscriber_ids.py) |
+| ETL build | [`pipelines/fct/msisdn_imei.py`](../../../src/mobile/pipelines/fct/msisdn_imei.py) |
+| Нормализация ID | [`pipelines/fct/subscriber_ids.py`](../../../src/mobile/pipelines/fct/subscriber_ids.py) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`msisdn_imei.json`](../../../src/mobile/schema/fct/msisdn_imei.json) |

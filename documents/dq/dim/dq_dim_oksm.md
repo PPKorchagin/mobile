@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_oksm` · **Команда:** `dq-dim-oksm` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/oksm.py](../../../src/mobile/pipelines/dq/stg/oksm.py)`. Контракт: `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`.
+Референс: `[pipelines/dq/dim/oksm.py](../../../src/mobile/pipelines/dq/dim/oksm.py)`. Контракт: `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`.
 
 ---
 
@@ -44,7 +44,7 @@ uv run mobile dq-dim-oksm
 uv run mobile dq-dim-oksm --oksm-path data/dim/oksm.parquet
 ```
 
-**Схема полей в runtime:** `DIM_OKSM_FIELDS` в `[pipelines/stg/oksm.py](../../../src/mobile/pipelines/stg/oksm.py)`; JSON `[oksm.json](../../../src/mobile/schema/dim/oksm.json)` — контракт документации.
+**Схема полей в runtime:** `DIM_OKSM_FIELDS` в `[pipelines/dim/oksm.py](../../../src/mobile/pipelines/dim/oksm.py)`; JSON `[oksm.json](../../../src/mobile/schema/dim/oksm.json)` — контракт документации.
 
 **Константа DQ:** `_RUSSIA_NUMERIC_CODE = "643"`.
 
@@ -181,8 +181,8 @@ uv run mobile dq-dim-oksm
 | Артефакт  | Путь                                                                       |
 | --------- | -------------------------------------------------------------------------- |
 | Схема     | `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`                    |
-| ETL build | `[pipelines/stg/oksm.py](../../../src/mobile/pipelines/stg/oksm.py)`       |
-| DQ        | `[pipelines/dq/stg/oksm.py](../../../src/mobile/pipelines/dq/stg/oksm.py)` |
+| ETL build | `[pipelines/dim/oksm.py](../../../src/mobile/pipelines/dim/oksm.py)`       |
+| DQ        | `[pipelines/dq/dim/oksm.py](../../../src/mobile/pipelines/dq/dim/oksm.py)` |
 | Build doc | `[documents/dim/build_dim_oksm.md](../../dim/build_dim_oksm.md)`           |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                 |
 

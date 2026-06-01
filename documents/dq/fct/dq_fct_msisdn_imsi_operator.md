@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_msisdn_imsi` · **Команда:** `dq-fct-msisdn-imsi-operator` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imsi_operator.py). Сборка: [`build_fct_msisdn_imsi_operator.md`](../../fct/build_fct_msisdn_imsi_operator.md). Схема: [`msisdn_imsi.json`](../../../src/mobile/schema/fct/msisdn_imsi.json).
+Референс: [`pipelines/dq/fct/msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imsi_operator.py). Сборка: [`build_fct_msisdn_imsi_operator.md`](../../fct/build_fct_msisdn_imsi_operator.md). Схема: [`msisdn_imsi.json`](../../../src/mobile/schema/fct/msisdn_imsi.json).
 
 ---
 
@@ -43,7 +43,7 @@
 | Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); **один прогон на календарный месяц**, если `fct_msisdn_imsi_output_path(day)` существует; timed-run `dq-fct-msisdn-imsi-operator-{YYYY-MM-01}` |
 | Оба явно | `--report-date` (любой день, например `2025-01-15` → месяц `2025-01-01`) и `--fct-msisdn-imsi-path` |
 
-**Константы DQ в коде** ([`msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imsi_operator.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imsi_operator.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
@@ -77,7 +77,7 @@ uv run mobile nb-fct-msisdn-imsi-operator
 | Путь по умолчанию | `data/fct/msisdn_imsi/{YYYY-MM-01}.parquet` |
 | Формат | Parquet (`snappy`) |
 | Гранулярность | Месячный файл, пополняется ежедневно из `stg_geo_all` |
-| Контракт полей | `FCT_MSISDN_IMSI_FIELDS` из [`pipelines/stg/msisdn_imsi.py`](../../../src/mobile/pipelines/stg/msisdn_imsi.py) |
+| Контракт полей | `FCT_MSISDN_IMSI_FIELDS` из [`pipelines/fct/msisdn_imsi.py`](../../../src/mobile/pipelines/fct/msisdn_imsi.py) |
 
 ### Поля (контракт)
 
@@ -146,7 +146,7 @@ uv run mobile nb-fct-msisdn-imsi-operator
 | `schema_columns` | **failed** | `missing_columns` | Контракт ETL / [`msisdn_imsi.json`](../../../src/mobile/schema/fct/msisdn_imsi.json) |
 | `nulls.*` | **failed** | null в обязательном поле | Интервал без ключевых полей бесполезен |
 | `temporal_order` | **failed** | `valid_to < valid_from` | Некорректный интервал |
-| `msisdn_format` | **failed** | невалидный MSISDN | [`subscriber_ids.py`](../../../src/mobile/pipelines/stg/subscriber_ids.py) |
+| `msisdn_format` | **failed** | невалидный MSISDN | [`subscriber_ids.py`](../../../src/mobile/pipelines/fct/subscriber_ids.py) |
 | `imsi_format` | **failed** | невалидный IMSI | Согласованность с ETL |
 | `normalization_canonical` | **warning** | не канонические значения | ETL должен нормализовать при записи |
 | `operator_id_valid` | **failed** | У IMSI `250…` нет `operator_id` | Для иностранных IMSI null допустим |
@@ -163,10 +163,10 @@ uv run mobile nb-fct-msisdn-imsi-operator
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/stg/msisdn_imsi_operator.py) |
+| DQ pipeline | [`pipelines/dq/fct/msisdn_imsi_operator.py`](../../../src/mobile/pipelines/dq/fct/msisdn_imsi_operator.py) |
 | DQ notebook | [`pipelines/nb/13_fct_msisdn_imsi_operator.ipynb`](../../../src/mobile/pipelines/nb/13_fct_msisdn_imsi_operator.ipynb) |
-| ETL build | [`pipelines/stg/msisdn_imsi.py`](../../../src/mobile/pipelines/stg/msisdn_imsi.py) |
-| Нормализация ID | [`pipelines/stg/subscriber_ids.py`](../../../src/mobile/pipelines/stg/subscriber_ids.py) |
+| ETL build | [`pipelines/fct/msisdn_imsi.py`](../../../src/mobile/pipelines/fct/msisdn_imsi.py) |
+| Нормализация ID | [`pipelines/fct/subscriber_ids.py`](../../../src/mobile/pipelines/fct/subscriber_ids.py) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`msisdn_imsi.json`](../../../src/mobile/schema/fct/msisdn_imsi.json) |

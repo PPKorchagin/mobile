@@ -9,24 +9,21 @@ import pandas as pd
 from shapely import wkt
 from shapely.errors import GEOSException
 
-from mobile.pipelines.stg.bs import FCT_BS_FIELDS
+from mobile.pipelines.dim.time_zones import DIM_TIME_ZONES_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_FCT_BS"
-_OPEN_END_TS = pd.Timestamp("2262-04-11 00:00:00")
-_ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
-_BS_TYPES = frozenset({"m", "f", "i", "x", "o"})
-_TELECOMSTANDARD = frozenset({"2G", "3G", "4G"})
+LOG_TAG = "DQ_DIM_TIME_ZONES"
+ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
 
 
-def run_dq(parquet_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``fct_bs`` по пути parquet (контракт полей — ``FCT_BS_FIELDS``)."""
-    resolved = _resolve_parquet_path(parquet_path)
-    expected_columns = [field["name"] for field in FCT_BS_FIELDS]
+def run_dq(time_zones_path: str | Path) -> dict[str, Any]:
+    """DQ витрины ``dim_time_zones`` по пути parquet (поля — ``DIM_TIME_ZONES_FIELDS`` в ETL)."""
+    resolved = _resolve_time_zones_path(time_zones_path)
+    expected_columns = [field["name"] for field in DIM_TIME_ZONES_FIELDS]
 
     if not resolved.exists():
-        summary = {"status": "failed", "reason": "parquet_not_found", "parquet_path": str(resolved)}
+        summary = {"status": "failed", "reason": "parquet_not_found", "time_zones_path": str(resolved)}
         _emit_log("dataset_presence", "failed", summary)
         _emit_summary(total_checks=1, warnings=0, failed=1)
         return summary
@@ -51,7 +48,7 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
         {
             "row_count": int(len(data)),
             "column_count": int(len(data.columns)),
-            "parquet_path": str(resolved),
+            "time_zones_path": str(resolved),
         },
     )
 
@@ -83,96 +80,56 @@ def run_dq(parquet_path: str | Path) -> dict[str, Any]:
             {"nunique": int(series.nunique(dropna=True))},
         )
 
-    if {"mcc", "mnc", "lac", "cell_id"}.issubset(data.columns):
-        key_null = int(
-            data[["mcc", "mnc", "lac", "cell_id"]]
-            .isna()
-            .any(axis=1)
-            .sum()
-        )
+    if "code" in data.columns:
+        code = pd.to_numeric(data["code"], errors="coerce")
+        duplicate_codes = int(code.duplicated(keep=False).sum())
+        invalid_codes = int(code.isna().sum())
         emit(
-            "key_presence",
-            "failed" if key_null > 0 else "ok",
-            {"null_key_rows": key_null},
-        )
-
-    if {"mcc", "mnc", "lac", "cell_id", "date_on"}.issubset(data.columns):
-        key_cols = ["mcc", "mnc", "lac", "cell_id", "date_on"]
-        dup = int(data.duplicated(subset=key_cols, keep=False).sum())
-        emit(
-            "key_uniqueness_per_snapshot",
-            "warning" if dup > 0 else "ok",
-            {"duplicate_rows": dup, "key_columns": key_cols},
-        )
-
-    if {"date_on", "date_off"}.issubset(data.columns):
-        date_on = pd.to_datetime(data["date_on"], errors="coerce")
-        date_off = pd.to_datetime(data["date_off"], errors="coerce")
-        invalid_order = int(((date_off < date_on) & date_on.notna() & date_off.notna()).sum())
-        open_rows = int(date_off.eq(_OPEN_END_TS).sum())
-        emit(
-            "temporal_consistency",
-            "failed" if invalid_order > 0 else "ok",
+            "code_quality",
+            "warning" if invalid_codes > 0 else "ok",
             {
-                "invalid_date_order_count": invalid_order,
-                "open_rows": open_rows,
-                "open_ratio": round(open_rows / max(len(data), 1), 4),
-                "open_sentinel": str(_OPEN_END_TS),
+                "duplicate_code_count": duplicate_codes,
+                "invalid_code_count": invalid_codes,
             },
         )
 
-    if {"lon", "lat"}.issubset(data.columns):
-        lon = pd.to_numeric(data["lon"], errors="coerce")
-        lat = pd.to_numeric(data["lat"], errors="coerce")
-        invalid_lon = int((~lon.between(-180, 180) & lon.notna()).sum())
-        invalid_lat = int((~lat.between(-90, 90) & lat.notna()).sum())
+    if "timezone" in data.columns:
+        timezone = pd.to_numeric(data["timezone"], errors="coerce")
+        invalid_timezone = int((~timezone.between(-12, 14) & timezone.notna()).sum())
         emit(
-            "coords_range",
-            "warning" if invalid_lon > 0 or invalid_lat > 0 else "ok",
+            "timezone_range",
+            "warning" if invalid_timezone > 0 else "ok",
             {
-                "invalid_lon_count": invalid_lon,
-                "invalid_lat_count": invalid_lat,
+                "invalid_timezone_count": invalid_timezone,
+                "timezone_min": float(timezone.min()) if timezone.notna().any() else None,
+                "timezone_max": float(timezone.max()) if timezone.notna().any() else None,
+                "distribution": _distribution_pct(timezone),
             },
         )
 
-    if "bs_type" in data.columns:
-        bs_type = data["bs_type"].astype("string").str.strip().str.lower()
-        invalid = int((~bs_type.isin(_BS_TYPES) & bs_type.notna()).sum())
-        emit(
-            "bs_type_vocab",
-            "warning" if invalid > 0 else "ok",
-            {"invalid_bs_type_count": invalid, "allowed_values": sorted(_BS_TYPES)},
+    if "geometry" in data.columns:
+        geometry_metrics = _collect_wkt_metrics(data["geometry"])
+        has_geom_warnings = (
+            geometry_metrics["parse_error_count"] > 0
+            or geometry_metrics["invalid_topology_count"] > 0
+            or geometry_metrics["empty_geometry_count"] > 0
+            or geometry_metrics["unsupported_geom_type_count"] > 0
         )
-
-    if "telecomstandard" in data.columns:
-        std = data["telecomstandard"].astype("string").str.strip().str.upper()
-        invalid = int((~std.isin(_TELECOMSTANDARD) & std.notna()).sum())
-        emit(
-            "telecomstandard_vocab",
-            "warning" if invalid > 0 else "ok",
-            {"invalid_telecomstandard_count": invalid, "allowed_values": sorted(_TELECOMSTANDARD)},
-        )
-
-    for geom_col in ("sector_wkt", "mapinfo_wkt"):
-        if geom_col not in data.columns:
-            continue
-        metrics = _collect_wkt_metrics(data[geom_col])
-        warn = (
-            metrics["parse_error_count"] > 0
-            or metrics["invalid_topology_count"] > 0
-            or metrics["empty_geometry_count"] > 0
-            or metrics["unsupported_geom_type_count"] > 0
-        )
-        emit(f"geometry.{geom_col}", "warning" if warn else "ok", metrics)
+        emit("geometry_quality", "warning" if has_geom_warnings else "ok", geometry_metrics)
 
     _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
     return {
-        "status": "failed" if failed else ("warning" if warnings else "ok"),
-        "parquet_path": str(resolved),
+        "status": "ok",
+        "time_zones_path": str(resolved),
         "total_checks": checks,
         "warning_checks": warnings,
         "failed_checks": failed,
     }
+
+
+def _distribution_pct(series: pd.Series) -> dict[str, float]:
+    value_counts = (series.astype("string").fillna("<NA>").value_counts(normalize=True) * 100).round(4).to_dict()
+    return {str(key): float(val) for key, val in value_counts.items()}
 
 
 def _collect_wkt_metrics(values: pd.Series) -> dict[str, Any]:
@@ -192,19 +149,21 @@ def _collect_wkt_metrics(values: pd.Series) -> dict[str, Any]:
         except (GEOSException, ValueError):
             parse_error_count += 1
             continue
+
         geom_type = geom.geom_type.upper()
         geom_type_counts[geom_type] = geom_type_counts.get(geom_type, 0) + 1
-        if geom_type not in _ALLOWED_GEOM_TYPES:
+        if geom_type not in ALLOWED_GEOM_TYPES:
             unsupported_geom_type_count += 1
         if geom.is_empty:
             empty_geometry_count += 1
         if not geom.is_valid:
             invalid_topology_count += 1
-        if geom_type in _ALLOWED_GEOM_TYPES and geom.is_valid and not geom.is_empty:
+        if geom_type in ALLOWED_GEOM_TYPES and geom.is_valid and not geom.is_empty:
             valid_geometry_count += 1
 
+    total = int(len(values))
     return {
-        "total_geometry_count": int(len(values)),
+        "total_geometry_count": total,
         "valid_geometry_count": valid_geometry_count,
         "parse_error_count": parse_error_count,
         "unsupported_geom_type_count": unsupported_geom_type_count,
@@ -214,7 +173,7 @@ def _collect_wkt_metrics(values: pd.Series) -> dict[str, Any]:
     }
 
 
-def _resolve_parquet_path(path: str | Path) -> Path:
+def _resolve_time_zones_path(path: str | Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 

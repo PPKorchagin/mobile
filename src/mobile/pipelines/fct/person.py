@@ -15,9 +15,9 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.pipelines.stg import msisdn_imei, msisdn_imsi
-from mobile.pipelines.stg.oksm import OksmLookup, load_lookup
-from mobile.pipelines.stg.subscriber_ids import (
+from mobile.pipelines.fct import msisdn_imei, msisdn_imsi
+from mobile.pipelines.dim.oksm import OksmLookup, load_lookup
+from mobile.pipelines.fct.subscriber_ids import (
     normalize_imei,
     normalize_imsi,
     normalize_msisdn,

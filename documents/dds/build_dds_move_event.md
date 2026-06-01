@@ -2,7 +2,7 @@
 
 **Витрина:** `dds_event` (DDS-слой) · **Команда:** `build-dds-move-event` · **Режим:** локальное копирование дневных Parquet по ЦОД в плоский layout.
 
-Референс: [`pipelines/stg/move_event.py`](../../src/mobile/pipelines/stg/move_event.py). Схема данных — та же, что у [`dds_event`](./build_dds_event.md): [`event.json`](../../src/mobile/schema/dds/event.json).
+Референс: [`pipelines/dds/move_event.py`](../../src/mobile/pipelines/dds/move_event.py). Схема данных — та же, что у [`dds_event`](./build_dds_event.md): [`event.json`](../../src/mobile/schema/dds/event.json).
 
 > **Заглушка (stub):** команда имитирует перенос в DDS-layout в dev/тестовом контуре (`data/dds/event_dds/`). **На проде** доставку файлов в целевой каталог **выполняет вручную поставщик**; автоматический transfer в боевой контур **не** входит в scope пайплайна.
 
@@ -40,7 +40,7 @@
 
 Пути `src` / `dst` вычисляются в коде — `dds_event_output_path` / `dds_event_dds_output_path` в [`project_paths.py`](../../src/mobile/project_paths.py); на вход job **не передаются**.
 
-**Константы ETL в коде** ([`move_event.py`](../../src/mobile/pipelines/stg/move_event.py), на вход job **не передаются**):
+**Константы ETL в коде** ([`move_event.py`](../../src/mobile/pipelines/dds/move_event.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
@@ -149,7 +149,7 @@ uv run mobile build-dds-move-event --report-date 2025-01-01
 | Артефакт | Путь |
 |----------|------|
 | Схема витрины | [`src/mobile/schema/dds/event.json`](../../src/mobile/schema/dds/event.json) |
-| ETL | [`src/mobile/pipelines/stg/move_event.py`](../../src/mobile/pipelines/stg/move_event.py) |
+| ETL | [`src/mobile/pipelines/dds/move_event.py`](../../src/mobile/pipelines/dds/move_event.py) |
 | Пути layout | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
 | Сборка событий | [`build_dds_event.md`](./build_dds_event.md) |

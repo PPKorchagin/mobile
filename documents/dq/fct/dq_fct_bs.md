@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_bs` · **Команда:** `dq-fct-bs` · **Режим:** read-only DQ (процесс не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/bs.py`](../../../src/mobile/pipelines/dq/stg/bs.py). Сборка: [`build_fct_bs.md`](../../fct/build_fct_bs.md). Схема: [`bs.json`](../../../src/mobile/schema/fct/bs.json).
+Референс: [`pipelines/dq/fct/bs.py`](../../../src/mobile/pipelines/dq/fct/bs.py). Сборка: [`build_fct_bs.md`](../../fct/build_fct_bs.md). Схема: [`bs.json`](../../../src/mobile/schema/fct/bs.json).
 
 ---
 
@@ -36,7 +36,7 @@
 
 **CLI:** `--fct-bs-path` — явный parquet; без флага — `fct_bs_output_path()` ([`project_paths.py`](../../../src/mobile/project_paths.py)).
 
-**Константы DQ в коде** ([`bs.py`](../../../src/mobile/pipelines/dq/stg/bs.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`bs.py`](../../../src/mobile/pipelines/dq/fct/bs.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
@@ -69,7 +69,7 @@ uv run mobile nb-fct-bs
 | Путь по умолчанию | `data/fct/bs.parquet` |
 | Формат | Parquet |
 | Модель данных | SCD Type 2: интервалы `date_on` / `date_off` |
-| Контракт полей | `FCT_BS_FIELDS` из [`pipelines/stg/bs.py`](../../../src/mobile/pipelines/stg/bs.py) |
+| Контракт полей | `FCT_BS_FIELDS` из [`pipelines/fct/bs.py`](../../../src/mobile/pipelines/fct/bs.py) |
 
 ### Поля (контракт)
 
@@ -198,9 +198,9 @@ CLI не завершается с ненулевым exit code при failed ch
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/bs.py`](../../../src/mobile/pipelines/dq/stg/bs.py) |
+| DQ pipeline | [`pipelines/dq/fct/bs.py`](../../../src/mobile/pipelines/dq/fct/bs.py) |
 | DQ notebook | [`pipelines/nb/10_fct_bs.ipynb`](../../../src/mobile/pipelines/nb/10_fct_bs.ipynb) |
-| ETL build | [`pipelines/stg/bs.py`](../../../src/mobile/pipelines/stg/bs.py) |
+| ETL build | [`pipelines/fct/bs.py`](../../../src/mobile/pipelines/fct/bs.py) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`bs.json`](../../../src/mobile/schema/fct/bs.json) |

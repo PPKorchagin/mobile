@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_oksm` · **Команда:** `build-dim-oksm` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: [`pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py). Схема витрины: [`oksm.json`](../../src/mobile/schema/dim/oksm.json).
+Референс: [`pipelines/dim/oksm.py`](../../src/mobile/pipelines/dim/oksm.py). Схема витрины: [`oksm.json`](../../src/mobile/schema/dim/oksm.json).
 
 ---
 
@@ -36,7 +36,7 @@
 
 Сжатие Parquet — константа `DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py) (по умолчанию `snappy`); в job **не передаётся**.
 
-**Константы ETL** ([`oksm.py`](../../src/mobile/pipelines/stg/oksm.py)):
+**Константы ETL** ([`oksm.py`](../../src/mobile/pipelines/dim/oksm.py)):
 
 | Константа | Значение |
 |-----------|----------|
@@ -115,6 +115,6 @@ uv run mobile build-dim-oksm --csv-path src/mobile/raw_data/oksm_v001.csv --outp
 | Артефакт | Путь |
 |----------|------|
 | Схема | [`src/mobile/schema/dim/oksm.json`](../../src/mobile/schema/dim/oksm.json) |
-| ETL / lookup | [`src/mobile/pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py) |
+| ETL / lookup | [`src/mobile/pipelines/dim/oksm.py`](../../src/mobile/pipelines/dim/oksm.py) |
 | DQ | [`documents/dq/dim/dq_dim_oksm.md`](../dq/dim/dq_dim_oksm.md) |
 | Потребитель | [`build_fct_person.md`](../fct/build_fct_person.md) |

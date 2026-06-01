@@ -10,8 +10,8 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.msisdn_imsi import FCT_MSISDN_IMSI_FIELDS, operator_id_from_imsi_series
-from mobile.pipelines.stg.subscriber_ids import (
+from mobile.pipelines.fct.msisdn_imsi import FCT_MSISDN_IMSI_FIELDS, operator_id_from_imsi_series
+from mobile.pipelines.fct.subscriber_ids import (
     IMSI_MAX_LEN,
     IMSI_MIN_LEN,
     MSISDN_MAX_LEN,

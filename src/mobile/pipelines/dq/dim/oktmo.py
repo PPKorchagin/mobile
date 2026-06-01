@@ -9,7 +9,7 @@ import pandas as pd
 from shapely import wkt
 from shapely.errors import GEOSException
 
-from mobile.pipelines.stg.oktmo import DIM_OKTMO_FIELDS
+from mobile.pipelines.dim.oktmo import DIM_OKTMO_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)

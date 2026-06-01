@@ -13,7 +13,7 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.pipelines.stg.subscriber_ids import normalize_imsi, normalize_msisdn, to_digit_string_series
+from mobile.pipelines.fct.subscriber_ids import normalize_imsi, normalize_msisdn, to_digit_string_series
 from mobile.project_paths import (
     DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH,
     resolve_project_path,

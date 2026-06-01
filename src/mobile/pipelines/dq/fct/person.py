@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.person import FCT_PERSON_FIELDS
+from mobile.pipelines.fct.person import FCT_PERSON_FIELDS
 from mobile.project_paths import (
     DEFAULT_DIM_OKSM_OUTPUT_PATH,
     report_month_start,

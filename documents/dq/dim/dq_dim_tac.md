@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_tac` · **Команда:** `dq-dim-tac` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)`. Контракт: `[tac.json](../../../src/mobile/schema/dim/tac.json)`.
+Референс: `[pipelines/dq/dim/tac.py](../../../src/mobile/pipelines/dq/dim/tac.py)`. Контракт: `[tac.json](../../../src/mobile/schema/dim/tac.json)`.
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## TODO
 
-1. При смене таксономии M2M обновлять `M2M_EQUIPMENT_TYPES` в `[pipelines/stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)` (DQ читает ту же константу).
+1. При смене таксономии M2M обновлять `M2M_EQUIPMENT_TYPES` в `[pipelines/dim/tac.py](../../../src/mobile/pipelines/dim/tac.py)` (DQ читает ту же константу).
 
 ---
 
@@ -43,7 +43,7 @@ uv run mobile dq-dim-tac
 uv run mobile dq-dim-tac --tac-path data/dim/tac.parquet
 ```
 
-Флаги CLI: `**--tac-path**`. Поля — `DIM_TAC_FIELDS`; M2M-типы — `M2M_EQUIPMENT_TYPES` (оба в ETL `[stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)`).
+Флаги CLI: `**--tac-path**`. Поля — `DIM_TAC_FIELDS`; M2M-типы — `M2M_EQUIPMENT_TYPES` (оба в ETL `[stg/tac.py](../../../src/mobile/pipelines/dim/tac.py)`).
 
 **Константа DQ:** `_MIN_M2M_RATIO = 0.05`.
 
@@ -112,7 +112,7 @@ uv run mobile dq-dim-tac
 
 ## Проверки
 
-Статусы: **ok** / **warning** / **failed**. Порог M2M: `_MIN_M2M_RATIO = 0.05` в `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)`.
+Статусы: **ok** / **warning** / **failed**. Порог M2M: `_MIN_M2M_RATIO = 0.05` в `[pipelines/dq/dim/tac.py](../../../src/mobile/pipelines/dq/dim/tac.py)`.
 
 ### Наличие и схема
 
@@ -161,8 +161,8 @@ uv run mobile dq-dim-tac
 | Артефакт  | Путь                                                                     |
 | --------- | ------------------------------------------------------------------------ |
 | Схема     | `[tac.json](../../../src/mobile/schema/dim/tac.json)`                    |
-| ETL build | `[pipelines/stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)`       |
-| DQ        | `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)` |
+| ETL build | `[pipelines/dim/tac.py](../../../src/mobile/pipelines/dim/tac.py)`       |
+| DQ        | `[pipelines/dq/dim/tac.py](../../../src/mobile/pipelines/dq/dim/tac.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`               |
 
 

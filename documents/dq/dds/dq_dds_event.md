@@ -2,7 +2,7 @@
 
 **Витрина:** `dds_event` (DDS-слой `event_dds`) · **Команда:** `dq-dds-event` · **Режим:** read-only DQ (процесс не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/event.py`](../../../src/mobile/pipelines/dq/stg/event.py). Сборка DDS: [`build_dds_move_event.md`](../../dds/build_dds_move_event.md). Схема полей: [`event.json`](../../../src/mobile/schema/dds/event.json).
+Референс: [`pipelines/dq/dds/event.py`](../../../src/mobile/pipelines/dq/dds/event.py). Сборка DDS: [`build_dds_move_event.md`](../../dds/build_dds_move_event.md). Схема полей: [`event.json`](../../../src/mobile/schema/dds/event.json).
 
 ---
 
@@ -30,7 +30,7 @@
 | `report_date` | date | **Да** | `DEFAULT_SRC_*` (оркестратор CLI) | Отчётный день (`--report-date`) |
 | `event_dds_root` | path (dir) | **Да** | `data/dds/event_dds` | Корень каталога DDS (`--event-dds-path`) |
 
-Pipeline принимает **только каталог**. Обход: `event_dds_root/{YYYY-MM-DD}/*.parquet` или `rglob` с фильтром по дате в пути ([`_discover_event_dds_parquet_paths`](../../../src/mobile/pipelines/dq/stg/event.py)).
+Pipeline принимает **только каталог**. Обход: `event_dds_root/{YYYY-MM-DD}/*.parquet` или `rglob` с фильтром по дате в пути ([`_discover_event_dds_parquet_paths`](../../../src/mobile/pipelines/dq/dds/event.py)).
 
 **CLI:** оркестратор перебирает календарные дни `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); на каждый день — один timed-run с тем же `event_dds_root` (все ЦОД за день в одном прогоне).
 
@@ -38,13 +38,13 @@ Pipeline принимает **только каталог**. Обход: `event_
 
 **С `--report-date`** — один прогон за указанный день; опционально `--event-dds-path` переопределяет корень каталога.
 
-**Константы DQ в коде** ([`event.py`](../../../src/mobile/pipelines/dq/stg/event.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`event.py`](../../../src/mobile/pipelines/dq/dds/event.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
 | `LOG_TAG` | `DQ_DDS_EVENT` |
 | `STG_EVENT_CRITICAL_COLUMNS` | поля из `DDS_EVENT_FIELDS` |
-| `EVENT_CODES` | коды/имена событий (из ETL [`stg/event.py`](../../../src/mobile/pipelines/stg/event.py)) |
+| `EVENT_CODES` | коды/имена событий (из ETL [`stg/event.py`](../../../src/mobile/pipelines/dds/event.py)) |
 
 **Предусловие:** `uv run mobile build-dds-move-event` (или `build-dds-event` + `build-dds-move-event`) за ту же `report_date`.
 
@@ -179,7 +179,7 @@ uv run mobile nb-dds-event
 | Check | Статус при сбое | Смысл | Обоснование |
 |-------|-----------------|-------|-------------|
 | `.stg_contract.sample` | **warning** | Пустой DataFrame на gate | Нет данных для проверки контракта |
-| `.stg_contract.event` | **failed** / **warning** | `event` ∈ {10001, 10002, 10003, 10004} (<99.9% / <100%) | Код OCC согласован с layout SRC и [`EVENT_CODES`](../../../src/mobile/pipelines/stg/event.py) |
+| `.stg_contract.event` | **failed** / **warning** | `event` ∈ {10001, 10002, 10003, 10004} (<99.9% / <100%) | Код OCC согласован с layout SRC и [`EVENT_CODES`](../../../src/mobile/pipelines/dds/event.py) |
 | `.stg_contract.event_name` | **failed** / **warning** | `event_name` ∈ {cdr, sms, gprs, location} | Человекочитаемый тип для отчётов и join |
 | `.stg_contract.event_code_name_alignment` | **failed** / **warning** | Согласованность `event` и `event_name` (<99.9%) | Исключение рассинхрона кода и имени после concat витрин |
 | `.stg_contract.location` | **failed** / **warning** | Struct `location`: mcc/mnc непустые при наличии (<90% / <98%) | Минимальная геопривязка для geo-all и карт |
@@ -202,7 +202,7 @@ CLI не завершается с ненулевым exit code при failed ch
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/event.py`](../../../src/mobile/pipelines/dq/stg/event.py) |
+| DQ pipeline | [`pipelines/dq/dds/event.py`](../../../src/mobile/pipelines/dq/dds/event.py) |
 | DQ notebook | [`pipelines/nb/9_dds_event.ipynb`](../../../src/mobile/pipelines/nb/9_dds_event.ipynb) |
 | Перенос DDS | [`build_dds_move_event.md`](../../dds/build_dds_move_event.md) |
 | Сборка событий | [`build_dds_event.md`](../../dds/build_dds_event.md) |

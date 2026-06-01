@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_person` · **Команда:** `dq-fct-person` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/person.py`](../../../src/mobile/pipelines/dq/stg/person.py). Сборка: [`build_fct_person.md`](../../fct/build_fct_person.md). Схема: [`person.json`](../../../src/mobile/schema/fct/person.json).
+Референс: [`pipelines/dq/fct/person.py`](../../../src/mobile/pipelines/dq/fct/person.py). Сборка: [`build_fct_person.md`](../../fct/build_fct_person.md). Схема: [`person.json`](../../../src/mobile/schema/fct/person.json).
 
 ---
 
@@ -46,12 +46,12 @@
 | Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); **один прогон на календарный месяц**, если `fct_person_output_path(month)` существует; timed-run `dq-fct-person-{YYYY-MM-01}` (`dim_oksm` — default в pipeline) |
 | Оба явно | `--report-date` (любой день, например `2025-01-15` → месяц `2025-01-01`) и `--fct-person-path`; опционально `--dim-oksm-path` |
 
-**Константы DQ в коде** ([`person.py`](../../../src/mobile/pipelines/dq/stg/person.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`person.py`](../../../src/mobile/pipelines/dq/fct/person.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
 | `LOG_TAG` | `DQ_FCT_PERSON` |
-| `_PERSON_COLUMNS` | имена полей из `FCT_PERSON_FIELDS` ([`stg/person.py`](../../../src/mobile/pipelines/stg/person.py)) |
+| `_PERSON_COLUMNS` | имена полей из `FCT_PERSON_FIELDS` ([`fct/person.py`](../../../src/mobile/pipelines/fct/person.py)) |
 | `_PERSON_CRITICAL_NULLS` | `person_id`, `person_cluster_key`, `report_date`, `msisdn`, `imsi`, `imei`, `operator_id` — null → **failed** |
 | `_PERSON_DEMO_NULLS` | `gender`, `age`, `citizenship` — null → **warning** |
 | `_PERSON_ID_RE` | `^prs_[0-9a-f]{24}$` |
@@ -89,7 +89,7 @@ uv run mobile nb-fct-person
 | Путь по умолчанию | `data/fct/person/{YYYY-MM-01}.parquet` |
 | Формат | Parquet (`snappy`) |
 | Гранулярность | Месячный срез (`report_date` = 1-е число месяца) |
-| Контракт полей | `FCT_PERSON_FIELDS` из [`pipelines/stg/person.py`](../../../src/mobile/pipelines/stg/person.py) |
+| Контракт полей | `FCT_PERSON_FIELDS` из [`pipelines/fct/person.py`](../../../src/mobile/pipelines/fct/person.py) |
 
 ### Поля (контракт)
 
@@ -193,9 +193,9 @@ uv run mobile nb-fct-person
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/person.py`](../../../src/mobile/pipelines/dq/stg/person.py) |
+| DQ pipeline | [`pipelines/dq/fct/person.py`](../../../src/mobile/pipelines/dq/fct/person.py) |
 | DQ notebook | [`pipelines/nb/15_fct_person.ipynb`](../../../src/mobile/pipelines/nb/15_fct_person.ipynb) |
-| ETL build | [`pipelines/stg/person.py`](../../../src/mobile/pipelines/stg/person.py) |
+| ETL build | [`pipelines/fct/person.py`](../../../src/mobile/pipelines/fct/person.py) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`person.json`](../../../src/mobile/schema/fct/person.json) |

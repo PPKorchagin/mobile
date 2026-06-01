@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_msisdn_imei` · **Команда:** `build-fct-msisdn-imei` · **Режим:** месячный Parquet с **ежедневным** инкрементом из `stg_geo_all`.
 
-Референс: [`pipelines/stg/msisdn_imei.py`](../../src/mobile/pipelines/stg/msisdn_imei.py). Схема витрины: [`msisdn_imei.json`](../../src/mobile/schema/fct/msisdn_imei.json).
+Референс: [`pipelines/fct/msisdn_imei.py`](../../src/mobile/pipelines/fct/msisdn_imei.py). Схема витрины: [`msisdn_imei.json`](../../src/mobile/schema/fct/msisdn_imei.json).
 
 ---
 
@@ -32,7 +32,7 @@
 
 Пути **относительные к корню репозитория** `mobile` (`resolve_project_path`). Parquet пишется со сжатием **`snappy`** (`DEFAULT_PARQUET_COMPRESSION`).
 
-**Константы ETL в коде** (на вход job **не передаются**): логика merge с gap ≤ 1 с — см. [`msisdn_imei.py`](../../src/mobile/pipelines/stg/msisdn_imei.py) (`_merge_imei_intervals`).
+**Константы ETL в коде** (на вход job **не передаются**): логика merge с gap ≤ 1 с — см. [`msisdn_imei.py`](../../src/mobile/pipelines/fct/msisdn_imei.py) (`_merge_imei_intervals`).
 
 ### CLI
 
@@ -96,7 +96,7 @@ uv run mobile build-fct-msisdn-imei \
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_build` → `_run_build` в [`msisdn_imei.py`](../../src/mobile/pipelines/stg/msisdn_imei.py).
+Точка входа: `run_build` → `_run_build` в [`msisdn_imei.py`](../../src/mobile/pipelines/fct/msisdn_imei.py).
 
 ### Шаг 0. Инициализация
 
@@ -113,7 +113,7 @@ uv run mobile build-fct-msisdn-imei \
 ### Шаг 2. Подготовка событий
 
 1. `event_ts` ← `start_time_utc`.
-2. [`normalize_msisdn`](../../src/mobile/pipelines/stg/subscriber_ids.py), [`normalize_imei`](../../src/mobile/pipelines/stg/subscriber_ids.py).
+2. [`normalize_msisdn`](../../src/mobile/pipelines/fct/subscriber_ids.py), [`normalize_imei`](../../src/mobile/pipelines/fct/subscriber_ids.py).
 3. Отбор: `msisdn`, `imei`, `event_ts` not null.
 4. Метрика: `event_rows_with_pair`.
 
@@ -127,7 +127,7 @@ uv run mobile build-fct-msisdn-imei \
 
 ### Шаг 4. Инкремент месячного файла
 
-Через [`_upsert_daily_into_month_parquet`](../../src/mobile/pipelines/stg/msisdn_imei.py):
+Через [`_upsert_daily_into_month_parquet`](../../src/mobile/pipelines/fct/msisdn_imei.py):
 
 1. Удалить из month-файла строки, **пересекающие** календарный день `report_date`.
 2. Добавить суточные интервалы.
@@ -154,7 +154,7 @@ uv run mobile build-fct-msisdn-imei \
 | Артефакт | Путь |
 |----------|------|
 | Схема витрины | [`src/mobile/schema/fct/msisdn_imei.json`](../../src/mobile/schema/fct/msisdn_imei.json) |
-| ETL | [`src/mobile/pipelines/stg/msisdn_imei.py`](../../src/mobile/pipelines/stg/msisdn_imei.py) |
+| ETL | [`src/mobile/pipelines/fct/msisdn_imei.py`](../../src/mobile/pipelines/fct/msisdn_imei.py) |
 | Пути/лейауты | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
 | Вход geo | [`build_stg_geo_all.md`](../stg/build_stg_geo_all.md) |

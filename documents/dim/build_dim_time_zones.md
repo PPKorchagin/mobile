@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_time_zones` · **Команда:** `build-dim-time-zones` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: `[pipelines/stg/time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`. Схема витрины: `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)`.
+Референс: `[pipelines/dim/time_zones.py](../../src/mobile/pipelines/dim/time_zones.py)`. Схема витрины: `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)`.
 
 ---
 
@@ -42,7 +42,7 @@
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
 
-**Константы ETL в коде** (`[time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`, на вход job **не передаются**):
+**Константы ETL в коде** (`[time_zones.py](../../src/mobile/pipelines/dim/time_zones.py)`, на вход job **не передаются**):
 
 
 | Константа                     | Значение                                                                                      |
@@ -80,7 +80,7 @@ uv run mobile build-dim-time-zones --csv-path src/mobile/raw_data/time_zones.csv
 
 ### Поля витрины
 
-Контракт полей — `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)` → `fields`; в ETL дублируется в `DIM_TIME_ZONES_FIELDS` (`[time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`).
+Контракт полей — `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)` → `fields`; в ETL дублируется в `DIM_TIME_ZONES_FIELDS` (`[time_zones.py](../../src/mobile/pipelines/dim/time_zones.py)`).
 
 
 | #   | Поле       | Тип    | Nullable | Смысл                                       |
@@ -183,7 +183,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 | Артефакт          | Путь                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------- |
 | Схема витрины     | `[src/mobile/schema/dim/time_zones.json](../../src/mobile/schema/dim/time_zones.json)`   |
-| ETL               | `[src/mobile/pipelines/stg/time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)` |
+| ETL               | `[src/mobile/pipelines/dim/time_zones.py](../../src/mobile/pipelines/dim/time_zones.py)` |
 | Пути по умолчанию | `[src/mobile/project_paths.py](../../src/mobile/project_paths.py)`                       |
 
 

@@ -46,22 +46,23 @@ from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import excl as dq_src_excl
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.dq.src import person as dq_src_person
-from mobile.pipelines.stg import event as dds_event
+from mobile.pipelines.dds import event as dds_event
+from mobile.pipelines.dds import move_event as stg_move_event
+from mobile.pipelines.dim import oktmo, oksm, tac, time_zones
+from mobile.pipelines.fct import bs as fct_bs
+from mobile.pipelines.fct import geo_intervals as fct_geo_intervals
+from mobile.pipelines.fct import msisdn_imei as fct_msisdn_imei
+from mobile.pipelines.fct import msisdn_imsi as fct_msisdn_imsi
+from mobile.pipelines.fct import person as fct_person
 from mobile.pipelines.stg import geo_all as stg_geo_all
-from mobile.pipelines.stg import geo_intervals as fct_geo_intervals
-from mobile.pipelines.stg import person as fct_person
-from mobile.pipelines.stg import move_event as stg_move_event
-from mobile.pipelines.stg import bs as fct_bs
-from mobile.pipelines.stg import msisdn_imei as fct_msisdn_imei
-from mobile.pipelines.stg import msisdn_imsi as fct_msisdn_imsi
-from mobile.pipelines.dq.stg import event as dq_dds_event
-from mobile.pipelines.dq.stg import geo_intervals as dq_fct_geo_intervals
+from mobile.pipelines.dq.dds import event as dq_dds_event
+from mobile.pipelines.dq.dim import oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.dq.fct import bs as dq_fct_bs
+from mobile.pipelines.dq.fct import geo_intervals as dq_fct_geo_intervals
+from mobile.pipelines.dq.fct import msisdn_imei as dq_fct_msisdn_imei
+from mobile.pipelines.dq.fct import msisdn_imsi_operator as dq_fct_msisdn_imsi_operator
+from mobile.pipelines.dq.fct import person as dq_fct_person
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
-from mobile.pipelines.dq.stg import msisdn_imei as dq_fct_msisdn_imei
-from mobile.pipelines.dq.stg import msisdn_imsi_operator as dq_fct_msisdn_imsi_operator
-from mobile.pipelines.dq.stg import person as dq_fct_person
-from mobile.pipelines.dq.stg import bs as dq_fct_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
-from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_SRC_EXCL_IMEI_OUTPUT,

@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_geo_intervals` · **Команда:** `dq-fct-geo-intervals` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py). Сборка: [`build_fct_geo_intervals.md`](../../fct/build_fct_geo_intervals.md). Схема: [`geo_intervals.json`](../../../src/mobile/schema/fct/geo_intervals.json).
+Референс: [`pipelines/dq/fct/geo_intervals.py`](../../../src/mobile/pipelines/dq/fct/geo_intervals.py). Сборка: [`build_fct_geo_intervals.md`](../../fct/build_fct_geo_intervals.md). Схема: [`geo_intervals.json`](../../../src/mobile/schema/fct/geo_intervals.json).
 
 ---
 
@@ -44,13 +44,13 @@
 | Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); на каждый день с существующим `fct_geo_intervals_output_path(day)` — `dq-fct-geo-intervals-{YYYY-MM-DD}` |
 | Оба явно | `--report-date` и `--fct-geo-intervals-path` (один прогон) |
 
-**Константы DQ в коде** ([`geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py), на вход job **не передаются**):
+**Константы DQ в коде** ([`geo_intervals.py`](../../../src/mobile/pipelines/dq/fct/geo_intervals.py), на вход job **не передаются**):
 
 | Константа | Значение |
 |-----------|----------|
 | `LOG_TAG` | `DQ_FCT_GEO_INTERVALS` |
 | `_BS_TYPES` | `m`, `f`, `i`, `x`, `o` |
-| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`stg/geo_intervals.py`](../../../src/mobile/pipelines/fct/geo_intervals.py) |
 
 **Предусловие:** `uv run mobile build-fct-geo-intervals` за ту же `report_date` (и binding-витрины за месяц этого дня).
 
@@ -80,7 +80,7 @@ uv run mobile nb-fct-geo-intervals
 | Путь по умолчанию | `data/fct/geo_intervals/{YYYY-MM-DD}.parquet` |
 | Формат | Parquet (`snappy`) |
 | Календарный срез | `report_date` (поле `time_key`) |
-| Контракт полей | `_OUTPUT_COLUMNS` из [`pipelines/stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+| Контракт полей | `_OUTPUT_COLUMNS` из [`pipelines/fct/geo_intervals.py`](../../../src/mobile/pipelines/fct/geo_intervals.py) |
 
 ### Поля (контракт)
 
@@ -170,9 +170,9 @@ uv run mobile nb-fct-geo-intervals
 
 | Артефакт | Путь |
 |----------|------|
-| DQ pipeline | [`pipelines/dq/stg/geo_intervals.py`](../../../src/mobile/pipelines/dq/stg/geo_intervals.py) |
+| DQ pipeline | [`pipelines/dq/fct/geo_intervals.py`](../../../src/mobile/pipelines/dq/fct/geo_intervals.py) |
 | DQ notebook | [`pipelines/nb/14_fct_geo_intervals.ipynb`](../../../src/mobile/pipelines/nb/14_fct_geo_intervals.ipynb) |
-| ETL build | [`pipelines/stg/geo_intervals.py`](../../../src/mobile/pipelines/stg/geo_intervals.py) |
+| ETL build | [`pipelines/fct/geo_intervals.py`](../../../src/mobile/pipelines/fct/geo_intervals.py) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`geo_intervals.json`](../../../src/mobile/schema/fct/geo_intervals.json) |

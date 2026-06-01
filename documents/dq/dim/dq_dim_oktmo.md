@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_oktmo` · **Команда:** `dq-dim-oktmo` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)`. Схема (контракт): `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)`.
+Референс: `[pipelines/dq/dim/oktmo.py](../../../src/mobile/pipelines/dq/dim/oktmo.py)`. Схема (контракт): `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)`.
 
 ---
 
@@ -43,7 +43,7 @@ uv run mobile dq-dim-oktmo
 uv run mobile dq-dim-oktmo --oktmo-path data/dim/oktmo.parquet
 ```
 
-**Схема полей в runtime:** `DIM_OKTMO_FIELDS` в `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`; JSON `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)` — только контракт документации.
+**Схема полей в runtime:** `DIM_OKTMO_FIELDS` в `[pipelines/dim/oktmo.py](../../../src/mobile/pipelines/dim/oktmo.py)`; JSON `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)` — только контракт документации.
 
 **Предусловие:** `uv run mobile build-dim-oktmo`.
 
@@ -184,8 +184,8 @@ uv run mobile dq-dim-oktmo
 | Артефакт  | Путь                                                                         |
 | --------- | ---------------------------------------------------------------------------- |
 | Схема     | `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)`                    |
-| ETL build | `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`       |
-| DQ        | `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)` |
+| ETL build | `[pipelines/dim/oktmo.py](../../../src/mobile/pipelines/dim/oktmo.py)`       |
+| DQ        | `[pipelines/dq/dim/oktmo.py](../../../src/mobile/pipelines/dq/dim/oktmo.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                   |
 
 

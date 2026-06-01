@@ -18,7 +18,7 @@ from shapely.prepared import prep
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_imsi, normalize_msisdn
+from mobile.pipelines.fct.subscriber_ids import normalize_imei, normalize_imsi, normalize_msisdn
 from mobile.project_paths import (
     resolve_project_path,
     resolve_stg_daily_parquet_path,

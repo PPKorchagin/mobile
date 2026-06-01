@@ -11,7 +11,7 @@ from typing import Any, Callable
 import pandas as pd
 import pyarrow.parquet as pq
 
-from mobile.pipelines.stg.event import EVENT_CODES, DDS_EVENT_FIELDS
+from mobile.pipelines.dds.event import EVENT_CODES, DDS_EVENT_FIELDS
 from mobile.project_paths import (
     resolve_project_path,
     started_parseable_mask,

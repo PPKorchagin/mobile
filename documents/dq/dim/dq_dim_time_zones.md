@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_time_zones` · **Команда:** `dq-dim-time-zones` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/time_zones.py](../../../src/mobile/pipelines/dq/stg/time_zones.py)`. Контракт полей: `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)`.
+Референс: `[pipelines/dq/dim/time_zones.py](../../../src/mobile/pipelines/dq/dim/time_zones.py)`. Контракт полей: `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)`.
 
 ---
 
@@ -43,7 +43,7 @@ uv run mobile dq-dim-time-zones
 uv run mobile dq-dim-time-zones --time-zones-path data/dim/time_zones.parquet
 ```
 
-**Схема полей в runtime:** `DIM_TIME_ZONES_FIELDS` в `[pipelines/stg/time_zones.py](../../../src/mobile/pipelines/stg/time_zones.py)`; JSON `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)` — контракт документации.
+**Схема полей в runtime:** `DIM_TIME_ZONES_FIELDS` в `[pipelines/dim/time_zones.py](../../../src/mobile/pipelines/dim/time_zones.py)`; JSON `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)` — контракт документации.
 
 **Предусловие:** `uv run mobile build-dim-time-zones`.
 
@@ -167,8 +167,8 @@ uv run mobile dq-dim-time-zones
 | Артефакт  | Путь                                                                                   |
 | --------- | -------------------------------------------------------------------------------------- |
 | Схема     | `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)`                    |
-| ETL build | `[pipelines/stg/time_zones.py](../../../src/mobile/pipelines/stg/time_zones.py)`       |
-| DQ        | `[pipelines/dq/stg/time_zones.py](../../../src/mobile/pipelines/dq/stg/time_zones.py)` |
+| ETL build | `[pipelines/dim/time_zones.py](../../../src/mobile/pipelines/dim/time_zones.py)`       |
+| DQ        | `[pipelines/dq/dim/time_zones.py](../../../src/mobile/pipelines/dq/dim/time_zones.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                             |
 
 

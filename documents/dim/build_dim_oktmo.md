@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_oktmo` · **Команда:** `build-dim-oktmo` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: [`pipelines/stg/oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py). Схема витрины: [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json).
+Референс: [`pipelines/dim/oktmo.py`](../../src/mobile/pipelines/dim/oktmo.py). Схема витрины: [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json).
 
 ---
 
@@ -42,7 +42,7 @@
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
 
-**Константы ETL в коде** ([`oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py), на вход job **не передаются**):
+**Константы ETL в коде** ([`oktmo.py`](../../src/mobile/pipelines/dim/oktmo.py), на вход job **не передаются**):
 
 
 | Константа                | Значение                                                          |
@@ -79,7 +79,7 @@ uv run mobile build-dim-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --ou
 
 ### Поля витрины
 
-Контракт полей — [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json) → `fields`; в ETL дублируется в `DIM_OKTMO_FIELDS` ([`oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py)). Порядок колонок в Parquet — **строго по таблице ниже**.
+Контракт полей — [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json) → `fields`; в ETL дублируется в `DIM_OKTMO_FIELDS` ([`oktmo.py`](../../src/mobile/pipelines/dim/oktmo.py)). Порядок колонок в Parquet — **строго по таблице ниже**.
 
 
 | #   | Поле          | Тип    | Nullable | Смысл                                                              |
@@ -191,7 +191,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 | Артефакт          | Путь                                                                           |
 | ----------------- | ------------------------------------------------------------------------------ |
 | Схема витрины     | [`src/mobile/schema/dim/oktmo.json`](../../src/mobile/schema/dim/oktmo.json)   |
-| ETL               | [`src/mobile/pipelines/stg/oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py) |
+| ETL               | [`src/mobile/pipelines/dim/oktmo.py`](../../src/mobile/pipelines/dim/oktmo.py) |
 | Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py)             |
 
 

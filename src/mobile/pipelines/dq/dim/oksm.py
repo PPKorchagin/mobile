@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.oksm import DIM_OKSM_FIELDS
+from mobile.pipelines.dim.oksm import DIM_OKSM_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ _RUSSIA_NUMERIC_CODE = "643"
 
 
 def run_dq(oksm_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``dim_oksm`` по пути parquet (поля — константы ETL ``stg/oksm.py``)."""
+    """DQ витрины ``dim_oksm`` по пути parquet (поля — константы ETL ``dim/oksm.py``)."""
     resolved = _resolve_oksm_path(oksm_path)
     expected_columns = [field["name"] for field in DIM_OKSM_FIELDS]
 

@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_msisdn_imsi` · **Команда:** `build-fct-msisdn-imsi-operator` · **Режим:** месячный Parquet MSISDN + IMSI + `operator_id` с **ежедневным** инкрементом из `stg_geo_all`.
 
-Референс: [`pipelines/stg/msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py). Схема витрины: [`msisdn_imsi.json`](../../src/mobile/schema/fct/msisdn_imsi.json).
+Референс: [`pipelines/fct/msisdn_imsi.py`](../../src/mobile/pipelines/fct/msisdn_imsi.py). Схема витрины: [`msisdn_imsi.json`](../../src/mobile/schema/fct/msisdn_imsi.json).
 
 ---
 
@@ -32,7 +32,7 @@
 
 Пути **относительные к корню репозитория** `mobile` (`resolve_project_path`). Parquet пишется со сжатием **`snappy`** (`DEFAULT_PARQUET_COMPRESSION`).
 
-**Константы ETL в коде** (на вход job **не передаются**): правило MNC `imsi[3:5]` при префиксе `250`, merge с gap ≤ 1 с — см. [`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py).
+**Константы ETL в коде** (на вход job **не передаются**): правило MNC `imsi[3:5]` при префиксе `250`, merge с gap ≤ 1 с — см. [`msisdn_imsi.py`](../../src/mobile/pipelines/fct/msisdn_imsi.py).
 
 ### CLI
 
@@ -99,7 +99,7 @@ uv run mobile build-fct-msisdn-imsi-operator \
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_build` в [`msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py).
+Точка входа: `run_build` в [`msisdn_imsi.py`](../../src/mobile/pipelines/fct/msisdn_imsi.py).
 
 ### Шаг 0. Инициализация
 
@@ -153,7 +153,7 @@ uv run mobile build-fct-msisdn-imsi-operator \
 | Артефакт | Путь |
 |----------|------|
 | Схема витрины | [`src/mobile/schema/fct/msisdn_imsi.json`](../../src/mobile/schema/fct/msisdn_imsi.json) |
-| ETL | [`src/mobile/pipelines/stg/msisdn_imsi.py`](../../src/mobile/pipelines/stg/msisdn_imsi.py) |
+| ETL | [`src/mobile/pipelines/fct/msisdn_imsi.py`](../../src/mobile/pipelines/fct/msisdn_imsi.py) |
 | Пути/лейауты | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
 | Вход geo | [`build_stg_geo_all.md`](../stg/build_stg_geo_all.md) |

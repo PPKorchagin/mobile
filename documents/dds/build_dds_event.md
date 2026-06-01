@@ -2,7 +2,7 @@
 
 **Витрина:** `dds_event` · **Команда:** `build-dds-event` · **Режим:** сборка дневного Parquet из mobile-витрин одного ЦОД.
 
-Референс: [`pipelines/stg/event.py`](../../src/mobile/pipelines/stg/event.py). Схема витрины: [`event.json`](../../src/mobile/schema/dds/event.json).
+Референс: [`pipelines/dds/event.py`](../../src/mobile/pipelines/dds/event.py). Схема витрины: [`event.json`](../../src/mobile/schema/dds/event.json).
 
 > **ЦОД:** pipeline обрабатывает **один** набор входных витрин и пишет **один** выходной файл. Для `central` и `far-east` нужны **отдельные** вызовы (разные корни SRC и разные `output_path`). Оркестратор CLI без флагов выполняет полный цикл по каждому ЦОД последовательно; внутри ЦОД — до **2** параллельных **subprocess** (`uv run mobile build-dds-event --dc … --report-date …`).
 
@@ -33,7 +33,7 @@
 
 ## Параметры запуска
 
-Переменные, передаваемые в job (`run_build()` из [`event.py`](../../src/mobile/pipelines/stg/event.py)). **Все пять обязательны** — pipeline не резолвит ЦОД и шаблоны путей.
+Переменные, передаваемые в job (`run_build()` из [`event.py`](../../src/mobile/pipelines/dds/event.py)). **Все пять обязательны** — pipeline не резолвит ЦОД и шаблоны путей.
 
 | Переменная | Тип | Обязательность | Описание |
 |------------|-----|----------------|----------|
@@ -46,7 +46,7 @@
 
 Parquet всегда пишется со сжатием **`snappy`** (`DEFAULT_PARQUET_COMPRESSION`). Сжатие подряд идущих событий (5m bucket) выполняется **всегда**.
 
-**Константы ETL в коде** (на вход job **не передаются**): `DDS_EVENT_FIELDS`, `_MART_READ_COLUMNS`, `_COMPRESS_GAP_SECONDS` — см. [`event.py`](../../src/mobile/pipelines/stg/event.py).
+**Константы ETL в коде** (на вход job **не передаются**): `DDS_EVENT_FIELDS`, `_MART_READ_COLUMNS`, `_COMPRESS_GAP_SECONDS` — см. [`event.py`](../../src/mobile/pipelines/dds/event.py).
 
 ### CLI
 
@@ -97,7 +97,7 @@ uv run mobile build-dds-event --report-date 2025-01-01 \
 
 ### Поля витрины
 
-Контракт — [`event.json`](../../src/mobile/schema/dds/event.json) → `fields`; в ETL — `DDS_EVENT_FIELDS` ([`event.py`](../../src/mobile/pipelines/stg/event.py)).
+Контракт — [`event.json`](../../src/mobile/schema/dds/event.json) → `fields`; в ETL — `DDS_EVENT_FIELDS` ([`event.py`](../../src/mobile/pipelines/dds/event.py)).
 
 | # | Поле | Тип | Смысл |
 |---|------|-----|-------|
@@ -178,7 +178,7 @@ Struct `location`: cdr/gprs — из `OwnerMCCMNC` + `BSStartLac` + `BSStartCell
 | Артефакт | Путь |
 |----------|------|
 | Схема витрины | [`src/mobile/schema/dds/event.json`](../../src/mobile/schema/dds/event.json) |
-| ETL | [`src/mobile/pipelines/stg/event.py`](../../src/mobile/pipelines/stg/event.py) |
+| ETL | [`src/mobile/pipelines/dds/event.py`](../../src/mobile/pipelines/dds/event.py) |
 | Пути, чтение витрин | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
 | Сборка mobile | [`build_src_mobile.md`](../src/build_src_mobile.md) |

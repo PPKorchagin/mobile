@@ -2,7 +2,7 @@
 
 **Витрина:** `dim_tac` · **Команда:** `build-dim-tac` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: `[pipelines/stg/tac.py](../../src/mobile/pipelines/stg/tac.py)`. Схема витрины: `[tac.json](../../src/mobile/schema/dim/tac.json)`.
+Референс: `[pipelines/dim/tac.py](../../src/mobile/pipelines/dim/tac.py)`. Схема витрины: `[tac.json](../../src/mobile/schema/dim/tac.json)`.
 
 ---
 
@@ -44,7 +44,7 @@
 
 Сжатие Parquet — константа `DEFAULT_PARQUET_COMPRESSION` в `[cli_defaults.py](../../src/mobile/cli_defaults.py)` (по умолчанию `snappy`); в job **не передаётся**.
 
-**Константы ETL в коде** (`[tac.py](../../src/mobile/pipelines/stg/tac.py)`, на вход job **не передаются**):
+**Константы ETL в коде** (`[tac.py](../../src/mobile/pipelines/dim/tac.py)`, на вход job **не передаются**):
 
 
 | Константа                | Значение                                                                        |
@@ -81,7 +81,7 @@ uv run mobile build-dim-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --outp
 
 ### Поля витрины
 
-Контракт полей — `[tac.json](../../src/mobile/schema/dim/tac.json)` → `fields`; в ETL — `DIM_TAC_FIELDS` (`[tac.py](../../src/mobile/pipelines/stg/tac.py)`). Поле `is_m2m` **вычисляется** (`equipment_type ∈ M2M_EQUIPMENT_TYPES`).
+Контракт полей — `[tac.json](../../src/mobile/schema/dim/tac.json)` → `fields`; в ETL — `DIM_TAC_FIELDS` (`[tac.py](../../src/mobile/pipelines/dim/tac.py)`). Поле `is_m2m` **вычисляется** (`equipment_type ∈ M2M_EQUIPMENT_TYPES`).
 
 
 | #   | Поле               | Тип    | Смысл                       |
@@ -151,7 +151,7 @@ raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
   - fallback `pd.to_datetime(..., dayfirst=True)`;
   - выход — строка `YYYY-MM-DD` или null.
 5. **is_m2m (флаг IoT):**
-  - `equipment_type ∈ M2M_EQUIPMENT_TYPES` (константа в `[tac.py](../../src/mobile/pipelines/stg/tac.py)`);
+  - `equipment_type ∈ M2M_EQUIPMENT_TYPES` (константа в `[tac.py](../../src/mobile/pipelines/dim/tac.py)`);
 6. Приведение типов: строковые колонки → pandas `string`; `is_m2m` → `boolean`.
 7. Порядок колонок строго `DIM_TAC_FIELDS`.
 8. `duplicated(subset=["tac"]).any()` → `ValueError` (ключ TAC уникален).
@@ -178,7 +178,7 @@ raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
 | Артефакт          | Путь                                                                       |
 | ----------------- | -------------------------------------------------------------------------- |
 | Схема витрины     | `[src/mobile/schema/dim/tac.json](../../src/mobile/schema/dim/tac.json)`   |
-| ETL               | `[src/mobile/pipelines/stg/tac.py](../../src/mobile/pipelines/stg/tac.py)` |
+| ETL               | `[src/mobile/pipelines/dim/tac.py](../../src/mobile/pipelines/dim/tac.py)` |
 | Пути по умолчанию | `[src/mobile/project_paths.py](../../src/mobile/project_paths.py)`         |
 
 

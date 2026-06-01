@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_person` · **Команда:** `build-fct-person` · **Режим:** один месячный срез физлиц с устойчивым `person_id`.
 
-Референс: [`pipelines/stg/person.py`](../../src/mobile/pipelines/stg/person.py).
+Референс: [`pipelines/fct/person.py`](../../src/mobile/pipelines/fct/person.py).
 
 Схема: [`person.json`](../../src/mobile/schema/fct/person.json).
 
@@ -58,7 +58,7 @@
 
 ### Выбор `src_person` (профиль)
 
-Режим **`latest_snapshot`** (в [`person.py`](../../src/mobile/pipelines/stg/person.py), `_read_src_person_latest_snapshot`):
+Режим **`latest_snapshot`** (в [`person.py`](../../src/mobile/pipelines/fct/person.py), `_read_src_person_latest_snapshot`):
 
 1. Период: с `report_date` по последний день месяца.
 2. Каталоги `load_day=*` с `_SUCCESS` и `person.parquet`.
@@ -132,7 +132,7 @@ Binding-витрины можно собрать заранее по дням (`
 
 ## Алгоритм обработки данных
 
-Точка входа: `run_build(report_date, …)` в [`person.py`](../../src/mobile/pipelines/stg/person.py).
+Точка входа: `run_build(report_date, …)` в [`person.py`](../../src/mobile/pipelines/fct/person.py).
 
 ### Шаг 0. Инициализация
 
@@ -155,7 +155,7 @@ Binding-витрины можно собрать заранее по дням (`
 ### Шаг 2. Загрузка справочника ОКСМ
 
 1. `dim_oksm_path` (по умолчанию `data/dim/oksm.parquet`, CLI `--dim-oksm-path`).
-2. [`oksm.load_lookup`](../../src/mobile/pipelines/stg/oksm.py) → `OksmLookup` (индексы `alpha2`/`alpha3` → `numeric_code`, токены из `name_short`/`name_full`).
+2. [`oksm.load_lookup`](../../src/mobile/pipelines/dim/oksm.py) → `OksmLookup` (индексы `alpha2`/`alpha3` → `numeric_code`, токены из `name_short`/`name_full`).
 3. Метрика `load_oksm_sec` в `command_timing.jsonl`.
 4. Если parquet отсутствует — `FileNotFoundError` (нужен `build-dim-oksm`).
 
@@ -181,7 +181,7 @@ Binding-витрины можно собрать заранее по дням (`
 ### Шаг 5. Месячные binding MSISDN↔IMSI/IMEI
 
 1. Пути: `fct_msisdn_imsi_output_path(report_month)` → `…/msisdn_imsi/{YYYY-MM-01}.parquet` (месячный файл).
-2. Если `build_bindings_month=true` и файла нет — `_refresh_month_bindings_from_geo` ([`person.py`](../../src/mobile/pipelines/stg/person.py)):
+2. Если `build_bindings_month=true` и файла нет — `_refresh_month_bindings_from_geo` ([`person.py`](../../src/mobile/pipelines/fct/person.py)):
    - для каждого дня месяца с `stg_geo_all` вызвать `msisdn_imsi.run_build` и `msisdn_imei.run_build` (инкремент в month parquet).
 3. `_read_binding_parquet` — нормализация `msisdn`/`imsi`/`imei`, `valid_from`/`valid_to`.
 
@@ -258,7 +258,7 @@ Binding-витрины можно собрать заранее по дням (`
 5. Эвристика русского ФИО (отчество `вич`/`вна`/…): при `мвд`/`паспорт рф` или пустых doc/dept → `default_russia()` (`643`).
 6. Иначе `U`.
 
-Константы `_DEPT_MAP`, `_DOC_MAP`, `_NAME_HINTS` — в [`person.py`](../../src/mobile/pipelines/stg/person.py); значения — ISO alpha-2, итог всегда **цифровой код ОКСМ**.
+Константы `_DEPT_MAP`, `_DOC_MAP`, `_NAME_HINTS` — в [`person.py`](../../src/mobile/pipelines/fct/person.py); значения — ISO alpha-2, итог всегда **цифровой код ОКСМ**.
 
 ### Шаг 11. Запись и метрики
 
@@ -282,9 +282,9 @@ Binding-витрины можно собрать заранее по дням (`
 
 | Артефакт | Путь |
 |----------|------|
-| ETL | [`person.py`](../../src/mobile/pipelines/stg/person.py) |
-| Граф / ID | [`person.py`](../../src/mobile/pipelines/stg/person.py) (`_UnionFind`, `_assign_person_ids`) |
-| Чтение src | [`person.py`](../../src/mobile/pipelines/stg/person.py) (`_read_src_person_latest_snapshot`) |
+| ETL | [`person.py`](../../src/mobile/pipelines/fct/person.py) |
+| Граф / ID | [`person.py`](../../src/mobile/pipelines/fct/person.py) (`_UnionFind`, `_assign_person_ids`) |
+| Чтение src | [`person.py`](../../src/mobile/pipelines/fct/person.py) (`_read_src_person_latest_snapshot`) |
 | DQ | [`dq_fct_person.md`](../dq/fct/dq_fct_person.md) · `uv run mobile dq-fct-person` |
 | Источник | [`build_src_person.md`](../src/build_src_person.md) |
 | Пути | [`project_paths.py`](../../src/mobile/project_paths.py) |

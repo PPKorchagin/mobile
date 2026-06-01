@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.tac import M2M_EQUIPMENT_TYPES, DIM_TAC_FIELDS
+from mobile.pipelines.dim.tac import M2M_EQUIPMENT_TYPES, DIM_TAC_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)

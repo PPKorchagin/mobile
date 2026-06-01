@@ -83,9 +83,9 @@ uv run mobile run-all
 | Python-модули (`src/mobile`) | **42** файла |
 | Строки Python (всего) | **~26 000** (~23 000 непустых) |
 | Функции / классы (AST) | **~848** / **12** |
-| ETL `pipelines/stg` | 13 модулей, ~5 500 строк |
+| ETL `pipelines/{dim,dds,fct,stg}` | dim 4 · dds 2 · fct 6 · stg 1, ~5 500 строк |
 | Синтез `pipelines/src` | 4 модуля, ~7 500 строк (крупнейший — `mobile.py`, ~3 500 строк) |
-| DQ `pipelines/dq` | 15 модулей, ~6 000 строк |
+| DQ `pipelines/dq/{dim,dds,fct,stg,src}` | 15 модулей, ~6 000 строк |
 | Ноутбуки `pipelines/nb/common.py` | ~3 900 строк (DQ-дашборды, folium) |
 | CLI, пути, timing | `cli.py`, `project_paths.py`, … — ~3 000 строк |
 | JSON-схемы витрин | **20** файлов в `schema/` |

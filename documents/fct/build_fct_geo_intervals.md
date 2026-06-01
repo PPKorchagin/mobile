@@ -2,7 +2,7 @@
 
 **Витрина:** `fct_geo_intervals` · **Команда:** `build-fct-geo-intervals` · **Режим:** сборка дневных интервалов пребывания из `stg_geo_all` с дозаполнением `imsi/imei`.
 
-Референс: [`pipelines/stg/geo_intervals.py`](../../src/mobile/pipelines/stg/geo_intervals.py). Схема витрины: [`geo_intervals.json`](../../src/mobile/schema/fct/geo_intervals.json).
+Референс: [`pipelines/fct/geo_intervals.py`](../../src/mobile/pipelines/fct/geo_intervals.py). Схема витрины: [`geo_intervals.json`](../../src/mobile/schema/fct/geo_intervals.json).
 
 ---
 
@@ -207,6 +207,6 @@ uv run mobile dq-fct-geo-intervals
 | Артефакт | Путь |
 |----------|------|
 | Схема витрины | [`src/mobile/schema/fct/geo_intervals.json`](../../src/mobile/schema/fct/geo_intervals.json) |
-| ETL | [`src/mobile/pipelines/stg/geo_intervals.py`](../../src/mobile/pipelines/stg/geo_intervals.py) |
+| ETL | [`src/mobile/pipelines/fct/geo_intervals.py`](../../src/mobile/pipelines/fct/geo_intervals.py) |
 | Источник событий | [`documents/stg/build_stg_geo_all.md`](../stg/build_stg_geo_all.md) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
