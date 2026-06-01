@@ -1,4 +1,4 @@
-"""Сборка ``stg_geo_intervals`` из ``stg_geo_all`` + ``stg_bs`` + ``stg_time_zones``."""
+"""Сборка ``stg_geo_intervals`` из ``stg_geo_all`` + ``stg_bs`` + ``dim_time_zones``."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def run_build(
     if not bs_file.exists():
         raise FileNotFoundError(f"stg_bs parquet not found: {bs_file}")
     if not tz_file.exists():
-        raise FileNotFoundError(f"stg_time_zones parquet not found: {tz_file}")
+        raise FileNotFoundError(f"dim_time_zones parquet not found: {tz_file}")
 
     with timed_stage("read_inputs_sec", perf):
         geo = pd.read_parquet(geo_all_file)

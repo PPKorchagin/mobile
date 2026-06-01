@@ -18,7 +18,7 @@
 
 **Бизнес-назначение:** контроль качества месячного профиля физлиц после [`build-stg-person`](../../stg/build_stg_person.md) (кластеризация ID+bio+bindings, M2M-отсечение, `sim_count`) перед downstream-аналитикой абонентской базы.
 
-**В scope:** наличие файла, контракт `STG_PERSON_FIELDS`, null-профиль критичных и демографических полей, уникальность и формат `person_id`, единый `report_date` в срезе, домены `gender`/`age`/`citizenship`/`person_confidence`/`sim_count`, цифровой формат `msisdn`/`imsi`/`imei`, сверка кодов гражданства с `stg_oksm`.
+**В scope:** наличие файла, контракт `STG_PERSON_FIELDS`, null-профиль критичных и демографических полей, уникальность и формат `person_id`, единый `report_date` в срезе, домены `gender`/`age`/`citizenship`/`person_confidence`/`sim_count`, цифровой формат `msisdn`/`imsi`/`imei`, сверка кодов гражданства с `dim_oksm`.
 
 ---
 
@@ -31,20 +31,20 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(report_date, stg_person_path, stg_oksm_path?)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-person`). **`report_date` и `stg_person_path` обязательны** при явном прогоне — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
+Вызов: `run_dq(report_date, stg_person_path, dim_oksm_path?)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-person`). **`report_date` и `stg_person_path` обязательны** при явном прогоне — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
 
 | Переменная | Тип | Обязательность | Описание |
 |------------|-----|----------------|----------|
 | `report_date` | date | **Да** | Любой календарный день; pipeline приводит к **1-му числу месяца** (`report_month_start`) |
 | `stg_person_path` | path | **Да** | Месячный parquet или каталог `data/stg/person` (для каталога — файл `{YYYY-MM-01}.parquet`) |
-| `stg_oksm_path` | path | Нет | `data/stg/oksm.parquet` — проверка `domain.citizenship_oksm`; по умолчанию `DEFAULT_STG_OKSM_OUTPUT_PATH` в коде |
+| `dim_oksm_path` | path | Нет | `data/dim/oksm.parquet` — проверка `domain.citizenship_oksm`; по умолчанию `DEFAULT_DIM_OKSM_OUTPUT_PATH` в коде |
 
 ### CLI
 
 | Режим | Поведение |
 |-------|-----------|
-| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); **один прогон на календарный месяц**, если `stg_person_output_path(month)` существует; timed-run `dq-stg-person-{YYYY-MM-01}` (`stg_oksm` — default в pipeline) |
-| Оба явно | `--report-date` (любой день, например `2025-01-15` → месяц `2025-01-01`) и `--stg-person-path`; опционально `--stg-oksm-path` |
+| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); **один прогон на календарный месяц**, если `stg_person_output_path(month)` существует; timed-run `dq-stg-person-{YYYY-MM-01}` (`dim_oksm` — default в pipeline) |
+| Оба явно | `--report-date` (любой день, например `2025-01-15` → месяц `2025-01-01`) и `--stg-person-path`; опционально `--dim-oksm-path` |
 
 **Константы DQ в коде** ([`person.py`](../../../src/mobile/pipelines/dq/stg/person.py), на вход job **не передаются**):
 
@@ -59,12 +59,12 @@
 | `_GENDER_VALUES` | `M`, `F`, `U` |
 | `_CONFIDENCE_VALUES` | `high`, `medium`, `low` |
 
-**Предусловие:** `uv run mobile build-stg-person --report-date YYYY-MM-01` за тот же месяц (binding `stg_msisdn_imsi` / `stg_msisdn_imei`, `src_person`, `src_excl`, `stg_oksm`).
+**Предусловие:** `uv run mobile build-stg-person --report-date YYYY-MM-01` за тот же месяц (binding `stg_msisdn_imsi` / `stg_msisdn_imei`, `src_person`, `src_excl`, `dim_oksm`).
 
 Локальный запуск:
 
 ```bash
-uv run mobile build-stg-oksm
+uv run mobile build-dim-oksm
 uv run mobile build-stg-msisdn-imei
 uv run mobile build-stg-msisdn-imsi-operator
 uv run mobile build-stg-person --report-date 2025-01-01
@@ -73,7 +73,7 @@ uv run mobile dq-stg-person --report-date 2025-01-15 \
   --stg-person-path data/stg/person/2025-01-01.parquet
 uv run mobile dq-stg-person --report-date 2025-01-01 \
   --stg-person-path data/stg/person \
-  --stg-oksm-path data/stg/oksm.parquet
+  --dim-oksm-path data/dim/oksm.parquet
 uv run mobile nb-stg-person
 ```
 
@@ -117,7 +117,7 @@ uv run mobile nb-stg-person
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
 | 1 | `stg_person` | `data/stg/person/{YYYY-MM-01}.parquet` | Месячный профиль после `build-stg-person` |
-| 2 | `stg_oksm` | `data/stg/oksm.parquet` | Справочник кодов гражданства (`domain.citizenship_oksm`) |
+| 2 | `dim_oksm` | `data/dim/oksm.parquet` | Справочник кодов гражданства (`domain.citizenship_oksm`) |
 
 ---
 
@@ -127,7 +127,7 @@ uv run mobile nb-stg-person
 
 1. `report_month_start(report_date)` — входная дата → 1-е число месяца (в метриках при отличии — `report_date_input`).
 2. `_resolve_source_path(report_month, stg_person_path)` — каталог → `{YYYY-MM-01}.parquet`, иначе файл как есть (`resolve_stg_monthly_parquet_path`).
-3. `stg_oksm_path` → `DEFAULT_STG_OKSM_OUTPUT_PATH`, если не передан.
+3. `dim_oksm_path` → `DEFAULT_DIM_OKSM_OUTPUT_PATH`, если не передан.
 4. Счётчики `total_checks`, `warning_checks`, `failed_checks`.
 
 ### Шаг 1. Наличие набора
@@ -151,7 +151,7 @@ uv run mobile nb-stg-person
 4. `domain.gender` — ⊆ `{M, F, U}` (**failed**).
 5. `domain.age` — целое 0–120 или `U` (**failed**).
 6. `domain.citizenship` — непусто; `U` или `^\d{3}$` (**failed**).
-7. `domain.citizenship_oksm` — коды (кроме `U`) ∈ `stg_oksm.numeric_code` (**failed**); нет файла ОКСМ → **warning**.
+7. `domain.citizenship_oksm` — коды (кроме `U`) ∈ `dim_oksm.numeric_code` (**failed**); нет файла ОКСМ → **warning**.
 8. `domain.person_confidence` — ⊆ `{high, medium, low}` (**failed**).
 9. `distribution.person_confidence` — доля `low` > 30% → **warning**.
 10. `domain.sim_count` — `sim_count >= 1` (**failed**).
@@ -180,7 +180,7 @@ uv run mobile nb-stg-person
 | `domain.gender` | **failed** | значение вне M/F/U | Контракт демографии |
 | `domain.age` | **failed** | не число и не `U`, или вне 0–120 | Возраст на начало месяца |
 | `domain.citizenship` | **failed** | пусто или не `U`/трёхзначный код | ОКСМ или unknown |
-| `domain.citizenship_oksm` | **failed** / **warning** | неизвестный код / нет `stg_oksm` | Сверка со справочником [`build-stg-oksm`](../../stg/build_stg_oksm.md) |
+| `domain.citizenship_oksm` | **failed** / **warning** | неизвестный код / нет `dim_oksm` | Сверка со справочником [`build-dim-oksm`](../../stg/build_dim_oksm.md) |
 | `domain.person_confidence` | **failed** | не high/medium/low | Сила идентификации кластера |
 | `distribution.person_confidence` | **warning** | доля `low` > 30% | Много слабых кластеров — риск для аналитики |
 | `domain.sim_count` | **failed** | `sim_count < 1` | Инвариант ETL после union-find |
@@ -202,6 +202,6 @@ uv run mobile nb-stg-person
 | Сборка (док) | [`build_stg_person.md`](../../stg/build_stg_person.md) |
 | DQ binding IMEI | [`dq_stg_msisdn_imei.md`](./dq_stg_msisdn_imei.md) |
 | DQ binding IMSI | [`dq_stg_msisdn_imsi_operator.md`](./dq_stg_msisdn_imsi_operator.md) |
-| Справочник ОКСМ | [`build_stg_oksm.md`](../../stg/build_stg_oksm.md) |
+| Справочник ОКСМ | [`build_dim_oksm.md`](../../stg/build_dim_oksm.md) |
 
 Сквозная цепочка: `build-stg-geo-all` → `build-stg-msisdn-imei` → **`dq-stg-msisdn-imei`** → `build-stg-msisdn-imsi-operator` → **`dq-stg-msisdn-imsi-operator`** → **`build-stg-person`** → **`dq-stg-person`** → **`nb-stg-person`** → downstream.

@@ -14,18 +14,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SCHEMA_ROOT = PROJECT_ROOT / "src" / "mobile" / "schema"
 _RAW_DATA = PROJECT_ROOT / "src" / "mobile" / "raw_data"
 
-DEFAULT_STG_OKTMO_CSV_PATH = _RAW_DATA / "oktmo_v001.csv"
-DEFAULT_STG_OKTMO_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oktmo.parquet"
-DEFAULT_STG_TIME_ZONES_CSV_PATH = _RAW_DATA / "time_zones.csv"
-DEFAULT_STG_TIME_ZONES_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "time_zones.parquet"
-DEFAULT_STG_TAC_CSV_PATH = _RAW_DATA / "tacdb_v001.csv"
-DEFAULT_STG_TAC_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "tac.parquet"
-DEFAULT_STG_OKSM_CSV_PATH = _RAW_DATA / "oksm_v001.csv"
-DEFAULT_STG_OKSM_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oksm.parquet"
+DEFAULT_DIM_OKTMO_CSV_PATH = _RAW_DATA / "oktmo_v001.csv"
+DEFAULT_DIM_OKTMO_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oktmo.parquet"
+DEFAULT_DIM_TIME_ZONES_CSV_PATH = _RAW_DATA / "time_zones.csv"
+DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "time_zones.parquet"
+DEFAULT_DIM_TAC_CSV_PATH = _RAW_DATA / "tacdb_v001.csv"
+DEFAULT_DIM_TAC_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "tac.parquet"
+DEFAULT_DIM_OKSM_CSV_PATH = _RAW_DATA / "oksm_v001.csv"
+DEFAULT_DIM_OKSM_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "oksm.parquet"
 
 DEFAULT_BS_PROFILE_PATH = _RAW_DATA / "build_bs_profile_from_opencellid.json"
 DEFAULT_BS_LAYOUT = PROJECT_ROOT / "data" / "src" / "bs.parquet"
-DEFAULT_TIME_ZONES_RAW_PATH = DEFAULT_STG_TIME_ZONES_CSV_PATH
+DEFAULT_TIME_ZONES_RAW_PATH = DEFAULT_DIM_TIME_ZONES_CSV_PATH
 DEFAULT_SRC_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "person.json"
 
 SRC_PERSON_LAYOUT_TEMPLATE = "data/src/person/load_year={YYYY}/load_month={MM}/load_day={DD}"
@@ -244,14 +244,14 @@ _DATA_NOTEBOOKS = PROJECT_ROOT / "data" / "notebooks"
 
 DEFAULT_PERF_METRICS_NOTEBOOK_PATH = _NB / "perf_metrics.ipynb"
 DEFAULT_PERF_METRICS_EXECUTED_PATH = _DATA_NOTEBOOKS / "perf_metrics.executed.ipynb"
-DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH = _NB / "1_stg_oktmo.ipynb"
-DEFAULT_NB_STG_OKTMO_EXECUTED_PATH = _DATA_NOTEBOOKS / "1_stg_oktmo.executed.ipynb"
-DEFAULT_NB_STG_TIME_ZONES_NOTEBOOK_PATH = _NB / "2_stg_time_zones.ipynb"
-DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH = _DATA_NOTEBOOKS / "2_stg_time_zones.executed.ipynb"
-DEFAULT_NB_STG_TAC_NOTEBOOK_PATH = _NB / "3_stg_tac.ipynb"
-DEFAULT_NB_STG_TAC_EXECUTED_PATH = _DATA_NOTEBOOKS / "3_stg_tac.executed.ipynb"
-DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH = _NB / "4_stg_oksm.ipynb"
-DEFAULT_NB_STG_OKSM_EXECUTED_PATH = _DATA_NOTEBOOKS / "4_stg_oksm.executed.ipynb"
+DEFAULT_NB_DIM_OKTMO_NOTEBOOK_PATH = _NB / "1_dim_oktmo.ipynb"
+DEFAULT_NB_DIM_OKTMO_EXECUTED_PATH = _DATA_NOTEBOOKS / "1_dim_oktmo.executed.ipynb"
+DEFAULT_NB_DIM_TIME_ZONES_NOTEBOOK_PATH = _NB / "2_dim_time_zones.ipynb"
+DEFAULT_NB_DIM_TIME_ZONES_EXECUTED_PATH = _DATA_NOTEBOOKS / "2_dim_time_zones.executed.ipynb"
+DEFAULT_NB_DIM_TAC_NOTEBOOK_PATH = _NB / "3_dim_tac.ipynb"
+DEFAULT_NB_DIM_TAC_EXECUTED_PATH = _DATA_NOTEBOOKS / "3_dim_tac.executed.ipynb"
+DEFAULT_NB_DIM_OKSM_NOTEBOOK_PATH = _NB / "4_dim_oksm.ipynb"
+DEFAULT_NB_DIM_OKSM_EXECUTED_PATH = _DATA_NOTEBOOKS / "4_dim_oksm.executed.ipynb"
 DEFAULT_NB_SRC_BS_NOTEBOOK_PATH = _NB / "5_src_bs.ipynb"
 DEFAULT_NB_SRC_BS_EXECUTED_PATH = _DATA_NOTEBOOKS / "5_src_bs.executed.ipynb"
 DEFAULT_NB_SRC_PERSON_NOTEBOOK_PATH = _NB / "6_src_person.ipynb"
@@ -279,7 +279,7 @@ DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
 
 def resolve_oktmo_layout() -> Path:
-    return DEFAULT_STG_OKTMO_OUTPUT_PATH
+    return DEFAULT_DIM_OKTMO_OUTPUT_PATH
 
 
 def stg_event_output_path(source_id: str, day: date) -> Path:

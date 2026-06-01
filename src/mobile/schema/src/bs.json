@@ -65,7 +65,7 @@
         {
             "name": "subject",
             "type": "string",
-            "comment": "Субъект РФ (имя stg_oktmo level=1)"
+            "comment": "Субъект РФ (имя dim_oktmo level=1)"
         },
         {
             "name": "location",

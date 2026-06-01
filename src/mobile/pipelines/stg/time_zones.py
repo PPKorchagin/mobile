@@ -13,7 +13,7 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-STG_TIME_ZONES_TABLE = "stg_time_zones"
+DIM_TIME_ZONES_TABLE = "dim_time_zones"
 
 CSV_SEP = ";"
 CSV_ENCODING = "utf-8"
@@ -26,7 +26,7 @@ SOURCE_MAPPING_COLUMNS: dict[str, str] = {
     "geometry": "geometry",
 }
 
-STG_TIME_ZONES_FIELDS: list[dict[str, str]] = [
+DIM_TIME_ZONES_FIELDS: list[dict[str, str]] = [
     {"name": "code", "type": "int32"},
     {"name": "name", "type": "string"},
     {"name": "timezone", "type": "int32"},
@@ -59,7 +59,7 @@ def run(
     with timed_stage("read_csv_sec", perf):
         prepared_chunks: list[pd.DataFrame] = []
         for chunk in pd.read_csv(csv_file, **csv_kwargs):
-            prepared_chunks.append(_prepare_chunk(chunk, SOURCE_MAPPING_COLUMNS, STG_TIME_ZONES_FIELDS))
+            prepared_chunks.append(_prepare_chunk(chunk, SOURCE_MAPPING_COLUMNS, DIM_TIME_ZONES_FIELDS))
         data = pd.concat(prepared_chunks, ignore_index=True) if prepared_chunks else pd.DataFrame()
 
     with timed_stage("write_parquet_sec", perf):
@@ -68,14 +68,14 @@ def run(
 
     logger.info(
         "%s parquet created: path=%s rows=%s columns=%s compression=%s",
-        STG_TIME_ZONES_TABLE,
+        DIM_TIME_ZONES_TABLE,
         parquet_file,
         len(data),
         len(data.columns),
         compression,
     )
     stats = {
-        "table": STG_TIME_ZONES_TABLE,
+        "table": DIM_TIME_ZONES_TABLE,
         "source_csv": str(csv_file),
         "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
@@ -83,7 +83,7 @@ def run(
         "parquet_compression": compression,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-time-zones", metrics={**stats, **perf})
+    append_command_metrics(command="build-dim-time-zones", metrics={**stats, **perf})
     return stats
 
 

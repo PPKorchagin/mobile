@@ -9,18 +9,18 @@ import pandas as pd
 from shapely import wkt
 from shapely.errors import GEOSException
 
-from mobile.pipelines.stg.oktmo import STG_OKTMO_FIELDS
+from mobile.pipelines.stg.oktmo import DIM_OKTMO_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_OKTMO"
+LOG_TAG = "DQ_DIM_OKTMO"
 ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
 
 
 def run_dq(oktmo_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``stg_oktmo`` по пути parquet (схема полей — ``STG_OKTMO_FIELDS`` в ETL)."""
+    """DQ витрины ``dim_oktmo`` по пути parquet (схема полей — ``DIM_OKTMO_FIELDS`` в ETL)."""
     resolved = _resolve_oktmo_path(oktmo_path)
-    expected_columns = [field["name"] for field in STG_OKTMO_FIELDS]
+    expected_columns = [field["name"] for field in DIM_OKTMO_FIELDS]
 
     if not resolved.exists():
         summary = {"status": "failed", "reason": "parquet_not_found", "oktmo_path": str(resolved)}

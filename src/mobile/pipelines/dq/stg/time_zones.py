@@ -9,18 +9,18 @@ import pandas as pd
 from shapely import wkt
 from shapely.errors import GEOSException
 
-from mobile.pipelines.stg.time_zones import STG_TIME_ZONES_FIELDS
+from mobile.pipelines.stg.time_zones import DIM_TIME_ZONES_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_TIME_ZONES"
+LOG_TAG = "DQ_DIM_TIME_ZONES"
 ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
 
 
 def run_dq(time_zones_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``stg_time_zones`` по пути parquet (поля — ``STG_TIME_ZONES_FIELDS`` в ETL)."""
+    """DQ витрины ``dim_time_zones`` по пути parquet (поля — ``DIM_TIME_ZONES_FIELDS`` в ETL)."""
     resolved = _resolve_time_zones_path(time_zones_path)
-    expected_columns = [field["name"] for field in STG_TIME_ZONES_FIELDS]
+    expected_columns = [field["name"] for field in DIM_TIME_ZONES_FIELDS]
 
     if not resolved.exists():
         summary = {"status": "failed", "reason": "parquet_not_found", "time_zones_path": str(resolved)}

@@ -1,8 +1,8 @@
-# build-stg-time-zones
+# build-dim-time-zones
 
-**Витрина:** `stg_time_zones` · **Команда:** `build-stg-time-zones` · **Режим:** полная перезапись одного Parquet-файла.
+**Витрина:** `dim_time_zones` · **Команда:** `build-dim-time-zones` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: `[pipelines/stg/time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`. Схема витрины: `[time_zones.json](../../src/mobile/schema/stg/time_zones.json)`.
+Референс: `[pipelines/stg/time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`. Схема витрины: `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)`.
 
 ---
 
@@ -12,7 +12,7 @@
 | #   | Задача                                                         | Результат                                       |
 | --- | -------------------------------------------------------------- | ----------------------------------------------- |
 | 1   | Загрузить сырой CSV справочника тайм-зон                       | Данные в памяти по чанкам                       |
-| 2   | Привести набор колонок и типы к целевой схеме `stg_time_zones` | Нормализованный DataFrame                       |
+| 2   | Привести набор колонок и типы к целевой схеме `dim_time_zones` | Нормализованный DataFrame                       |
 | 3   | Записать витрину в Parquet с заданным сжатием                  | Файл `output_path`, готовый к чтению downstream |
 
 
@@ -37,7 +37,7 @@
 | Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
 | ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
 | `csv_path`    | string (path) | Да             | `src/mobile/raw_data/time_zones.csv` | Входной CSV (CLI `--csv-path`)         |
-| `output_path` | string (path) | Да             | `data/stg/time_zones.parquet`        | Выходной Parquet (CLI `--output-path`) |
+| `output_path` | string (path) | Да             | `data/dim/time_zones.parquet`        | Выходной Parquet (CLI `--output-path`) |
 
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
@@ -47,8 +47,8 @@
 
 | Константа                     | Значение                                                                                      |
 | ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `STG_TIME_ZONES_TABLE`        | `stg_time_zones`                                                                              |
-| `STG_TIME_ZONES_FIELDS`       | порядок и типы колонок (см. `[time_zones.json](../../src/mobile/schema/stg/time_zones.json)`) |
+| `DIM_TIME_ZONES_TABLE`        | `dim_time_zones`                                                                              |
+| `DIM_TIME_ZONES_FIELDS`       | порядок и типы колонок (см. `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)`) |
 | `CSV_SEP`                     | `;`                                                                                           |
 | `CSV_ENCODING`                | `utf-8`                                                                                       |
 | `CSV_CHUNK_SIZE`              | `200000`                                                                                      |
@@ -59,8 +59,8 @@
 Локальный запуск референса:
 
 ```bash
-uv run mobile build-stg-time-zones
-uv run mobile build-stg-time-zones --csv-path src/mobile/raw_data/time_zones.csv --output-path data/stg/time_zones.parquet
+uv run mobile build-dim-time-zones
+uv run mobile build-dim-time-zones --csv-path src/mobile/raw_data/time_zones.csv --output-path data/dim/time_zones.parquet
 ```
 
 ---
@@ -70,7 +70,7 @@ uv run mobile build-stg-time-zones --csv-path src/mobile/raw_data/time_zones.csv
 
 | Свойство                       | Значение                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| Имя таблицы                    | `stg_time_zones` — `[time_zones.json](../../src/mobile/schema/stg/time_zones.json)` → `table` |
+| Имя таблицы                    | `dim_time_zones` — `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)` → `table` |
 | Описание                       | Справочник тайм-зон по регионам — `description` в JSON                                        |
 | Формат хранения                | Parquet                                                                                       |
 | Партиционирование              | Нет                                                                                           |
@@ -80,7 +80,7 @@ uv run mobile build-stg-time-zones --csv-path src/mobile/raw_data/time_zones.csv
 
 ### Поля витрины
 
-Контракт полей — `[time_zones.json](../../src/mobile/schema/stg/time_zones.json)` → `fields`; в ETL дублируется в `STG_TIME_ZONES_FIELDS` (`[time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`).
+Контракт полей — `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)` → `fields`; в ETL дублируется в `DIM_TIME_ZONES_FIELDS` (`[time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)`).
 
 
 | #   | Поле       | Тип    | Nullable | Смысл                                       |
@@ -132,7 +132,7 @@ uv run mobile build-stg-time-zones --csv-path src/mobile/raw_data/time_zones.csv
 ### Шаг 0. Инициализация
 
 1. Проверить существование `csv_path`; иначе `FileNotFoundError`.
-2. Взять целевую схему из `STG_TIME_ZONES_FIELDS` (согласована с `[time_zones.json](../../src/mobile/schema/stg/time_zones.json)`, чтение JSON в runtime не выполняется).
+2. Взять целевую схему из `DIM_TIME_ZONES_FIELDS` (согласована с `[time_zones.json](../../src/mobile/schema/dim/time_zones.json)`, чтение JSON в runtime не выполняется).
 3. Разрешить пути относительно `PROJECT_ROOT` при необходимости.
 
 ### Шаг 1. Чтение источника
@@ -146,7 +146,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 1. Проверка: все колонки из `SOURCE_MAPPING_COLUMNS` присутствуют; иначе `ValueError`.
 2. Переименование 1:1 в имена витрины (`timezone`, `utc_offset`, `geometry`, …).
-3. Отбор и упорядочивание по `STG_TIME_ZONES_FIELDS`.
+3. Отбор и упорядочивание по `DIM_TIME_ZONES_FIELDS`.
 4. Приведение типов по схеме JSON:
   - `string` → pandas `string`;
   - `int32` / `int64` → nullable integer;
@@ -154,7 +154,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
   - `bool` → boolean.
 5. **geometry (WKT):**
   - trim строки WKT;
-  - опциональная валидация через `shapely.wkt.loads` (невалидные — log/warning в build, строгий DQ — в `[dq_stg_time_zones](../dq/stg/dq_stg_time_zones.md)`);
+  - опциональная валидация через `shapely.wkt.loads` (невалидные — log/warning в build, строгий DQ — в `[dq_dim_time_zones](../dq/stg/dq_dim_time_zones.md)`);
   - допустимые типы для downstream point-in-polygon: `POLYGON`, `MULTIPOLYGON`.
 6. **utc_offset:** numeric, ожидаемый диапазон часовых сдвигов (DQ: [-12, 14]).
 
@@ -182,7 +182,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 | Артефакт          | Путь                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------- |
-| Схема витрины     | `[src/mobile/schema/stg/time_zones.json](../../src/mobile/schema/stg/time_zones.json)`   |
+| Схема витрины     | `[src/mobile/schema/dim/time_zones.json](../../src/mobile/schema/dim/time_zones.json)`   |
 | ETL               | `[src/mobile/pipelines/stg/time_zones.py](../../src/mobile/pipelines/stg/time_zones.py)` |
 | Пути по умолчанию | `[src/mobile/project_paths.py](../../src/mobile/project_paths.py)`                       |
 

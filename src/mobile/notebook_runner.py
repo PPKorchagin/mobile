@@ -15,12 +15,12 @@ from nbclient import NotebookClient
 from nbformat.validator import normalize
 
 from mobile.project_paths import (
-    DEFAULT_NB_STG_OKTMO_EXECUTED_PATH,
-    DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH,
-    DEFAULT_NB_STG_TAC_EXECUTED_PATH,
-    DEFAULT_NB_STG_TAC_NOTEBOOK_PATH,
-    DEFAULT_NB_STG_OKSM_EXECUTED_PATH,
-    DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH,
+    DEFAULT_NB_DIM_OKTMO_EXECUTED_PATH,
+    DEFAULT_NB_DIM_OKTMO_NOTEBOOK_PATH,
+    DEFAULT_NB_DIM_TAC_EXECUTED_PATH,
+    DEFAULT_NB_DIM_TAC_NOTEBOOK_PATH,
+    DEFAULT_NB_DIM_OKSM_EXECUTED_PATH,
+    DEFAULT_NB_DIM_OKSM_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_BS_EXECUTED_PATH,
     DEFAULT_NB_SRC_BS_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_EXCL_EXECUTED_PATH,
@@ -43,8 +43,8 @@ from mobile.project_paths import (
     DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_PERSON_EXECUTED_PATH,
     DEFAULT_NB_SRC_PERSON_NOTEBOOK_PATH,
-    DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH,
-    DEFAULT_NB_STG_TIME_ZONES_NOTEBOOK_PATH,
+    DEFAULT_NB_DIM_TIME_ZONES_EXECUTED_PATH,
+    DEFAULT_NB_DIM_TIME_ZONES_NOTEBOOK_PATH,
     DEFAULT_NOTEBOOK_KERNEL_NAME,
     DEFAULT_NOTEBOOK_RESOURCES_PATH,
     DEFAULT_PERF_METRICS_EXECUTED_PATH,
@@ -54,7 +54,7 @@ from mobile.project_paths import (
 
 logger = logging.getLogger(__name__)
 
-_LEGACY_DQ_STG_OKTMO_HTML = PROJECT_ROOT / "data" / "notebooks" / "dq_stg_oktmo.html"
+_LEGACY_DQ_DIM_OKTMO_HTML = PROJECT_ROOT / "data" / "notebooks" / "dq_dim_oktmo.html"
 
 
 def run_notebook(
@@ -110,41 +110,41 @@ def run_nb_perf_metrics() -> None:
     )
 
 
-def run_nb_stg_oktmo() -> None:
-    if _LEGACY_DQ_STG_OKTMO_HTML.exists():
-        _LEGACY_DQ_STG_OKTMO_HTML.unlink()
-    if DEFAULT_NB_STG_OKTMO_EXECUTED_PATH.exists():
-        DEFAULT_NB_STG_OKTMO_EXECUTED_PATH.unlink()
+def run_nb_dim_oktmo() -> None:
+    if _LEGACY_DQ_DIM_OKTMO_HTML.exists():
+        _LEGACY_DQ_DIM_OKTMO_HTML.unlink()
+    if DEFAULT_NB_DIM_OKTMO_EXECUTED_PATH.exists():
+        DEFAULT_NB_DIM_OKTMO_EXECUTED_PATH.unlink()
     run_notebook(
-        source_notebook=DEFAULT_NB_STG_OKTMO_NOTEBOOK_PATH,
-        executed_notebook=DEFAULT_NB_STG_OKTMO_EXECUTED_PATH,
+        source_notebook=DEFAULT_NB_DIM_OKTMO_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_DIM_OKTMO_EXECUTED_PATH,
     )
 
 
-def run_nb_stg_time_zones() -> None:
-    if DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH.exists():
-        DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH.unlink()
+def run_nb_dim_time_zones() -> None:
+    if DEFAULT_NB_DIM_TIME_ZONES_EXECUTED_PATH.exists():
+        DEFAULT_NB_DIM_TIME_ZONES_EXECUTED_PATH.unlink()
     run_notebook(
-        source_notebook=DEFAULT_NB_STG_TIME_ZONES_NOTEBOOK_PATH,
-        executed_notebook=DEFAULT_NB_STG_TIME_ZONES_EXECUTED_PATH,
+        source_notebook=DEFAULT_NB_DIM_TIME_ZONES_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_DIM_TIME_ZONES_EXECUTED_PATH,
     )
 
 
-def run_nb_stg_tac() -> None:
-    if DEFAULT_NB_STG_TAC_EXECUTED_PATH.exists():
-        DEFAULT_NB_STG_TAC_EXECUTED_PATH.unlink()
+def run_nb_dim_tac() -> None:
+    if DEFAULT_NB_DIM_TAC_EXECUTED_PATH.exists():
+        DEFAULT_NB_DIM_TAC_EXECUTED_PATH.unlink()
     run_notebook(
-        source_notebook=DEFAULT_NB_STG_TAC_NOTEBOOK_PATH,
-        executed_notebook=DEFAULT_NB_STG_TAC_EXECUTED_PATH,
+        source_notebook=DEFAULT_NB_DIM_TAC_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_DIM_TAC_EXECUTED_PATH,
     )
 
 
-def run_nb_stg_oksm() -> None:
-    if DEFAULT_NB_STG_OKSM_EXECUTED_PATH.exists():
-        DEFAULT_NB_STG_OKSM_EXECUTED_PATH.unlink()
+def run_nb_dim_oksm() -> None:
+    if DEFAULT_NB_DIM_OKSM_EXECUTED_PATH.exists():
+        DEFAULT_NB_DIM_OKSM_EXECUTED_PATH.unlink()
     run_notebook(
-        source_notebook=DEFAULT_NB_STG_OKSM_NOTEBOOK_PATH,
-        executed_notebook=DEFAULT_NB_STG_OKSM_EXECUTED_PATH,
+        source_notebook=DEFAULT_NB_DIM_OKSM_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_DIM_OKSM_EXECUTED_PATH,
     )
 
 

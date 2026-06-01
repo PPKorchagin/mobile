@@ -1,5 +1,5 @@
 {
-  "table": "stg_oksm",
+  "table": "dim_oksm",
   "description": "Справочник ОКСМ (общероссийский классификатор стран мира)",
   "fields": [
     { "name": "numeric_code", "type": "string", "comment": "Цифровой код страны (ISO 3166-1 numeric), 3 цифры" },

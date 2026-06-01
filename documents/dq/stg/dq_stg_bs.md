@@ -46,7 +46,7 @@
 | `_TELECOMSTANDARD` | `2G`, `3G`, `4G` |
 | `_ALLOWED_GEOM_TYPES` | `POLYGON`, `MULTIPOLYGON` |
 
-**Предусловие:** `uv run mobile build-stg-bs` (нужны `build-src-bs`, `build-stg-oktmo`, `build-stg-time-zones`).
+**Предусловие:** `uv run mobile build-stg-bs` (нужны `build-src-bs`, `build-dim-oktmo`, `build-dim-time-zones`).
 
 Локальный запуск:
 

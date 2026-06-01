@@ -1,8 +1,8 @@
-# dq-stg-oktmo
+# dq-dim-oktmo
 
-**Витрина:** `stg_oktmo` · **Команда:** `dq-stg-oktmo` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
+**Витрина:** `dim_oktmo` · **Команда:** `dq-dim-oktmo` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)`. Схема (контракт): `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)`.
+Референс: `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)`. Схема (контракт): `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)`.
 
 ---
 
@@ -12,11 +12,11 @@
 | #   | Задача                                                       | Результат                                |
 | --- | ------------------------------------------------------------ | ---------------------------------------- |
 | 1   | Прочитать parquet по пути из CLI                             | DataFrame витрины                        |
-| 2   | Выполнить проверки по полям `STG_OKTMO_FIELDS` (как в build) | JSON-строки в лог с тегом `DQ_STG_OKTMO` |
+| 2   | Выполнить проверки по полям `DIM_OKTMO_FIELDS` (как в build) | JSON-строки в лог с тегом `DQ_DIM_OKTMO` |
 | 3   | Итог `summary`                                               | Счётчики checks                          |
 
 
-**Бизнес-назначение:** контроль качества справочника ОКТМО после `build-stg-oktmo`.
+**Бизнес-назначение:** контроль качества справочника ОКТМО после `build-dim-oktmo`.
 
 **В scope задач:** наличие файла, колонки из `fields`, null/cardinality, level 1–2, коды, иерархия parent↔code, WKT.
 
@@ -30,30 +30,30 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(oktmo_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-stg-oktmo`).
+Вызов: `run_dq(oktmo_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-dim-oktmo`).
 
 
 | Переменная   | Тип           | Обязательность | Значение по умолчанию    | Описание                |
 | ------------ | ------------- | -------------- | ------------------------ | ----------------------- |
-| `oktmo_path` | string (path) | Да             | `data/stg/oktmo.parquet` | CLI: `**--oktmo-path`** |
+| `oktmo_path` | string (path) | Да             | `data/dim/oktmo.parquet` | CLI: `**--oktmo-path`** |
 
 
 ```bash
-uv run mobile dq-stg-oktmo
-uv run mobile dq-stg-oktmo --oktmo-path data/stg/oktmo.parquet
+uv run mobile dq-dim-oktmo
+uv run mobile dq-dim-oktmo --oktmo-path data/dim/oktmo.parquet
 ```
 
-**Схема полей в runtime:** `STG_OKTMO_FIELDS` в `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`; JSON `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)` — только контракт документации.
+**Схема полей в runtime:** `DIM_OKTMO_FIELDS` в `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`; JSON `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)` — только контракт документации.
 
-**Предусловие:** `uv run mobile build-stg-oktmo`.
+**Предусловие:** `uv run mobile build-dim-oktmo`.
 
 Локальный запуск:
 
 ```bash
-uv run mobile dq-stg-oktmo
+uv run mobile dq-dim-oktmo
 ```
 
-Логи: `data/logs/mobile.log` (тег `DQ_STG_OKTMO`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-oktmo`.
+Логи: `data/logs/mobile.log` (тег `DQ_DIM_OKTMO`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-dim-oktmo`.
 
 ---
 
@@ -62,9 +62,9 @@ uv run mobile dq-stg-oktmo
 
 | Свойство    | Значение                                                                                                                       |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Имя таблицы | `stg_oktmo`                                                                                                                    |
+| Имя таблицы | `dim_oktmo`                                                                                                                    |
 | Формат      | Parquet                                                                                                                        |
-| Поля        | `WKT`, `level`, `parent_code`, `code`, `name` — `STG_OKTMO_FIELDS` / `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)` |
+| Поля        | `WKT`, `level`, `parent_code`, `code`, `name` — `DIM_OKTMO_FIELDS` / `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)` |
 
 
 ---
@@ -74,7 +74,7 @@ uv run mobile dq-stg-oktmo
 
 | #   | Источник    | Путь                                    | Назначение |
 | --- | ----------- | --------------------------------------- | ---------- |
-| 1   | Витрина STG | `data/stg/oktmo.parquet` (`oktmo_path`) | Объект DQ  |
+| 1   | Витрина STG | `data/dim/oktmo.parquet` (`oktmo_path`) | Объект DQ  |
 
 
 ---
@@ -84,7 +84,7 @@ uv run mobile dq-stg-oktmo
 ### Шаг 0. Инициализация
 
 1. `resolved = _resolve_oktmo_path(oktmo_path)` (относительно `PROJECT_ROOT`).
-2. `expected_columns` — имена из `STG_OKTMO_FIELDS`.
+2. `expected_columns` — имена из `DIM_OKTMO_FIELDS`.
 
 ### Шаг 1. Наличие данных
 
@@ -117,7 +117,7 @@ uv run mobile dq-stg-oktmo
 
 `summary` с агрегатами; return dict со `status`, `oktmo_path`, счётчиками checks.
 
-Каждый check — JSON в лог: `{"tag":"DQ_STG_OKTMO","check":"...","status":"...","metrics":{...}}`.
+Каждый check — JSON в лог: `{"tag":"DQ_DIM_OKTMO","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -141,12 +141,12 @@ uv run mobile dq-stg-oktmo
 | ------------------ | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `dataset_presence` | **failed**      | Parquet по `oktmo_path` не найден; дальнейшие checks не выполняются                       | Без файла витрины DQ и downstream-пайплайны не имеют входа         |
 | `dataset_basic`    | **ok**          | `row_count`, `column_count`, `oktmo_path`                                                 | Фиксация объёма среза для сравнения прогонов и пустого справочника |
-| `schema_columns`   | **failed**      | Отсутствуют колонки из `STG_OKTMO_FIELDS` (`WKT`, `level`, `parent_code`, `code`, `name`) | Контракт колонок совпадает с ETL и ожиданиями geo-джойнов          |
+| `schema_columns`   | **failed**      | Отсутствуют колонки из `DIM_OKTMO_FIELDS` (`WKT`, `level`, `parent_code`, `code`, `name`) | Контракт колонок совпадает с ETL и ожиданиями geo-джойнов          |
 
 
 ### По каждому полю схемы
 
-Для каждого присутствующего поля из `STG_OKTMO_FIELDS`:
+Для каждого присутствующего поля из `DIM_OKTMO_FIELDS`:
 
 
 | Check                 | Статус | Метрики                    | Обоснование                                          |
@@ -183,7 +183,7 @@ uv run mobile dq-stg-oktmo
 
 | Артефакт  | Путь                                                                         |
 | --------- | ---------------------------------------------------------------------------- |
-| Схема     | `[oktmo.json](../../../src/mobile/schema/stg/oktmo.json)`                    |
+| Схема     | `[oktmo.json](../../../src/mobile/schema/dim/oktmo.json)`                    |
 | ETL build | `[pipelines/stg/oktmo.py](../../../src/mobile/pipelines/stg/oktmo.py)`       |
 | DQ        | `[pipelines/dq/stg/oktmo.py](../../../src/mobile/pipelines/dq/stg/oktmo.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                   |

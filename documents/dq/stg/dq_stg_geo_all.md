@@ -139,7 +139,7 @@ uv run mobile nb-stg-geo-all
 | `temporal_order` | **failed** | `end < start` | Интервал события некорректен |
 | `event_count_valid` | **failed** | `event_count < 1` | После 5m-агрегации в группе минимум одно событие |
 | `source_event_type_vocab` | **failed** | неизвестный тип | Согласованность с `event_dds` |
-| `utc_offset_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_bs.timezone` / `stg_time_zones` |
+| `utc_offset_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_bs.timezone` / `dim_time_zones` |
 | `bs_type_vocab` | **warning** | неизвестный `bs_type` | Тип БС из enrich `stg_bs` |
 | `duplicate_event_key` | **warning** | дубли ключа события | Риск двойного учёта в downstream |
 | `summary` | **ok** | счётчики checks | Сводка прогона |

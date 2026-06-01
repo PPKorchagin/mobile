@@ -1,8 +1,8 @@
-# build-stg-oksm
+# build-dim-oksm
 
-**Витрина:** `stg_oksm` · **Команда:** `build-stg-oksm` · **Режим:** полная перезапись одного Parquet-файла.
+**Витрина:** `dim_oksm` · **Команда:** `build-dim-oksm` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: [`pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py). Схема витрины: [`oksm.json`](../../src/mobile/schema/stg/oksm.json).
+Референс: [`pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py). Схема витрины: [`oksm.json`](../../src/mobile/schema/dim/oksm.json).
 
 ---
 
@@ -11,7 +11,7 @@
 | # | Задача | Результат |
 |---|--------|-----------|
 | 1 | Загрузить сырой CSV ОКСМ | DataFrame источника |
-| 2 | Нормализовать коды и наименования | DataFrame целевой схемы `stg_oksm` |
+| 2 | Нормализовать коды и наименования | DataFrame целевой схемы `dim_oksm` |
 | 3 | Записать витрину в Parquet с заданным сжатием | Файл `output_path` |
 
 **Бизнес-назначение:** справочник стран (ОКСМ) для атрибутов с цифровым/буквенным кодом страны.
@@ -32,7 +32,7 @@
 | Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
 | ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
 | `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oksm_v001.csv`  | Входной CSV (CLI `--csv-path`)         |
-| `output_path` | string (path) | Да             | `data/stg/oksm.parquet`              | Выходной Parquet (CLI `--output-path`) |
+| `output_path` | string (path) | Да             | `data/dim/oksm.parquet`              | Выходной Parquet (CLI `--output-path`) |
 
 Сжатие Parquet — константа `DEFAULT_PARQUET_COMPRESSION` в [`cli_defaults.py`](../../src/mobile/cli_defaults.py) (по умолчанию `snappy`); в job **не передаётся**.
 
@@ -40,14 +40,14 @@
 
 | Константа | Значение |
 |-----------|----------|
-| `STG_OKSM_TABLE` | `stg_oksm` |
+| `DIM_OKSM_TABLE` | `dim_oksm` |
 | `CSV_SEP` | `;` |
 | `CSV_ENCODING` | `utf-8-sig` |
 | `SOURCE_MAPPING_COLUMNS` | колонки CSV (русские заголовки) → витрина |
 
 ```bash
-uv run mobile build-stg-oksm
-uv run mobile build-stg-oksm --csv-path src/mobile/raw_data/oksm_v001.csv --output-path data/stg/oksm.parquet
+uv run mobile build-dim-oksm
+uv run mobile build-dim-oksm --csv-path src/mobile/raw_data/oksm_v001.csv --output-path data/dim/oksm.parquet
 ```
 
 ---
@@ -114,7 +114,7 @@ uv run mobile build-stg-oksm --csv-path src/mobile/raw_data/oksm_v001.csv --outp
 
 | Артефакт | Путь |
 |----------|------|
-| Схема | [`src/mobile/schema/stg/oksm.json`](../../src/mobile/schema/stg/oksm.json) |
+| Схема | [`src/mobile/schema/dim/oksm.json`](../../src/mobile/schema/dim/oksm.json) |
 | ETL / lookup | [`src/mobile/pipelines/stg/oksm.py`](../../src/mobile/pipelines/stg/oksm.py) |
-| DQ | [`documents/dq/stg/dq_stg_oksm.md`](../dq/stg/dq_stg_oksm.md) |
+| DQ | [`documents/dq/stg/dq_dim_oksm.md`](../dq/stg/dq_dim_oksm.md) |
 | Потребитель | [`build_stg_person.md`](./build_stg_person.md) |

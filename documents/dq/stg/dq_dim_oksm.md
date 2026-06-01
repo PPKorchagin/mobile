@@ -1,8 +1,8 @@
-# dq-stg-oksm
+# dq-dim-oksm
 
-**Витрина:** `stg_oksm` · **Команда:** `dq-stg-oksm` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
+**Витрина:** `dim_oksm` · **Команда:** `dq-dim-oksm` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/oksm.py](../../../src/mobile/pipelines/dq/stg/oksm.py)`. Контракт: `[oksm.json](../../../src/mobile/schema/stg/oksm.json)`.
+Референс: `[pipelines/dq/stg/oksm.py](../../../src/mobile/pipelines/dq/stg/oksm.py)`. Контракт: `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`.
 
 ---
 
@@ -12,11 +12,11 @@
 | #   | Задача                                        | Результат                               |
 | --- | --------------------------------------------- | --------------------------------------- |
 | 1   | Прочитать parquet по пути из CLI              | DataFrame витрины                       |
-| 2   | Выполнить проверки по полям `STG_OKSM_FIELDS` | JSON-строки в лог с тегом `DQ_STG_OKSM` |
+| 2   | Выполнить проверки по полям `DIM_OKSM_FIELDS` | JSON-строки в лог с тегом `DQ_DIM_OKSM` |
 | 3   | Итог `summary`                                | Счётчики checks                         |
 
 
-**Бизнес-назначение:** контроль качества справочника ОКСМ после `build-stg-oksm`.
+**Бизнес-назначение:** контроль качества справочника ОКСМ после `build-dim-oksm`.
 
 **В scope задач:** наличие файла, колонки из `fields`, null/cardinality, целостность `numeric_code` / `alpha2` / `alpha3`, наименования, `autokey`, наличие записи RU (`643`).
 
@@ -31,32 +31,32 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(oksm_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-stg-oksm`).
+Вызов: `run_dq(oksm_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-dim-oksm`).
 
 
 | Переменная  | Тип           | Обязательность | Значение по умолчанию   | Описание               |
 | ----------- | ------------- | -------------- | ----------------------- | ---------------------- |
-| `oksm_path` | string (path) | Да             | `data/stg/oksm.parquet` | CLI: `**--oksm-path`** |
+| `oksm_path` | string (path) | Да             | `data/dim/oksm.parquet` | CLI: `**--oksm-path`** |
 
 
 ```bash
-uv run mobile dq-stg-oksm
-uv run mobile dq-stg-oksm --oksm-path data/stg/oksm.parquet
+uv run mobile dq-dim-oksm
+uv run mobile dq-dim-oksm --oksm-path data/dim/oksm.parquet
 ```
 
-**Схема полей в runtime:** `STG_OKSM_FIELDS` в `[pipelines/stg/oksm.py](../../../src/mobile/pipelines/stg/oksm.py)`; JSON `[oksm.json](../../../src/mobile/schema/stg/oksm.json)` — контракт документации.
+**Схема полей в runtime:** `DIM_OKSM_FIELDS` в `[pipelines/stg/oksm.py](../../../src/mobile/pipelines/stg/oksm.py)`; JSON `[oksm.json](../../../src/mobile/schema/dim/oksm.json)` — контракт документации.
 
 **Константа DQ:** `_RUSSIA_NUMERIC_CODE = "643"`.
 
-**Предусловие:** `uv run mobile build-stg-oksm`.
+**Предусловие:** `uv run mobile build-dim-oksm`.
 
 Локальный запуск:
 
 ```bash
-uv run mobile dq-stg-oksm
+uv run mobile dq-dim-oksm
 ```
 
-Логи: `data/logs/mobile.log` (тег `DQ_STG_OKSM`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-oksm`.
+Логи: `data/logs/mobile.log` (тег `DQ_DIM_OKSM`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-dim-oksm`.
 
 ---
 
@@ -65,9 +65,9 @@ uv run mobile dq-stg-oksm
 
 | Свойство    | Значение                                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Имя таблицы | `stg_oksm`                                                                                                                                             |
+| Имя таблицы | `dim_oksm`                                                                                                                                             |
 | Формат      | Parquet                                                                                                                                                |
-| Поля        | `numeric_code`, `name_short`, `name_full`, `alpha2`, `alpha3`, `autokey` — `STG_OKSM_FIELDS` / `[oksm.json](../../../src/mobile/schema/stg/oksm.json)` |
+| Поля        | `numeric_code`, `name_short`, `name_full`, `alpha2`, `alpha3`, `autokey` — `DIM_OKSM_FIELDS` / `[oksm.json](../../../src/mobile/schema/dim/oksm.json)` |
 
 
 ---
@@ -77,7 +77,7 @@ uv run mobile dq-stg-oksm
 
 | #   | Источник    | Путь                                  | Назначение |
 | --- | ----------- | ------------------------------------- | ---------- |
-| 1   | Витрина STG | `data/stg/oksm.parquet` (`oksm_path`) | Объект DQ  |
+| 1   | Витрина STG | `data/dim/oksm.parquet` (`oksm_path`) | Объект DQ  |
 
 
 ---
@@ -87,7 +87,7 @@ uv run mobile dq-stg-oksm
 ### Шаг 0. Инициализация
 
 1. `resolved = _resolve_oksm_path(oksm_path)` (относительно `PROJECT_ROOT`).
-2. `expected_columns` — имена из `STG_OKSM_FIELDS`.
+2. `expected_columns` — имена из `DIM_OKSM_FIELDS`.
 
 ### Шаг 1. Наличие данных
 
@@ -101,7 +101,7 @@ uv run mobile dq-stg-oksm
 
 ### Шаг 3. Предметные проверки
 
-Для каждой проверки — отдельная запись в лог с `tag=DQ_STG_OKSM`.
+Для каждой проверки — отдельная запись в лог с `tag=DQ_DIM_OKSM`.
 
 1. `**numeric_code_integrity`:** все `numeric_code` match `^\d{3}$`; `duplicate_numeric_code_count` → **failed** при нарушении.
 2. `**russia_presence`:** есть строка с `numeric_code = 643`; иначе **warning** (`has_numeric_code_643`).
@@ -113,7 +113,7 @@ uv run mobile dq-stg-oksm
 
 ### Шаг 4. Итог
 
-`summary`; тег `DQ_STG_OKSM`. Формат строки: `{"tag":"DQ_STG_OKSM","check":"...","status":"...","metrics":{...}}`.
+`summary`; тег `DQ_DIM_OKSM`. Формат строки: `{"tag":"DQ_DIM_OKSM","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -137,12 +137,12 @@ uv run mobile dq-stg-oksm
 | ------------------ | --------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `dataset_presence` | **failed**      | Parquet по `oksm_path` не найден; дальнейшие checks не выполняются                                              | Без файла витрины DQ и downstream (`build-stg-person`) не имеют входа |
 | `dataset_basic`    | **ok**          | `row_count`, `column_count`, `oksm_path`                                                                        | Фиксация объёма среза для сравнения прогонов и пустого справочника    |
-| `schema_columns`   | **failed**      | Отсутствуют колонки из `STG_OKSM_FIELDS` (6 полей, см. `[oksm.json](../../../src/mobile/schema/stg/oksm.json)`) | Контракт колонок совпадает с ETL и `OksmLookup`                       |
+| `schema_columns`   | **failed**      | Отсутствуют колонки из `DIM_OKSM_FIELDS` (6 полей, см. `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`) | Контракт колонок совпадает с ETL и `OksmLookup`                       |
 
 
 ### По каждому полю схемы
 
-Для каждого присутствующего поля из `STG_OKSM_FIELDS`:
+Для каждого присутствующего поля из `DIM_OKSM_FIELDS`:
 
 
 | Check                 | Статус | Метрики                    | Обоснование                                          |
@@ -180,10 +180,10 @@ uv run mobile dq-stg-oksm
 
 | Артефакт  | Путь                                                                       |
 | --------- | -------------------------------------------------------------------------- |
-| Схема     | `[oksm.json](../../../src/mobile/schema/stg/oksm.json)`                    |
+| Схема     | `[oksm.json](../../../src/mobile/schema/dim/oksm.json)`                    |
 | ETL build | `[pipelines/stg/oksm.py](../../../src/mobile/pipelines/stg/oksm.py)`       |
 | DQ        | `[pipelines/dq/stg/oksm.py](../../../src/mobile/pipelines/dq/stg/oksm.py)` |
-| Build doc | `[documents/stg/build_stg_oksm.md](../../stg/build_stg_oksm.md)`           |
+| Build doc | `[documents/stg/build_dim_oksm.md](../../stg/build_dim_oksm.md)`           |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                 |
 
 

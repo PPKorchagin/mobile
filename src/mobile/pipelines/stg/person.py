@@ -27,9 +27,9 @@ from mobile.project_paths import (
     DEFAULT_SRC_EXCL_IMEI_OUTPUT,
     DEFAULT_SRC_EXCL_IMSI_OUTPUT,
     DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
-    DEFAULT_STG_OKSM_OUTPUT_PATH,
+    DEFAULT_DIM_OKSM_OUTPUT_PATH,
     DEFAULT_STG_PERSON_SCHEMA_PATH,
-    DEFAULT_STG_TAC_OUTPUT_PATH,
+    DEFAULT_DIM_TAC_OUTPUT_PATH,
     SRC_PERSON_LAYOUT_TEMPLATE,
     SRC_PERSON_SUCCESS_FLAG,
     resolve_project_path,
@@ -369,8 +369,8 @@ def run_build(
     src_excl_imsi_path: str | Path | None = None,
     src_excl_imei_path: str | Path | None = None,
     src_excl_msisdn_path: str | Path | None = None,
-    stg_tac_path: str | Path | None = None,
-    stg_oksm_path: str | Path | None = None,
+    dim_tac_path: str | Path | None = None,
+    dim_oksm_path: str | Path | None = None,
     output_path: str | Path | None = None,
     sync_bindings_from_geo: bool = True,
 ) -> dict[str, Any]:
@@ -413,8 +413,8 @@ def run_build(
         )
     src_rows_before_exclusions = int(len(raw))
 
-    tac_path = resolve_project_path(stg_tac_path) if stg_tac_path is not None else DEFAULT_STG_TAC_OUTPUT_PATH
-    oksm_path = resolve_project_path(stg_oksm_path) if stg_oksm_path is not None else DEFAULT_STG_OKSM_OUTPUT_PATH
+    tac_path = resolve_project_path(dim_tac_path) if dim_tac_path is not None else DEFAULT_DIM_TAC_OUTPUT_PATH
+    oksm_path = resolve_project_path(dim_oksm_path) if dim_oksm_path is not None else DEFAULT_DIM_OKSM_OUTPUT_PATH
     excl_imsi_path = resolve_project_path(src_excl_imsi_path or DEFAULT_SRC_EXCL_IMSI_OUTPUT)
     excl_imei_path = resolve_project_path(src_excl_imei_path or DEFAULT_SRC_EXCL_IMEI_OUTPUT)
     excl_msisdn_path = resolve_project_path(src_excl_msisdn_path or DEFAULT_SRC_EXCL_MSISDN_OUTPUT)
@@ -571,7 +571,7 @@ def _load_previous_person(prev_month: date) -> pd.DataFrame | None:
 
 def _read_m2m_tac_set(tac_path: Path) -> set[str]:
     if not tac_path.exists():
-        logger.warning("build-stg-person: stg_tac not found, skipping M2M TAC exclusion: %s", tac_path)
+        logger.warning("build-stg-person: dim_tac not found, skipping M2M TAC exclusion: %s", tac_path)
         return set()
     tac_df = pd.read_parquet(tac_path, columns=["tac", "is_m2m"])
     m2m = tac_df[tac_df["is_m2m"].fillna(False).astype(bool)]
@@ -997,7 +997,7 @@ def _derive_citizenship(
     return "U"
 
 
-# Подстроки в bio → ISO alpha-2; в ``stg_person.citizenship`` — numeric_code из ``stg_oksm``.
+# Подстроки в bio → ISO alpha-2; в ``stg_person.citizenship`` — numeric_code из ``dim_oksm``.
 _DEPT_MAP = {
     "мвд": "RU",
     "овд": "RU",

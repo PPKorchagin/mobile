@@ -8,19 +8,19 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.tac import M2M_EQUIPMENT_TYPES, STG_TAC_FIELDS
+from mobile.pipelines.stg.tac import M2M_EQUIPMENT_TYPES, DIM_TAC_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_TAC"
+LOG_TAG = "DQ_DIM_TAC"
 _TAC_RE = re.compile(r"^\d{8}$")
 _MIN_M2M_RATIO = 0.05
 
 
 def run_dq(tac_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``stg_tac`` по пути parquet (поля и M2M — константы ETL ``stg/tac.py``)."""
+    """DQ витрины ``dim_tac`` по пути parquet (поля и M2M — константы ETL ``stg/tac.py``)."""
     resolved = _resolve_tac_path(tac_path)
-    expected_columns = [field["name"] for field in STG_TAC_FIELDS]
+    expected_columns = [field["name"] for field in DIM_TAC_FIELDS]
     m2m_types = set(M2M_EQUIPMENT_TYPES)
 
     if not resolved.exists():

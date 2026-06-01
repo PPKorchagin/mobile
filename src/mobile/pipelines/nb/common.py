@@ -21,11 +21,11 @@ from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
-    DEFAULT_STG_OKSM_OUTPUT_PATH,
+    DEFAULT_DIM_OKSM_OUTPUT_PATH,
     stg_bs_output_path,
-    DEFAULT_STG_OKTMO_OUTPUT_PATH,
-    DEFAULT_STG_TAC_OUTPUT_PATH,
-    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+    DEFAULT_DIM_OKTMO_OUTPUT_PATH,
+    DEFAULT_DIM_TAC_OUTPUT_PATH,
+    DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
     stg_geo_all_output_path,
     stg_geo_intervals_output_path,
     stg_msisdn_imei_output_path,
@@ -370,7 +370,7 @@ def plot_count_bars(
     return fig
 
 
-def render_stg_oktmo_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_dim_oktmo_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     fig, axes = plt.subplots(2, 3, figsize=(16, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -462,7 +462,7 @@ def plot_timezone_distribution(dist: pd.DataFrame, *, ax: plt.Axes | None = None
     return fig
 
 
-def render_stg_time_zones_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_dim_time_zones_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     fig, axes = plt.subplots(2, 3, figsize=(16, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -584,7 +584,7 @@ def plot_equipment_type_distribution(dist: pd.DataFrame, *, ax: plt.Axes | None 
     return fig
 
 
-def render_stg_tac_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_dim_tac_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     fig, axes = plt.subplots(2, 3, figsize=(16, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -613,7 +613,7 @@ def render_stg_tac_dq_overview(latest: pd.DataFrame) -> plt.Figure:
 
 
 def display_tac_parquet_summary(root: Path) -> None:
-    tac_parquet = _resolve_parquet(root, DEFAULT_STG_TAC_OUTPUT_PATH)
+    tac_parquet = _resolve_parquet(root, DEFAULT_DIM_TAC_OUTPUT_PATH)
     if not tac_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {tac_parquet}")
     df = pd.read_parquet(tac_parquet)
@@ -621,7 +621,7 @@ def display_tac_parquet_summary(root: Path) -> None:
         rel = tac_parquet.relative_to(root)
     except ValueError:
         rel = tac_parquet
-    print(f"stg_tac rows: {len(df):,} | файл: {rel}")
+    print(f"dim_tac rows: {len(df):,} | файл: {rel}")
     if "is_m2m" in df.columns:
         display(df.groupby("is_m2m", dropna=False).size().reset_index(name="rows"))
     if "equipment_type" in df.columns:
@@ -698,7 +698,7 @@ def plot_russia_presence(latest: pd.DataFrame, *, ax: plt.Axes | None = None) ->
     return fig
 
 
-def render_stg_oksm_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_dim_oksm_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     fig, axes = plt.subplots(2, 3, figsize=(16, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -742,7 +742,7 @@ def render_stg_oksm_dq_overview(latest: pd.DataFrame) -> plt.Figure:
 
 
 def display_oksm_parquet_summary(root: Path) -> None:
-    oksm_parquet = _resolve_parquet(root, DEFAULT_STG_OKSM_OUTPUT_PATH)
+    oksm_parquet = _resolve_parquet(root, DEFAULT_DIM_OKSM_OUTPUT_PATH)
     if not oksm_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {oksm_parquet}")
     df = pd.read_parquet(oksm_parquet)
@@ -750,7 +750,7 @@ def display_oksm_parquet_summary(root: Path) -> None:
         rel = oksm_parquet.relative_to(root)
     except ValueError:
         rel = oksm_parquet
-    print(f"stg_oksm rows: {len(df):,} | файл: {rel}")
+    print(f"dim_oksm rows: {len(df):,} | файл: {rel}")
     cols = [col for col in ("numeric_code", "name_short", "alpha2", "alpha3") if col in df.columns]
     if cols:
         display(df[cols].head(20))
@@ -901,7 +901,7 @@ def display_folium_map(m: folium.Map) -> None:
 def render_src_bs_folium_map(root: Path) -> folium.Map:
     """Карта ``src_bs``: кластер точек, слои по generation и контуры ОКТМО level=1."""
     bs_parquet = _resolve_parquet(root, DEFAULT_BS_LAYOUT)
-    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_DIM_OKTMO_OUTPUT_PATH)
     if not bs_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
 
@@ -1085,8 +1085,8 @@ def _add_oktmo_level_layer(
     return ok, bad, total
 
 
-def render_stg_oktmo_folium_map(root: Path) -> folium.Map:
-    oktmo_parquet = DEFAULT_STG_OKTMO_OUTPUT_PATH
+def render_dim_oktmo_folium_map(root: Path) -> folium.Map:
+    oktmo_parquet = DEFAULT_DIM_OKTMO_OUTPUT_PATH
     if not oktmo_parquet.is_absolute():
         oktmo_parquet = root / oktmo_parquet
 
@@ -1098,7 +1098,7 @@ def render_stg_oktmo_folium_map(root: Path) -> folium.Map:
         rel = oktmo_parquet.relative_to(root)
     except ValueError:
         rel = oktmo_parquet
-    print(f"stg_oktmo rows: {len(oktmo_df):,} | файл: {rel}")
+    print(f"dim_oktmo rows: {len(oktmo_df):,} | файл: {rel}")
     display(
         oktmo_df.groupby("level", as_index=False)
         .agg(polygons=("code", "count"))
@@ -1165,9 +1165,9 @@ def _resolve_parquet(root: Path, path: Path) -> Path:
     return root / path
 
 
-def render_stg_time_zones_folium_map(root: Path) -> folium.Map:
-    tz_parquet = _resolve_parquet(root, DEFAULT_STG_TIME_ZONES_OUTPUT_PATH)
-    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+def render_dim_time_zones_folium_map(root: Path) -> folium.Map:
+    tz_parquet = _resolve_parquet(root, DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH)
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_DIM_OKTMO_OUTPUT_PATH)
 
     tz_df = pd.read_parquet(tz_parquet)
     if tz_df.empty or "geometry" not in tz_df.columns:
@@ -2331,7 +2331,7 @@ def _stg_bs_map_center(pts: pd.DataFrame) -> tuple[float, float]:
 def _add_stg_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> None:
     if "oktmo_code_1" not in pts.columns:
         return
-    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_DIM_OKTMO_OUTPUT_PATH)
     if not oktmo_parquet.exists():
         return
     oktmo_df = pd.read_parquet(oktmo_parquet)

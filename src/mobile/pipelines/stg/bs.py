@@ -21,8 +21,8 @@ from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_SRC_BS_SCHEMA_PATH,
     DEFAULT_STG_BS_SCHEMA_PATH,
-    DEFAULT_STG_OKTMO_OUTPUT_PATH,
-    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+    DEFAULT_DIM_OKTMO_OUTPUT_PATH,
+    DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
     resolve_project_path,
     stg_bs_output_path,
 )
@@ -116,8 +116,8 @@ def run_build(
         else stg_bs_output_path()
     )
     src_path = resolve_project_path(src_bs_path or DEFAULT_BS_LAYOUT)
-    oktmo_file = resolve_project_path(oktmo_path or DEFAULT_STG_OKTMO_OUTPUT_PATH)
-    tz_path = resolve_project_path(time_zones_path or DEFAULT_STG_TIME_ZONES_OUTPUT_PATH)
+    oktmo_file = resolve_project_path(oktmo_path or DEFAULT_DIM_OKTMO_OUTPUT_PATH)
+    tz_path = resolve_project_path(time_zones_path or DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH)
 
     if not src_path.exists():
         raise FileNotFoundError(f"SRC BS parquet not found: {src_path}")

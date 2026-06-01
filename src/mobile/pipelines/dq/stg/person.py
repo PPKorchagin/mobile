@@ -13,7 +13,7 @@ import pandas as pd
 
 from mobile.pipelines.stg.person import STG_PERSON_FIELDS
 from mobile.project_paths import (
-    DEFAULT_STG_OKSM_OUTPUT_PATH,
+    DEFAULT_DIM_OKSM_OUTPUT_PATH,
     report_month_start,
     resolve_project_path,
     resolve_stg_monthly_parquet_path,
@@ -46,12 +46,12 @@ def run_dq(
     *,
     report_date: date,
     stg_person_path: str | Path,
-    stg_oksm_path: str | Path | None = None,
+    dim_oksm_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Read-only DQ ``stg_person``; ``report_date`` и ``stg_person_path`` обязательны (пути задаёт CLI)."""
     report_month = report_month_start(report_date)
     person_path = _resolve_source_path(report_date=report_month, stg_person_path=stg_person_path)
-    oksm_path = resolve_project_path(stg_oksm_path or DEFAULT_STG_OKSM_OUTPUT_PATH)
+    oksm_path = resolve_project_path(dim_oksm_path or DEFAULT_DIM_OKSM_OUTPUT_PATH)
 
     checks = 0
     warnings = 0

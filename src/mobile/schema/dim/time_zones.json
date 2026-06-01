@@ -1,5 +1,5 @@
 {
-  "table": "stg_time_zones",
+  "table": "dim_time_zones",
   "description": "Справочник тайм-зон по регионам",
   "fields": [
     { "name": "code", "type": "int32", "comment": "Код региона" },

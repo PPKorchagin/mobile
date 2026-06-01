@@ -1,5 +1,5 @@
 {
-  "table": "stg_tac",
+  "table": "dim_tac",
   "description": "Справочник TAC (Type Allocation Code) для классификации терминалов и M2M",
   "fields": [
     { "name": "tac", "type": "string", "comment": "TAC — первые 8 цифр IMEI" },

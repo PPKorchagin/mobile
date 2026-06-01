@@ -1,8 +1,8 @@
-# build-stg-oktmo
+# build-dim-oktmo
 
-**Витрина:** `stg_oktmo` · **Команда:** `build-stg-oktmo` · **Режим:** полная перезапись одного Parquet-файла.
+**Витрина:** `dim_oktmo` · **Команда:** `build-dim-oktmo` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: [`pipelines/stg/oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py). Схема витрины: [`oktmo.json`](../../src/mobile/schema/stg/oktmo.json).
+Референс: [`pipelines/stg/oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py). Схема витрины: [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json).
 
 ---
 
@@ -12,7 +12,7 @@
 | #   | Задача                                                    | Результат                                       |
 | --- | --------------------------------------------------------- | ----------------------------------------------- |
 | 1   | Загрузить сырой CSV классификатора ОКТМО                  | Данные в памяти по чанкам                       |
-| 2   | Привести набор колонок и типы к целевой схеме `stg_oktmo` | Нормализованный DataFrame                       |
+| 2   | Привести набор колонок и типы к целевой схеме `dim_oktmo` | Нормализованный DataFrame                       |
 | 3   | Записать витрину в Parquet                                | Файл `output_path`, готовый к чтению downstream |
 
 
@@ -37,7 +37,7 @@
 | Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
 | ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
 | `csv_path`    | string (path) | Да             | `src/mobile/raw_data/oktmo_v001.csv` | Входной CSV ОКТМО (CLI `--csv-path`)   |
-| `output_path` | string (path) | Да             | `data/stg/oktmo.parquet`             | Выходной Parquet (CLI `--output-path`) |
+| `output_path` | string (path) | Да             | `data/dim/oktmo.parquet`             | Выходной Parquet (CLI `--output-path`) |
 
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
@@ -47,8 +47,8 @@
 
 | Константа                | Значение                                                          |
 | ------------------------ | ----------------------------------------------------------------- |
-| `STG_OKTMO_TABLE`        | `stg_oktmo`                                                       |
-| `STG_OKTMO_FIELDS`       | порядок и типы колонок (см. [`oktmo.json`](../../src/mobile/schema/stg/oktmo.json)) |
+| `DIM_OKTMO_TABLE`        | `dim_oktmo`                                                       |
+| `DIM_OKTMO_FIELDS`       | порядок и типы колонок (см. [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json)) |
 | `CSV_SEP`                | `;`                                                               |
 | `CSV_ENCODING`           | `utf-8`                                                           |
 | `CSV_CHUNK_SIZE`         | `200000`                                                          |
@@ -58,8 +58,8 @@
 Локальный запуск референса:
 
 ```bash
-uv run mobile build-stg-oktmo
-uv run mobile build-stg-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --output-path data/stg/oktmo.parquet
+uv run mobile build-dim-oktmo
+uv run mobile build-dim-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --output-path data/dim/oktmo.parquet
 ```
 
 ---
@@ -69,7 +69,7 @@ uv run mobile build-stg-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --ou
 
 | Свойство                       | Значение                                       |
 | ------------------------------ | ---------------------------------------------- |
-| Имя таблицы                    | `stg_oktmo` — [`oktmo.json`](../../src/mobile/schema/stg/oktmo.json) → `table` |
+| Имя таблицы                    | `dim_oktmo` — [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json) → `table` |
 | Описание                       | Справочник ОКТМО территорий — `description` в JSON |
 | Формат хранения                | Parquet                                        |
 | Партиционирование              | Нет                                            |
@@ -79,7 +79,7 @@ uv run mobile build-stg-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --ou
 
 ### Поля витрины
 
-Контракт полей — [`oktmo.json`](../../src/mobile/schema/stg/oktmo.json) → `fields`; в ETL дублируется в `STG_OKTMO_FIELDS` ([`oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py)). Порядок колонок в Parquet — **строго по таблице ниже**.
+Контракт полей — [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json) → `fields`; в ETL дублируется в `DIM_OKTMO_FIELDS` ([`oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py)). Порядок колонок в Parquet — **строго по таблице ниже**.
 
 
 | #   | Поле          | Тип    | Nullable | Смысл                                                              |
@@ -133,7 +133,7 @@ uv run mobile build-stg-oktmo --csv-path src/mobile/raw_data/oktmo_v001.csv --ou
 ### Шаг 0. Инициализация
 
 1. Проверить существование `csv_path`; иначе `FileNotFoundError`.
-2. Взять целевую схему из `STG_OKTMO_FIELDS` (согласована с [`oktmo.json`](../../src/mobile/schema/stg/oktmo.json), чтение JSON в runtime не выполняется).
+2. Взять целевую схему из `DIM_OKTMO_FIELDS` (согласована с [`oktmo.json`](../../src/mobile/schema/dim/oktmo.json), чтение JSON в runtime не выполняется).
 3. Разрешить пути относительно `PROJECT_ROOT` при необходимости.
 
 ### Шаг 1. Чтение источника
@@ -149,13 +149,13 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 1. **Проверка колонок:** все значения из `SOURCE_MAPPING_COLUMNS` должны быть в chunk; иначе `ValueError`.
 2. **Переименование:** mapping 1:1.
-3. **Отбор:** колонки из `STG_OKTMO_FIELDS` в заданном порядке.
-4. **Приведение типов** по `STG_OKTMO_FIELDS` (см. таблицу ниже).
+3. **Отбор:** колонки из `DIM_OKTMO_FIELDS` в заданном порядке.
+4. **Приведение типов** по `DIM_OKTMO_FIELDS` (см. таблицу ниже).
 5. **Иерархия:**
    - `level` ∈ {1, 2};
    - для `level=2` обязателен `parent_code`, ссылающийся на `code` записи level=1;
    - `code` — числовой строковый идентификатор ОКТМО.
-6. **WKT:** поле `WKT` сохраняется как string; валидация геометрии — в DQ ([`dq_stg_oktmo`](../dq/stg/dq_stg_oktmo.md)).
+6. **WKT:** поле `WKT` сохраняется как string; валидация геометрии — в DQ ([`dq_dim_oktmo`](../dq/stg/dq_dim_oktmo.md)).
 
 | Тип       | Преобразование                          |
 | --------- | --------------------------------------- |
@@ -190,7 +190,7 @@ FOR EACH chunk IN read_csv(csv_path, sep=';', encoding='utf-8', chunksize=200000
 
 | Артефакт          | Путь                                                                           |
 | ----------------- | ------------------------------------------------------------------------------ |
-| Схема витрины     | [`src/mobile/schema/stg/oktmo.json`](../../src/mobile/schema/stg/oktmo.json)   |
+| Схема витрины     | [`src/mobile/schema/dim/oktmo.json`](../../src/mobile/schema/dim/oktmo.json)   |
 | ETL               | [`src/mobile/pipelines/stg/oktmo.py`](../../src/mobile/pipelines/stg/oktmo.py) |
 | Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py)             |
 

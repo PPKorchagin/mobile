@@ -10,7 +10,7 @@
 
 | # | Задача | Результат |
 |---|--------|-----------|
-| 1 | Загрузить полигоны субъектов из `stg_oktmo` и профиль генерации | Контекст для размещения БС |
+| 1 | Загрузить полигоны субъектов из `dim_oktmo` и профиль генерации | Контекст для размещения БС |
 | 2 | Сгенерировать синтетические строки БС в полигонах субъектов | DataFrame целевой схемы |
 | 3 | Записать витрину в Parquet | Файл `data/src/bs.parquet` (перезапись) |
 
@@ -33,7 +33,7 @@
 
 | Переменная / объект | Тип | Обязательность | Значение по умолчанию | Описание |
 |---------------------|-----|----------------|----------------------|----------|
-| `oktmo_parquet_path` | string (path) | Да | `data/stg/oktmo.parquet` | Полигоны субъектов (`resolve_oktmo_layout()`) |
+| `oktmo_parquet_path` | string (path) | Да | `data/dim/oktmo.parquet` | Полигоны субъектов (`resolve_oktmo_layout()`) |
 | `output_path` | string (path) | Да | `data/src/bs.parquet` | Выходной Parquet (перезапись) |
 | `compression` | string | Да | `snappy` | Сжатие Parquet (`DEFAULT_PARQUET_COMPRESSION`) |
 | `params` | `BuildBsParams` | Да | `default_bs_params()` | Период, регионы, операторы, seed, профиль |
@@ -105,7 +105,7 @@ uv run mobile build-src-bs
 
 | # | Источник | Путь (по умолчанию) | Назначение |
 |---|----------|---------------------|------------|
-| 1 | ОКТМО STG | `data/stg/oktmo.parquet` | `level=1`, колонки `name`, `WKT` → полигоны |
+| 1 | ОКТМО STG | `data/dim/oktmo.parquet` | `level=1`, колонки `name`, `WKT` → полигоны |
 | 2 | Профиль генерации | `src/mobile/raw_data/build_bs_profile_from_opencellid.json` | Доли операторов/поколений, диапазоны LAC/Cell, p50/p95 мощности |
 
 ---

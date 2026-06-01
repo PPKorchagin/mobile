@@ -1,8 +1,8 @@
-# build-stg-tac
+# build-dim-tac
 
-**Витрина:** `stg_tac` · **Команда:** `build-stg-tac` · **Режим:** полная перезапись одного Parquet-файла.
+**Витрина:** `dim_tac` · **Команда:** `build-dim-tac` · **Режим:** полная перезапись одного Parquet-файла.
 
-Референс: `[pipelines/stg/tac.py](../../src/mobile/pipelines/stg/tac.py)`. Схема витрины: `[tac.json](../../src/mobile/schema/stg/tac.json)`.
+Референс: `[pipelines/stg/tac.py](../../src/mobile/pipelines/stg/tac.py)`. Схема витрины: `[tac.json](../../src/mobile/schema/dim/tac.json)`.
 
 ---
 
@@ -12,7 +12,7 @@
 | #   | Задача                                          | Результат                         |
 | --- | ----------------------------------------------- | --------------------------------- |
 | 1   | Загрузить сырой CSV TACDB                       | DataFrame источника               |
-| 2   | Нормализовать TAC, даты, признак `is_m2m`, типы | DataFrame целевой схемы `stg_tac` |
+| 2   | Нормализовать TAC, даты, признак `is_m2m`, типы | DataFrame целевой схемы `dim_tac` |
 | 3   | Записать витрину в Parquet с заданным сжатием   | Файл `output_path`                |
 
 
@@ -37,7 +37,7 @@
 | Переменная    | Тип           | Обязательность | Значение по умолчанию                | Описание                               |
 | ------------- | ------------- | -------------- | ------------------------------------ | -------------------------------------- |
 | `csv_path`    | string (path) | Да             | `src/mobile/raw_data/tacdb_v001.csv` | Входной CSV (CLI `--csv-path`)         |
-| `output_path` | string (path) | Да             | `data/stg/tac.parquet`               | Выходной Parquet (CLI `--output-path`) |
+| `output_path` | string (path) | Да             | `data/dim/tac.parquet`               | Выходной Parquet (CLI `--output-path`) |
 
 
 Пути **относительные к корню репозитория** `mobile`, если не заданы абсолютные (в коде: `PROJECT_ROOT`).
@@ -49,8 +49,8 @@
 
 | Константа                | Значение                                                                        |
 | ------------------------ | ------------------------------------------------------------------------------- |
-| `STG_TAC_TABLE`          | `stg_tac`                                                                       |
-| `STG_TAC_FIELDS`         | порядок и типы колонок (см. `[tac.json](../../src/mobile/schema/stg/tac.json)`) |
+| `DIM_TAC_TABLE`          | `dim_tac`                                                                       |
+| `DIM_TAC_FIELDS`         | порядок и типы колонок (см. `[tac.json](../../src/mobile/schema/dim/tac.json)`) |
 | `CSV_SEP`                | `;`                                                                             |
 | `CSV_ENCODING`           | `utf-8-sig`                                                                     |
 | `SOURCE_MAPPING_COLUMNS` | колонки CSV → витрина (1:1), без `is_m2m`                                       |
@@ -60,8 +60,8 @@
 Локальный запуск референса:
 
 ```bash
-uv run mobile build-stg-tac
-uv run mobile build-stg-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --output-path data/stg/tac.parquet
+uv run mobile build-dim-tac
+uv run mobile build-dim-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --output-path data/dim/tac.parquet
 ```
 
 ---
@@ -71,7 +71,7 @@ uv run mobile build-stg-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --outp
 
 | Свойство                       | Значение                                                                 |
 | ------------------------------ | ------------------------------------------------------------------------ |
-| Имя таблицы                    | `stg_tac` — `[tac.json](../../src/mobile/schema/stg/tac.json)` → `table` |
+| Имя таблицы                    | `dim_tac` — `[tac.json](../../src/mobile/schema/dim/tac.json)` → `table` |
 | Описание                       | Справочник TAC — `description` в JSON                                    |
 | Формат хранения                | Parquet                                                                  |
 | Партиционирование              | Нет                                                                      |
@@ -81,7 +81,7 @@ uv run mobile build-stg-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --outp
 
 ### Поля витрины
 
-Контракт полей — `[tac.json](../../src/mobile/schema/stg/tac.json)` → `fields`; в ETL — `STG_TAC_FIELDS` (`[tac.py](../../src/mobile/pipelines/stg/tac.py)`). Поле `is_m2m` **вычисляется** (`equipment_type ∈ M2M_EQUIPMENT_TYPES`).
+Контракт полей — `[tac.json](../../src/mobile/schema/dim/tac.json)` → `fields`; в ETL — `DIM_TAC_FIELDS` (`[tac.py](../../src/mobile/pipelines/stg/tac.py)`). Поле `is_m2m` **вычисляется** (`equipment_type ∈ M2M_EQUIPMENT_TYPES`).
 
 
 | #   | Поле               | Тип    | Смысл                       |
@@ -130,7 +130,7 @@ uv run mobile build-stg-tac --csv-path src/mobile/raw_data/tacdb_v001.csv --outp
 ### Шаг 0. Инициализация
 
 1. Проверить существование `csv_path`; иначе `FileNotFoundError`.
-2. Схема из `STG_TAC_FIELDS` (согласована с `[tac.json](../../src/mobile/schema/stg/tac.json)`, JSON в runtime не читается).
+2. Схема из `DIM_TAC_FIELDS` (согласована с `[tac.json](../../src/mobile/schema/dim/tac.json)`, JSON в runtime не читается).
 
 ### Шаг 1. Чтение источника
 
@@ -153,7 +153,7 @@ raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
 5. **is_m2m (флаг IoT):**
   - `equipment_type ∈ M2M_EQUIPMENT_TYPES` (константа в `[tac.py](../../src/mobile/pipelines/stg/tac.py)`);
 6. Приведение типов: строковые колонки → pandas `string`; `is_m2m` → `boolean`.
-7. Порядок колонок строго `STG_TAC_FIELDS`.
+7. Порядок колонок строго `DIM_TAC_FIELDS`.
 8. `duplicated(subset=["tac"]).any()` → `ValueError` (ключ TAC уникален).
 
 ### Шаг 3. Запись
@@ -177,7 +177,7 @@ raw = read_csv(csv_path, sep=';', encoding='utf-8-sig')
 
 | Артефакт          | Путь                                                                       |
 | ----------------- | -------------------------------------------------------------------------- |
-| Схема витрины     | `[src/mobile/schema/stg/tac.json](../../src/mobile/schema/stg/tac.json)`   |
+| Схема витрины     | `[src/mobile/schema/dim/tac.json](../../src/mobile/schema/dim/tac.json)`   |
 | ETL               | `[src/mobile/pipelines/stg/tac.py](../../src/mobile/pipelines/stg/tac.py)` |
 | Пути по умолчанию | `[src/mobile/project_paths.py](../../src/mobile/project_paths.py)`         |
 

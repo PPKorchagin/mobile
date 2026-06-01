@@ -1,5 +1,5 @@
 {
-    "table": "stg_oktmo",
+    "table": "dim_oktmo",
     "description": "Справочник ОКТМО территорий",
     "fields": [
         { "name": "WKT", "type": "string", "comment": "Геометрия объекта WGS84 (EPSG:4326)" },

@@ -10,7 +10,7 @@
 
 | # | Задача | Результат |
 |---|--------|-----------|
-| 1 | Прочитать `stg_geo_all`, `stg_bs`, `stg_time_zones` | Входные DataFrame |
+| 1 | Прочитать `stg_geo_all`, `stg_bs`, `dim_time_zones` | Входные DataFrame |
 | 2 | Дозаполнить `imsi/imei` из `stg_msisdn_imsi`/`stg_msisdn_imei` | Подготовленные события |
 | 3 | Сформировать интервалы по методике AGG_GEO_INTERVALS | Интервалы с `cgi_list` |
 | 4 | Обогатить timezone и `time_key` | Готовая витрина |
@@ -37,7 +37,7 @@
 | `report_date` | date | **Да** | Отчётный день |
 | `stg_geo_all_path` | path | **Да** | `stg_geo_all`: файл `{YYYY-MM-DD}.parquet` или каталог `geo_all/` |
 | `stg_bs_path` | path | **Да** | `stg_bs.parquet` (общий справочник) |
-| `time_zones_path` | path | **Да** | `stg_time_zones.parquet` |
+| `time_zones_path` | path | **Да** | `dim_time_zones.parquet` |
 | `stg_msisdn_imsi_path` | path | **Да** | Месячный `stg_msisdn_imsi`: файл `{YYYY-MM-01}.parquet` или каталог (месяц от `report_date`) |
 | `stg_msisdn_imei_path` | path | **Да** | Месячный `stg_msisdn_imei`: файл `{YYYY-MM-01}.parquet` или каталог |
 | `output_path` | path | **Да** | Выход: файл `{YYYY-MM-DD}.parquet` или каталог `geo_intervals/` |
@@ -51,7 +51,7 @@
 
 **Фильтрация по дням (оркестратор):** пропуск дня, если нет `geo_all/{date}.parquet` или нет месячных `msisdn_imsi` / `msisdn_imei` за `{YYYY-MM-01}` этого дня.
 
-**Предусловия:** `build-stg-geo-all`, `build-stg-msisdn-imsi-operator`, `build-stg-msisdn-imei`, `build-stg-bs`, `build-stg-time-zones`.
+**Предусловия:** `build-stg-geo-all`, `build-stg-msisdn-imsi-operator`, `build-stg-msisdn-imei`, `build-stg-bs`, `build-dim-time-zones`.
 
 Локальный запуск:
 
@@ -63,7 +63,7 @@ uv run mobile build-stg-geo-intervals \
   --report-date 2025-01-15 \
   --stg-geo-all-path data/stg/geo_all \
   --stg-bs-path data/stg/bs.parquet \
-  --time-zones-path data/stg/time_zones.parquet \
+  --time-zones-path data/dim/time_zones.parquet \
   --stg-msisdn-imsi-path data/stg/msisdn_imsi \
   --stg-msisdn-imei-path data/stg/msisdn_imei \
   --output-path data/stg/geo_intervals
@@ -107,7 +107,7 @@ uv run mobile dq-stg-geo-intervals
 |---|----------|------|------------|
 | 1 | `stg_geo_all` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | События с координатами/CGI |
 | 2 | `stg_bs` | `data/stg/bs.parquet` | Центроиды и fallback timezone |
-| 3 | `stg_time_zones` | `data/stg/time_zones.parquet` | Point-in-polygon timezone |
+| 3 | `dim_time_zones` | `data/dim/time_zones.parquet` | Point-in-polygon timezone |
 | 4 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | Дозаполнение `imsi` (месячный срез) |
 | 5 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | Дозаполнение `imei` |
 
@@ -118,13 +118,13 @@ uv run mobile dq-stg-geo-intervals
 ### Шаг 0. Инициализация
 
 1. Разрешить входные/выходные пути.
-2. Проверить существование `stg_geo_all`, `stg_bs`, `stg_time_zones`.
+2. Проверить существование `stg_geo_all`, `stg_bs`, `dim_time_zones`.
 3. Подготовить счетчики timing.
 
 ### Шаг 1. Чтение и подготовка источников
 
 1. Прочитать `stg_geo_all` за `report_date`.
-2. Прочитать `stg_bs` и `stg_time_zones`.
+2. Прочитать `stg_bs` и `dim_time_zones`.
 3. Собрать подготовленные timezone-геометрии (`prepared geometry`) для point-in-polygon.
 
 ### Шаг 2. Дозаполнение `imsi/imei`
@@ -186,7 +186,7 @@ uv run mobile dq-stg-geo-intervals
 
 ### Шаг 6. Timezone и финализация
 
-1. Определить `timezone` по `sub_lon/sub_lat` через `stg_time_zones`.
+1. Определить `timezone` по `sub_lon/sub_lat` через `dim_time_zones`.
 2. Если полигон не найден — fallback timezone из первой БС интервала (`stg_bs`).
 3. Заполнить `time_key=report_date`.
 4. Вывести строго контрактные поля и записать parquet.

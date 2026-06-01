@@ -1,8 +1,8 @@
-# dq-stg-tac
+# dq-dim-tac
 
-**Витрина:** `stg_tac` · **Команда:** `dq-stg-tac` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
+**Витрина:** `dim_tac` · **Команда:** `dq-dim-tac` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)`. Контракт: `[tac.json](../../../src/mobile/schema/stg/tac.json)`.
+Референс: `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)`. Контракт: `[tac.json](../../../src/mobile/schema/dim/tac.json)`.
 
 ---
 
@@ -12,11 +12,11 @@
 | #   | Задача                                 | Результат         |
 | --- | -------------------------------------- | ----------------- |
 | 1   | Прочитать parquet по пути CLI          | DataFrame витрины |
-| 2   | Проверить TAC, M2M, даты, manufacturer | Логи `DQ_STG_TAC` |
+| 2   | Проверить TAC, M2M, даты, manufacturer | Логи `DQ_DIM_TAC` |
 | 3   | Итог `summary`                         | Счётчики checks   |
 
 
-**Бизнес-назначение:** контроль качества справочника TAC после `build-stg-tac`.
+**Бизнес-назначение:** контроль качества справочника TAC после `build-dim-tac`.
 
 **В scope:** схема, целостность TAC (8 цифр, без дублей), согласованность `is_m2m` с `equipment_type`, покрытие M2M.
 
@@ -30,34 +30,34 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(tac_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-stg-tac`).
+Вызов: `run_dq(tac_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-dim-tac`).
 
 
 | Переменная | Тип           | Обязательность | Значение по умолчанию  | Описание              |
 | ---------- | ------------- | -------------- | ---------------------- | --------------------- |
-| `tac_path` | string (path) | Да             | `data/stg/tac.parquet` | CLI: `**--tac-path`** |
+| `tac_path` | string (path) | Да             | `data/dim/tac.parquet` | CLI: `**--tac-path`** |
 
 
 ```bash
-uv run mobile dq-stg-tac
-uv run mobile dq-stg-tac --tac-path data/stg/tac.parquet
+uv run mobile dq-dim-tac
+uv run mobile dq-dim-tac --tac-path data/dim/tac.parquet
 ```
 
-Флаги CLI: `**--tac-path**`. Поля — `STG_TAC_FIELDS`; M2M-типы — `M2M_EQUIPMENT_TYPES` (оба в ETL `[stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)`).
+Флаги CLI: `**--tac-path**`. Поля — `DIM_TAC_FIELDS`; M2M-типы — `M2M_EQUIPMENT_TYPES` (оба в ETL `[stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)`).
 
 **Константа DQ:** `_MIN_M2M_RATIO = 0.05`.
 
-**Предусловие:** `uv run mobile build-stg-tac`.
+**Предусловие:** `uv run mobile build-dim-tac`.
 
 ```bash
-uv run mobile dq-stg-tac
+uv run mobile dq-dim-tac
 ```
 
 ---
 
 ## Структура проверяемой витрины
 
-12 полей — `[tac.json](../../../src/mobile/schema/stg/tac.json)` → `fields`. Ключевые для DQ: `tac`, `equipment_type`, `is_m2m`, `allocation_date`, `manufacturer`.
+12 полей — `[tac.json](../../../src/mobile/schema/dim/tac.json)` → `fields`. Ключевые для DQ: `tac`, `equipment_type`, `is_m2m`, `allocation_date`, `manufacturer`.
 
 ---
 
@@ -66,7 +66,7 @@ uv run mobile dq-stg-tac
 
 | #   | Источник | Путь                   |
 | --- | -------- | ---------------------- |
-| 1   | Parquet  | `data/stg/tac.parquet` |
+| 1   | Parquet  | `data/dim/tac.parquet` |
 
 
 ---
@@ -75,7 +75,7 @@ uv run mobile dq-stg-tac
 
 ### Шаг 0. Инициализация
 
-`_resolve_tac_path(tac_path)`; `STG_TAC_FIELDS`; `m2m_types = M2M_EQUIPMENT_TYPES`.
+`_resolve_tac_path(tac_path)`; `DIM_TAC_FIELDS`; `m2m_types = M2M_EQUIPMENT_TYPES`.
 
 ### Шаг 1. Наличие данных
 
@@ -87,7 +87,7 @@ uv run mobile dq-stg-tac
 
 ### Шаг 3. Предметные проверки
 
-Для каждой проверки — отдельная запись в лог с `tag=DQ_STG_TAC`. Порог M2M: `_MIN_M2M_RATIO = 0.05`.
+Для каждой проверки — отдельная запись в лог с `tag=DQ_DIM_TAC`. Порог M2M: `_MIN_M2M_RATIO = 0.05`.
 
 1. `**tac_integrity`:** все `tac` match `^\d{8}$`; `duplicate_tac_count` по полному дубликату ключа → **failed** при нарушении.
 2. `**m2m_coverage`:** `m2m_row_count`, `m2m_ratio`, `non_m2m_row_count`; **warning**, если M2M=0 или `m2m_ratio < 5%` (ожидается доля IoT в справочнике).
@@ -97,7 +97,7 @@ uv run mobile dq-stg-tac
 
 ### Шаг 4. Итог
 
-`summary`; тег `DQ_STG_TAC`. Формат: `{"tag":"DQ_STG_TAC","check":"...","status":"...","metrics":{...}}`.
+`summary`; тег `DQ_DIM_TAC`. Формат: `{"tag":"DQ_DIM_TAC","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -121,7 +121,7 @@ uv run mobile dq-stg-tac
 | ------------------ | --------------- | ------------------------------------------ | --------------------------------------------------------------------- |
 | `dataset_presence` | **failed**      | Нет parquet                                | Без файла витрины DQ и downstream (`build-stg-person`) не имеют входа |
 | `dataset_basic`    | **ok**          | `row_count`, `column_count`, `tac_path`    | Фиксация объёма среза для сравнения прогонов                          |
-| `schema_columns`   | **failed**      | Нет колонок из `STG_TAC_FIELDS` (12 полей) | Контракт колонок совпадает с ETL и ожиданиями person/M2M-фильтра      |
+| `schema_columns`   | **failed**      | Нет колонок из `DIM_TAC_FIELDS` (12 полей) | Контракт колонок совпадает с ETL и ожиданиями person/M2M-фильтра      |
 
 
 ### По каждому полю схемы
@@ -160,7 +160,7 @@ uv run mobile dq-stg-tac
 
 | Артефакт  | Путь                                                                     |
 | --------- | ------------------------------------------------------------------------ |
-| Схема     | `[tac.json](../../../src/mobile/schema/stg/tac.json)`                    |
+| Схема     | `[tac.json](../../../src/mobile/schema/dim/tac.json)`                    |
 | ETL build | `[pipelines/stg/tac.py](../../../src/mobile/pipelines/stg/tac.py)`       |
 | DQ        | `[pipelines/dq/stg/tac.py](../../../src/mobile/pipelines/dq/stg/tac.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`               |

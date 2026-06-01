@@ -1,8 +1,8 @@
-# dq-stg-time-zones
+# dq-dim-time-zones
 
-**Витрина:** `stg_time_zones` · **Команда:** `dq-stg-time-zones` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
+**Витрина:** `dim_time_zones` · **Команда:** `dq-dim-time-zones` · **Режим:** read-only проверки Parquet (процесс не падает при failed checks).
 
-Референс: `[pipelines/dq/stg/time_zones.py](../../../src/mobile/pipelines/dq/stg/time_zones.py)`. Контракт полей: `[time_zones.json](../../../src/mobile/schema/stg/time_zones.json)`.
+Референс: `[pipelines/dq/stg/time_zones.py](../../../src/mobile/pipelines/dq/stg/time_zones.py)`. Контракт полей: `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)`.
 
 ---
 
@@ -12,11 +12,11 @@
 | #   | Задача                                                | Результат                |
 | --- | ----------------------------------------------------- | ------------------------ |
 | 1   | Прочитать конфиг и путь parquet                       | Целевой файл DQ          |
-| 2   | Проверить схему, `code`, `timezone`, WKT в `geometry` | Логи `DQ_STG_TIME_ZONES` |
+| 2   | Проверить схему, `code`, `timezone`, WKT в `geometry` | Логи `DQ_DIM_TIME_ZONES` |
 | 3   | Итог `summary`                                        | Счётчики checks          |
 
 
-**Бизнес-назначение:** контроль качества справочника тайм-зон после `build-stg-time-zones`.
+**Бизнес-назначение:** контроль качества справочника тайм-зон после `build-dim-time-zones`.
 
 **В scope задач:** наличие файла, колонки, null/cardinality, диапазон timezone, геометрия.
 
@@ -24,36 +24,36 @@
 
 ## TODO
 
-1. При необходимости добавить перекрёстную проверку с `stg_oktmo` в DQ (сейчас только parquet time_zones; в notebook — совместная карта).
+1. При необходимости добавить перекрёстную проверку с `dim_oktmo` в DQ (сейчас только parquet time_zones; в notebook — совместная карта).
 
 ---
 
 ## Параметры запуска
 
-Вызов: `run_dq(time_zones_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-stg-time-zones`).
+Вызов: `run_dq(time_zones_path)` (`[cli.py](../../../src/mobile/cli.py)` → `dq-dim-time-zones`).
 
 
 | Переменная        | Тип           | Обязательность | Значение по умолчанию         | Описание                     |
 | ----------------- | ------------- | -------------- | ----------------------------- | ---------------------------- |
-| `time_zones_path` | string (path) | Да             | `data/stg/time_zones.parquet` | CLI: `**--time-zones-path`** |
+| `time_zones_path` | string (path) | Да             | `data/dim/time_zones.parquet` | CLI: `**--time-zones-path`** |
 
 
 ```bash
-uv run mobile dq-stg-time-zones
-uv run mobile dq-stg-time-zones --time-zones-path data/stg/time_zones.parquet
+uv run mobile dq-dim-time-zones
+uv run mobile dq-dim-time-zones --time-zones-path data/dim/time_zones.parquet
 ```
 
-**Схема полей в runtime:** `STG_TIME_ZONES_FIELDS` в `[pipelines/stg/time_zones.py](../../../src/mobile/pipelines/stg/time_zones.py)`; JSON `[time_zones.json](../../../src/mobile/schema/stg/time_zones.json)` — контракт документации.
+**Схема полей в runtime:** `DIM_TIME_ZONES_FIELDS` в `[pipelines/stg/time_zones.py](../../../src/mobile/pipelines/stg/time_zones.py)`; JSON `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)` — контракт документации.
 
-**Предусловие:** `uv run mobile build-stg-time-zones`.
+**Предусловие:** `uv run mobile build-dim-time-zones`.
 
 Локальный запуск:
 
 ```bash
-uv run mobile dq-stg-time-zones
+uv run mobile dq-dim-time-zones
 ```
 
-Логи: `data/logs/mobile.log`. Метрики: `command=dq-stg-time-zones` в `command_timing.jsonl`.
+Логи: `data/logs/mobile.log`. Метрики: `command=dq-dim-time-zones` в `command_timing.jsonl`.
 
 ---
 
@@ -62,7 +62,7 @@ uv run mobile dq-stg-time-zones
 
 | Свойство    | Значение                                                 |
 | ----------- | -------------------------------------------------------- |
-| Имя таблицы | `stg_time_zones`                                         |
+| Имя таблицы | `dim_time_zones`                                         |
 | Поля        | `code`, `name`, `timezone`, `geometry` — JSON → `fields` |
 
 
@@ -73,7 +73,7 @@ uv run mobile dq-stg-time-zones
 
 | #   | Источник | Путь                          |
 | --- | -------- | ----------------------------- |
-| 1   | Parquet  | `data/stg/time_zones.parquet` |
+| 1   | Parquet  | `data/dim/time_zones.parquet` |
 
 
 ---
@@ -82,7 +82,7 @@ uv run mobile dq-stg-time-zones
 
 ### Шаг 0. Инициализация
 
-`_resolve_parquet_path(parquet_path)`; `expected_columns` из `STG_TIME_ZONES_FIELDS`.
+`_resolve_parquet_path(parquet_path)`; `expected_columns` из `DIM_TIME_ZONES_FIELDS`.
 
 ### Шаг 1. Наличие данных
 
@@ -103,7 +103,7 @@ uv run mobile dq-stg-time-zones
 
 ### Шаг 4. Итог
 
-`summary`; тег логов `DQ_STG_TIME_ZONES`. Формат строки: `{"tag":"DQ_STG_TIME_ZONES","check":"...","status":"...","metrics":{...}}`.
+`summary`; тег логов `DQ_DIM_TIME_ZONES`. Формат строки: `{"tag":"DQ_DIM_TIME_ZONES","check":"...","status":"...","metrics":{...}}`.
 
 ### Типовые ошибки
 
@@ -127,12 +127,12 @@ uv run mobile dq-stg-time-zones
 | ------------------ | --------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `dataset_presence` | **failed**      | Parquet по `time_zones_path` не найден; дальнейшие checks не выполняются                       | Без файла витрины DQ и downstream (`build-stg-bs`, `build-stg-geo-intervals`) не имеют входа |
 | `dataset_basic`    | **ok**          | `row_count`, `column_count`, `time_zones_path`                                                 | Фиксация объёма среза для сравнения прогонов и пустого справочника          |
-| `schema_columns`   | **failed**      | Отсутствуют колонки из `STG_TIME_ZONES_FIELDS` (`code`, `name`, `timezone`, `geometry`)        | Контракт колонок совпадает с ETL и ожиданиями джойнов по региону            |
+| `schema_columns`   | **failed**      | Отсутствуют колонки из `DIM_TIME_ZONES_FIELDS` (`code`, `name`, `timezone`, `geometry`)        | Контракт колонок совпадает с ETL и ожиданиями джойнов по региону            |
 
 
 ### По каждому полю схемы
 
-Для каждого присутствующего поля из `STG_TIME_ZONES_FIELDS`:
+Для каждого присутствующего поля из `DIM_TIME_ZONES_FIELDS`:
 
 
 | Check                 | Статус | Метрики                    | Обоснование                                          |
@@ -148,7 +148,7 @@ uv run mobile dq-stg-time-zones
 | ------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `code_quality`     | **warning**     | Дубли `code` или NaN после `to_numeric`; `duplicate_code_count`, `invalid_code_count`                                                                                                                    | `code` — ключ региона для связи с ОКТМО и локальным временем по БС          |
 | `timezone_range`   | **warning**     | `timezone` вне [-12, 14]; `invalid_timezone_count`, `timezone_min`, `timezone_max`, **`distribution`** — доли по значениям timezone (%)                                                                  | Смещение UTC должно быть физически допустимым; distribution — профиль по РФ |
-| `geometry_quality` | **warning**     | WKT в `geometry`: `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count`, `geom_type_counts`, `valid_geometry_count` (допустимы `POLYGON`, `MULTIPOLYGON`) | Полигоны регионов нужны для point-in-polygon и карты в `nb-stg-time-zones`  |
+| `geometry_quality` | **warning**     | WKT в `geometry`: `parse_error_count`, `invalid_topology_count`, `empty_geometry_count`, `unsupported_geom_type_count`, `geom_type_counts`, `valid_geometry_count` (допустимы `POLYGON`, `MULTIPOLYGON`) | Полигоны регионов нужны для point-in-polygon и карты в `nb-dim-time-zones`  |
 
 
 ### Итог
@@ -166,7 +166,7 @@ uv run mobile dq-stg-time-zones
 
 | Артефакт  | Путь                                                                                   |
 | --------- | -------------------------------------------------------------------------------------- |
-| Схема     | `[time_zones.json](../../../src/mobile/schema/stg/time_zones.json)`                    |
+| Схема     | `[time_zones.json](../../../src/mobile/schema/dim/time_zones.json)`                    |
 | ETL build | `[pipelines/stg/time_zones.py](../../../src/mobile/pipelines/stg/time_zones.py)`       |
 | DQ        | `[pipelines/dq/stg/time_zones.py](../../../src/mobile/pipelines/dq/stg/time_zones.py)` |
 | Пути      | `[project_paths.py](../../../src/mobile/project_paths.py)`                             |

@@ -14,10 +14,10 @@
 |---|--------|-----------|
 | 1 | Принять `report_date` = 1-е число отчётного месяца | `2025-01-01` |
 | 2 | `src_person` — **последний** `load_day` с `_SUCCESS` (профиль) | `person.parquet` |
-| 3 | `stg_oksm` → `OksmLookup` | `citizenship` = `numeric_code` или `U` |
+| 3 | `dim_oksm` → `OksmLookup` | `citizenship` = `numeric_code` или `U` |
 | 4 | Синхронизация месячных `stg_msisdn_imsi` / `stg_msisdn_imei` из `stg_geo_all` по дням месяца | `{YYYY-MM-01}.parquet` для обеих binding-витрин |
 | 5 | Чтение месячных binding + обогащение `src_person` | MSISDN↔IMSI, MSISDN↔IMEI, MNP на интервалах |
-| 6 | Исключения: `src_imsi` / `src_imei` / `src_msisdn` + M2M по `stg_tac` | Строки excl и IoT не попадают в кластеризацию |
+| 6 | Исключения: `src_imsi` / `src_imei` / `src_msisdn` + M2M по `dim_tac` | Строки excl и IoT не попадают в кластеризацию |
 | 7 | Union-find: `bio`, `iccid`, ID + binding + operator | `person_cluster_key` |
 | 8 | `person_id` из прошлого `stg_person` по `person_cluster_key` | Стабильный ID между месяцами |
 | 9 | Запись `stg_person` | 1 строка на персону, поле `sim_count` |
@@ -29,8 +29,8 @@
 **Предусловия:**
 
 - [`build-src-excl`](../src/build_src_excl.md) → `data/src/excl/src_{imsi,imei,msisdn}.parquet`.
-- [`build-stg-tac`](build_stg_tac.md) → `data/stg/tac.parquet` (иначе M2M-фильтр пропускается с warning).
-- [`build-stg-oksm`](build_stg_oksm.md) → `data/stg/oksm.parquet` (обязателен для `citizenship`).
+- [`build-dim-tac`](build_dim_tac.md) → `data/dim/tac.parquet` (иначе M2M-фильтр пропускается с warning).
+- [`build-dim-oksm`](build_dim_oksm.md) → `data/dim/oksm.parquet` (обязателен для `citizenship`).
 - [`build-stg-geo-all`](build_stg_geo_all.md) по дням месяца (pipeline дополняет binding-витрины при `sync_bindings_from_geo=true`, по умолчанию).
 
 ---
@@ -49,8 +49,8 @@
 | `src_person_path` | path | Нет | `data/src/person` | Корень layout или parquet |
 | `stg_msisdn_imsi_path` | path | Нет | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | MSISDN↔IMSI за месяц |
 | `stg_msisdn_imei_path` | path | Нет | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI за месяц |
-| `stg_tac_path` | path | Нет | `data/stg/tac.parquet` | M2M по TAC |
-| `stg_oksm_path` | path | Нет | `data/stg/oksm.parquet` | Справочник ОКСМ для `citizenship` |
+| `dim_tac_path` | path | Нет | `data/dim/tac.parquet` | M2M по TAC |
+| `dim_oksm_path` | path | Нет | `data/dim/oksm.parquet` | Справочник ОКСМ для `citizenship` |
 | `src_excl_imsi_path` | path | Нет | `data/src/excl/src_imsi.parquet` | Список исключений IMSI |
 | `src_excl_imei_path` | path | Нет | `data/src/excl/src_imei.parquet` | Список исключений IMEI |
 | `src_excl_msisdn_path` | path | Нет | `data/src/excl/src_msisdn.parquet` | Список исключений MSISDN |
@@ -115,15 +115,15 @@ Binding-витрины можно собрать заранее по дням (`
 | 2 | `stg_msisdn_imsi` | `data/stg/msisdn_imsi/{YYYY-MM-01}.parquet` | MSISDN↔IMSI + `operator_id`, MNP |
 | 3 | `stg_msisdn_imei` | `data/stg/msisdn_imei/{YYYY-MM-01}.parquet` | MSISDN↔IMEI |
 | 4 | `src_imsi` / `src_imei` / `src_msisdn` | `data/src/excl/*.parquet` | Исключения из анализа |
-| 5 | `stg_tac` | `data/stg/tac.parquet` | M2M по TAC |
-| 6 | `stg_oksm` | `data/stg/oksm.parquet` | Коды гражданства |
+| 5 | `dim_tac` | `data/dim/tac.parquet` | M2M по TAC |
+| 6 | `dim_oksm` | `data/dim/oksm.parquet` | Коды гражданства |
 | 7 | `stg_person` (прошлый месяц) | `data/stg/person/{prev YYYY-MM-01}.parquet` | Стабильный `person_id` |
 | 8 | `stg_geo_all` (по дням) | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Инкремент binding внутри pipeline |
 
 Документация вспомогательных сборок:
 
-- [`build_stg_tac.md`](./build_stg_tac.md)
-- [`build_stg_oksm.md`](./build_stg_oksm.md)
+- [`build_dim_tac.md`](./build_dim_tac.md)
+- [`build_dim_oksm.md`](./build_dim_oksm.md)
 - [`build_stg_msisdn_imsi_operator.md`](./build_stg_msisdn_imsi_operator.md)
 - [`build_stg_msisdn_imsi_operator.md`](./build_stg_msisdn_imsi_operator.md) (geo / IMSI)
 - [`build_stg_msisdn_imei.md`](./build_stg_msisdn_imei.md)
@@ -154,14 +154,14 @@ Binding-витрины можно собрать заранее по дням (`
 
 ### Шаг 2. Загрузка справочника ОКСМ
 
-1. `stg_oksm_path` (по умолчанию `data/stg/oksm.parquet`, CLI `--stg-oksm-path`).
+1. `dim_oksm_path` (по умолчанию `data/dim/oksm.parquet`, CLI `--dim-oksm-path`).
 2. [`oksm.load_lookup`](../../src/mobile/pipelines/stg/oksm.py) → `OksmLookup` (индексы `alpha2`/`alpha3` → `numeric_code`, токены из `name_short`/`name_full`).
 3. Метрика `load_oksm_sec` в `command_timing.jsonl`.
-4. Если parquet отсутствует — `FileNotFoundError` (нужен `build-stg-oksm`).
+4. Если parquet отсутствует — `FileNotFoundError` (нужен `build-dim-oksm`).
 
 ### Шаг 3. Исключение M2M по TAC
 
-1. Чтение `stg_tac.parquet` (`tac`, `is_m2m`); множество `m2m_tacs`.
+1. Чтение `dim_tac.parquet` (`tac`, `is_m2m`); множество `m2m_tacs`.
 2. Для каждой строки: `imei_tac = первые 8 цифр IMEI` после нормализации цифр.
 3. Удаление строк, где `imei_tac ∈ m2m_tacs`; счётчик `excluded_m2m_tac_rows`.
 4. Если файла TAC нет или нет колонок — **warning**, фильтр не применяется.
@@ -271,8 +271,8 @@ Binding-витрины можно собрать заранее по дням (`
 |----------|-----------|
 | `report_date` не 1-е число | `ValueError` / `SystemExit` |
 | Нет `_SUCCESS` за месяц | `FileNotFoundError` |
-| Нет `stg_tac` | warning, M2M не фильтруется |
-| Нет `stg_oksm` | `FileNotFoundError` при старте |
+| Нет `dim_tac` | warning, M2M не фильтруется |
+| Нет `dim_oksm` | `FileNotFoundError` при старте |
 | Нет `stg_geo_all` за дни | пустые/частичные binding, слабый fill |
 | Нет bio и нет связующих рёбер | отдельные кластеры по tech ID, `person_confidence=low` |
 

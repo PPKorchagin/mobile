@@ -12,11 +12,11 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import DEFAULT_STG_OKSM_OUTPUT_PATH, PROJECT_ROOT
+from mobile.project_paths import DEFAULT_DIM_OKSM_OUTPUT_PATH, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-STG_OKSM_TABLE = "stg_oksm"
+DIM_OKSM_TABLE = "dim_oksm"
 
 _NUMERIC_CODE_RE = re.compile(r"^\d{3}$")
 _ALPHA2_RE = re.compile(r"^[A-Z]{2}$")
@@ -52,7 +52,7 @@ SOURCE_MAPPING_COLUMNS: dict[str, str] = {
     "autokey": "autokey",
 }
 
-STG_OKSM_FIELDS: list[dict[str, str]] = [
+DIM_OKSM_FIELDS: list[dict[str, str]] = [
     {"name": "numeric_code", "type": "string"},
     {"name": "name_short", "type": "string"},
     {"name": "name_full", "type": "string"},
@@ -67,7 +67,7 @@ _RUSSIA_NUMERIC = "643"
 
 @dataclass(frozen=True)
 class OksmLookup:
-    """Индексы ``stg_oksm``: alpha2/alpha3 → numeric_code, подстроки наименований → numeric_code."""
+    """Индексы ``dim_oksm``: alpha2/alpha3 → numeric_code, подстроки наименований → numeric_code."""
 
     alpha2_to_numeric: dict[str, str]
     alpha3_to_numeric: dict[str, str]
@@ -79,7 +79,7 @@ class OksmLookup:
         required = {"numeric_code", "name_short", "name_full", "alpha2", "alpha3"}
         missing = required - set(frame.columns)
         if missing:
-            raise ValueError(f"stg_oksm missing columns: {sorted(missing)}")
+            raise ValueError(f"dim_oksm missing columns: {sorted(missing)}")
 
         alpha2_to_numeric: dict[str, str] = {}
         alpha3_to_numeric: dict[str, str] = {}
@@ -135,10 +135,10 @@ class OksmLookup:
 
 
 def load_lookup(path: str | Path | None = None) -> OksmLookup:
-    resolved = _resolve_path(path or DEFAULT_STG_OKSM_OUTPUT_PATH)
+    resolved = _resolve_path(path or DEFAULT_DIM_OKSM_OUTPUT_PATH)
     if not resolved.exists():
         raise FileNotFoundError(
-            f"stg_oksm parquet not found: {resolved}. Run `uv run mobile build-stg-oksm` first."
+            f"dim_oksm parquet not found: {resolved}. Run `uv run mobile build-dim-oksm` first."
         )
     frame = pd.read_parquet(
         resolved,
@@ -177,7 +177,7 @@ def run(
     logger.info("Reading source CSV: %s", csv_file)
     with timed_stage("read_csv_sec", perf):
         raw = pd.read_csv(csv_file, **csv_kwargs)
-        data = _prepare_dataset(raw, SOURCE_MAPPING_COLUMNS, STG_OKSM_FIELDS)
+        data = _prepare_dataset(raw, SOURCE_MAPPING_COLUMNS, DIM_OKSM_FIELDS)
 
     with timed_stage("write_parquet_sec", perf):
         parquet_file.parent.mkdir(parents=True, exist_ok=True)
@@ -185,14 +185,14 @@ def run(
 
     logger.info(
         "%s parquet created: path=%s rows=%s columns=%s compression=%s",
-        STG_OKSM_TABLE,
+        DIM_OKSM_TABLE,
         parquet_file,
         len(data),
         len(data.columns),
         compression,
     )
     stats = {
-        "table": STG_OKSM_TABLE,
+        "table": DIM_OKSM_TABLE,
         "source_csv": str(csv_file),
         "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
@@ -200,7 +200,7 @@ def run(
         "parquet_compression": compression,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-oksm", metrics={**stats, **perf})
+    append_command_metrics(command="build-dim-oksm", metrics={**stats, **perf})
     return stats
 
 

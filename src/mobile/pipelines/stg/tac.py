@@ -14,7 +14,7 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-STG_TAC_TABLE = "stg_tac"
+DIM_TAC_TABLE = "dim_tac"
 
 _TAC_RE = re.compile(r"^\d{8}$")
 
@@ -46,7 +46,7 @@ M2M_EQUIPMENT_TYPES: frozenset[str] = frozenset(
     }
 )
 
-STG_TAC_FIELDS: list[dict[str, str]] = [
+DIM_TAC_FIELDS: list[dict[str, str]] = [
     {"name": "tac", "type": "string"},
     {"name": "manufacturer", "type": "string"},
     {"name": "model_name", "type": "string"},
@@ -85,7 +85,7 @@ def run(
     logger.info("Reading source CSV: %s", csv_file)
     with timed_stage("read_csv_sec", perf):
         raw = pd.read_csv(csv_file, **csv_kwargs)
-        data = _prepare_dataset(raw, SOURCE_MAPPING_COLUMNS, STG_TAC_FIELDS, M2M_EQUIPMENT_TYPES)
+        data = _prepare_dataset(raw, SOURCE_MAPPING_COLUMNS, DIM_TAC_FIELDS, M2M_EQUIPMENT_TYPES)
 
     with timed_stage("write_parquet_sec", perf):
         parquet_file.parent.mkdir(parents=True, exist_ok=True)
@@ -94,7 +94,7 @@ def run(
     m2m_count = int(data["is_m2m"].sum()) if "is_m2m" in data.columns else 0
     logger.info(
         "%s parquet created: path=%s rows=%s m2m_rows=%s columns=%s compression=%s",
-        STG_TAC_TABLE,
+        DIM_TAC_TABLE,
         parquet_file,
         len(data),
         m2m_count,
@@ -102,7 +102,7 @@ def run(
         compression,
     )
     stats = {
-        "table": STG_TAC_TABLE,
+        "table": DIM_TAC_TABLE,
         "source_csv": str(csv_file),
         "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
@@ -111,7 +111,7 @@ def run(
         "parquet_compression": compression,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-tac", metrics={**stats, **perf})
+    append_command_metrics(command="build-dim-tac", metrics={**stats, **perf})
     return stats
 
 

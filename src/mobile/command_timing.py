@@ -24,10 +24,10 @@ _command_run_id: ContextVar[str | None] = ContextVar("command_run_id", default=N
 
 COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
     {
-        "build-stg-oktmo",
-        "build-stg-time-zones",
-        "build-stg-tac",
-        "build-stg-oksm",
+        "build-dim-oktmo",
+        "build-dim-time-zones",
+        "build-dim-tac",
+        "build-dim-oksm",
         "build-src-bs",
         "build-src-person",
         "build-src-excl",

@@ -13,7 +13,7 @@ from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-STG_OKTMO_TABLE = "stg_oktmo"
+DIM_OKTMO_TABLE = "dim_oktmo"
 
 CSV_SEP = ";"
 CSV_ENCODING = "utf-8"
@@ -27,7 +27,7 @@ SOURCE_MAPPING_COLUMNS: dict[str, str] = {
     "WKT": "WKT",
 }
 
-STG_OKTMO_FIELDS: list[dict[str, str]] = [
+DIM_OKTMO_FIELDS: list[dict[str, str]] = [
     {"name": "WKT", "type": "string"},
     {"name": "level", "type": "int32"},
     {"name": "parent_code", "type": "string"},
@@ -60,7 +60,7 @@ def run(
     with timed_stage("read_csv_sec", perf):
         prepared_chunks: list[pd.DataFrame] = []
         for chunk in pd.read_csv(csv_file, **csv_kwargs):
-            prepared_chunks.append(_prepare_chunk(chunk, SOURCE_MAPPING_COLUMNS, STG_OKTMO_FIELDS))
+            prepared_chunks.append(_prepare_chunk(chunk, SOURCE_MAPPING_COLUMNS, DIM_OKTMO_FIELDS))
         data = pd.concat(prepared_chunks, ignore_index=True) if prepared_chunks else pd.DataFrame()
 
     with timed_stage("write_parquet_sec", perf):
@@ -69,14 +69,14 @@ def run(
 
     logger.info(
         "%s parquet created: path=%s rows=%s columns=%s compression=%s",
-        STG_OKTMO_TABLE,
+        DIM_OKTMO_TABLE,
         parquet_file,
         len(data),
         len(data.columns),
         DEFAULT_PARQUET_COMPRESSION,
     )
     stats = {
-        "table": STG_OKTMO_TABLE,
+        "table": DIM_OKTMO_TABLE,
         "source_csv": str(csv_file),
         "output_parquet": str(parquet_file),
         "row_count": int(len(data)),
@@ -84,7 +84,7 @@ def run(
         "parquet_compression": DEFAULT_PARQUET_COMPRESSION,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-oktmo", metrics={**stats, **perf})
+    append_command_metrics(command="build-dim-oktmo", metrics={**stats, **perf})
     return stats
 
 

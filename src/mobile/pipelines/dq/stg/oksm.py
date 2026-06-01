@@ -8,11 +8,11 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.oksm import STG_OKSM_FIELDS
+from mobile.pipelines.stg.oksm import DIM_OKSM_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_OKSM"
+LOG_TAG = "DQ_DIM_OKSM"
 _NUMERIC_CODE_RE = re.compile(r"^\d{3}$")
 _ALPHA2_RE = re.compile(r"^[A-Z]{2}$")
 _ALPHA3_RE = re.compile(r"^[A-Z]{3}$")
@@ -20,9 +20,9 @@ _RUSSIA_NUMERIC_CODE = "643"
 
 
 def run_dq(oksm_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``stg_oksm`` по пути parquet (поля — константы ETL ``stg/oksm.py``)."""
+    """DQ витрины ``dim_oksm`` по пути parquet (поля — константы ETL ``stg/oksm.py``)."""
     resolved = _resolve_oksm_path(oksm_path)
-    expected_columns = [field["name"] for field in STG_OKSM_FIELDS]
+    expected_columns = [field["name"] for field in DIM_OKSM_FIELDS]
 
     if not resolved.exists():
         summary = {"status": "failed", "reason": "parquet_not_found", "oksm_path": str(resolved)}

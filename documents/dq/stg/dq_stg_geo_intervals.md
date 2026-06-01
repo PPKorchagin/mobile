@@ -158,7 +158,7 @@ uv run mobile nb-stg-geo-intervals
 | `temporal_order` | **failed** | `end < start` | Некорректный интервал пребывания |
 | `coords_range` | **warning** | координаты вне диапазона | Гео-точка интервала и карты |
 | `bs_type_vocab` | **warning** | неизвестный `bs_type` | Согласованность с enrich `stg_bs` |
-| `timezone_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_time_zones` / fallback из БС |
+| `timezone_range` | **warning** | offset вне [-12, 14] | Согласованность с `dim_time_zones` / fallback из БС |
 | `cgi_list_non_empty` | **failed** | пустой `cgi_list` | Интервал без сот — нарушение AGG_GEO_INTERVALS |
 | `distribution.cgi_list_len` | **ok** | counts по длине `cgi_list` | Профиль мобильности / handover |
 | `duplicate_interval_key` | **warning** | дубли ключа интервала | Риск двойного учёта в downstream |

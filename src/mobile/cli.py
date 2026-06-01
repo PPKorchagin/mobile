@@ -36,10 +36,10 @@ from mobile.notebook_runner import (
     run_nb_stg_msisdn_imsi_operator,
     run_nb_stg_geo_intervals,
     run_nb_stg_person,
-    run_nb_stg_oksm,
-    run_nb_stg_oktmo,
-    run_nb_stg_tac,
-    run_nb_stg_time_zones,
+    run_nb_dim_oksm,
+    run_nb_dim_oktmo,
+    run_nb_dim_tac,
+    run_nb_dim_time_zones,
 )
 from mobile.pipelines.src import bs, excl, mobile as src_mobile, person
 from mobile.pipelines.dq.src import bs as dq_src_bs
@@ -70,18 +70,18 @@ from mobile.project_paths import (
     DEFAULT_SRC_PERSON_OUTPUT_ROOT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
-    DEFAULT_STG_OKTMO_CSV_PATH,
-    DEFAULT_STG_OKTMO_OUTPUT_PATH,
-    DEFAULT_STG_OKSM_CSV_PATH,
-    DEFAULT_STG_OKSM_OUTPUT_PATH,
-    DEFAULT_STG_TAC_CSV_PATH,
+    DEFAULT_DIM_OKTMO_CSV_PATH,
+    DEFAULT_DIM_OKTMO_OUTPUT_PATH,
+    DEFAULT_DIM_OKSM_CSV_PATH,
+    DEFAULT_DIM_OKSM_OUTPUT_PATH,
+    DEFAULT_DIM_TAC_CSV_PATH,
     DEFAULT_STG_EVENT_DDS_ROOT,
     STG_BS_LAYOUT_TEMPLATE,
     STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
     STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
-    DEFAULT_STG_TAC_OUTPUT_PATH,
-    DEFAULT_STG_TIME_ZONES_CSV_PATH,
-    DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+    DEFAULT_DIM_TAC_OUTPUT_PATH,
+    DEFAULT_DIM_TIME_ZONES_CSV_PATH,
+    DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
     mobile_datacenter_ids,
     mobile_datacenter_root,
     mobile_mart_paths,
@@ -117,10 +117,10 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
 }
 
 _NB_COMMANDS: dict[str, Callable[[], None]] = {
-    "nb-stg-oktmo": run_nb_stg_oktmo,
-    "nb-stg-time-zones": run_nb_stg_time_zones,
-    "nb-stg-tac": run_nb_stg_tac,
-    "nb-stg-oksm": run_nb_stg_oksm,
+    "nb-dim-oktmo": run_nb_dim_oktmo,
+    "nb-dim-time-zones": run_nb_dim_time_zones,
+    "nb-dim-tac": run_nb_dim_tac,
+    "nb-dim-oksm": run_nb_dim_oksm,
     "nb-stg-bs": run_nb_stg_bs,
     "nb-stg-geo-all": run_nb_stg_geo_all,
     "nb-stg-msisdn-imei": run_nb_stg_msisdn_imei,
@@ -137,18 +137,18 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
 
 # Порядок как в README.md (команды 1–47).
 RUN_ALL_COMMANDS: tuple[str, ...] = (
-    "build-stg-oktmo",
-    "dq-stg-oktmo",
-    "nb-stg-oktmo",
-    "build-stg-time-zones",
-    "dq-stg-time-zones",
-    "nb-stg-time-zones",
-    "build-stg-tac",
-    "dq-stg-tac",
-    "nb-stg-tac",
-    "build-stg-oksm",
-    "dq-stg-oksm",
-    "nb-stg-oksm",
+    "build-dim-oktmo",
+    "dq-dim-oktmo",
+    "nb-dim-oktmo",
+    "build-dim-time-zones",
+    "dq-dim-time-zones",
+    "nb-dim-time-zones",
+    "build-dim-tac",
+    "dq-dim-tac",
+    "nb-dim-tac",
+    "build-dim-oksm",
+    "dq-dim-oksm",
+    "nb-dim-oksm",
     "build-src-bs",
     "dq-src-bs",
     "nb-src-bs",
@@ -188,7 +188,7 @@ RUN_ALL_COMMANDS: tuple[str, ...] = (
 
 # Генерация src-витрин (только build; порядок README 1 + 13, 16, 19, 22).
 RUN_SRC_COMMANDS: tuple[str, ...] = (
-    "build-stg-oktmo",
+    "build-dim-oktmo",
     "build-src-bs",
     "build-src-person",
     "build-src-excl",
@@ -468,66 +468,66 @@ def _run_build_stg_event_dc_subprocesses(
             )
 
 
-def run_dq_stg_oktmo(*, oktmo_path: str | None) -> None:
-    """DQ ``stg_oktmo`` (read-only проверки)."""
-    path = Path(oktmo_path) if oktmo_path else DEFAULT_STG_OKTMO_OUTPUT_PATH
+def run_dq_dim_oktmo(*, oktmo_path: str | None) -> None:
+    """DQ ``dim_oktmo`` (read-only проверки)."""
+    path = Path(oktmo_path) if oktmo_path else DEFAULT_DIM_OKTMO_OUTPUT_PATH
     run_timed_command(
-        "dq-stg-oktmo",
+        "dq-dim-oktmo",
         lambda: dq_oktmo.run_dq(oktmo_path=path),
     )
 
 
-def run_dq_stg_time_zones(*, time_zones_path: str | None) -> None:
-    """DQ ``stg_time_zones`` (read-only проверки)."""
-    path = Path(time_zones_path) if time_zones_path else DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+def run_dq_dim_time_zones(*, time_zones_path: str | None) -> None:
+    """DQ ``dim_time_zones`` (read-only проверки)."""
+    path = Path(time_zones_path) if time_zones_path else DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH
     run_timed_command(
-        "dq-stg-time-zones",
+        "dq-dim-time-zones",
         lambda: dq_time_zones.run_dq(time_zones_path=path),
     )
 
 
-def run_dq_stg_tac(*, tac_path: str | None) -> None:
-    """DQ ``stg_tac`` (read-only проверки)."""
-    path = Path(tac_path) if tac_path else DEFAULT_STG_TAC_OUTPUT_PATH
+def run_dq_dim_tac(*, tac_path: str | None) -> None:
+    """DQ ``dim_tac`` (read-only проверки)."""
+    path = Path(tac_path) if tac_path else DEFAULT_DIM_TAC_OUTPUT_PATH
     run_timed_command(
-        "dq-stg-tac",
+        "dq-dim-tac",
         lambda: dq_tac.run_dq(tac_path=path),
     )
 
 
-def run_build_stg_tac(
+def run_build_dim_tac(
     *,
     csv_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-tac: CSV TACDB → Parquet ``stg_tac``."""
-    csv = Path(csv_path) if csv_path else DEFAULT_STG_TAC_CSV_PATH
-    out = Path(output_path) if output_path else DEFAULT_STG_TAC_OUTPUT_PATH
+    """build-dim-tac: CSV TACDB → Parquet ``dim_tac``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_DIM_TAC_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_DIM_TAC_OUTPUT_PATH
     run_timed_command(
-        "build-stg-tac",
+        "build-dim-tac",
         lambda: tac.run(csv_path=csv, output_path=out),
     )
 
 
-def run_build_stg_oksm(
+def run_build_dim_oksm(
     *,
     csv_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-oksm: CSV ОКСМ → Parquet ``stg_oksm``."""
-    csv = Path(csv_path) if csv_path else DEFAULT_STG_OKSM_CSV_PATH
-    out = Path(output_path) if output_path else DEFAULT_STG_OKSM_OUTPUT_PATH
+    """build-dim-oksm: CSV ОКСМ → Parquet ``dim_oksm``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_DIM_OKSM_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_DIM_OKSM_OUTPUT_PATH
     run_timed_command(
-        "build-stg-oksm",
+        "build-dim-oksm",
         lambda: oksm.run(csv_path=csv, output_path=out),
     )
 
 
-def run_dq_stg_oksm(*, oksm_path: str | None) -> None:
-    """DQ ``stg_oksm`` (read-only проверки)."""
-    path = Path(oksm_path) if oksm_path else DEFAULT_STG_OKSM_OUTPUT_PATH
+def run_dq_dim_oksm(*, oksm_path: str | None) -> None:
+    """DQ ``dim_oksm`` (read-only проверки)."""
+    path = Path(oksm_path) if oksm_path else DEFAULT_DIM_OKSM_OUTPUT_PATH
     run_timed_command(
-        "dq-stg-oksm",
+        "dq-dim-oksm",
         lambda: dq_oksm.run_dq(oksm_path=path),
     )
 
@@ -541,30 +541,30 @@ def run_dq_stg_bs(*, stg_bs_path: str | None) -> None:
     )
 
 
-def run_build_stg_time_zones(
+def run_build_dim_time_zones(
     *,
     csv_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-time-zones: CSV таймзон → Parquet ``stg_time_zones``."""
-    csv = Path(csv_path) if csv_path else DEFAULT_STG_TIME_ZONES_CSV_PATH
-    out = Path(output_path) if output_path else DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+    """build-dim-time-zones: CSV таймзон → Parquet ``dim_time_zones``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_DIM_TIME_ZONES_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH
     run_timed_command(
-        "build-stg-time-zones",
+        "build-dim-time-zones",
         lambda: time_zones.run(csv_path=csv, output_path=out),
     )
 
 
-def run_build_stg_oktmo(
+def run_build_dim_oktmo(
     *,
     csv_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-oktmo: CSV ОКТМО → Parquet ``stg_oktmo``."""
-    csv = Path(csv_path) if csv_path else DEFAULT_STG_OKTMO_CSV_PATH
-    out = Path(output_path) if output_path else DEFAULT_STG_OKTMO_OUTPUT_PATH
+    """build-dim-oktmo: CSV ОКТМО → Parquet ``dim_oktmo``."""
+    csv = Path(csv_path) if csv_path else DEFAULT_DIM_OKTMO_CSV_PATH
+    out = Path(output_path) if output_path else DEFAULT_DIM_OKTMO_OUTPUT_PATH
     run_timed_command(
-        "build-stg-oktmo",
+        "build-dim-oktmo",
         lambda: oktmo.run(csv_path=csv, output_path=out),
     )
 
@@ -609,8 +609,8 @@ def run_build_stg_bs(
         "build-stg-bs",
         lambda: stg_bs.run_build(
             src_bs_path=DEFAULT_BS_LAYOUT,
-            oktmo_path=DEFAULT_STG_OKTMO_OUTPUT_PATH,
-            time_zones_path=DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+            oktmo_path=DEFAULT_DIM_OKTMO_OUTPUT_PATH,
+            time_zones_path=DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
             output_path=stg_bs_output_path(),
         ),
     )
@@ -763,7 +763,7 @@ def run_build_stg_geo_intervals(
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
     bs = stg_bs_output_path()
-    tz = DEFAULT_STG_TIME_ZONES_OUTPUT_PATH
+    tz = DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH
     geo_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT
     imsi_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imsi"
     imei_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imei"
@@ -904,8 +904,8 @@ def run_build_stg_person(
     src_excl_imsi_path: str | None,
     src_excl_imei_path: str | None,
     src_excl_msisdn_path: str | None,
-    stg_tac_path: str | None,
-    stg_oksm_path: str | None,
+    dim_tac_path: str | None,
+    dim_oksm_path: str | None,
     output_path: str | None,
 ) -> None:
     """build-stg-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
@@ -916,8 +916,8 @@ def run_build_stg_person(
     src = Path(src_person_path) if src_person_path else None
     imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
     imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
-    tac = Path(stg_tac_path) if stg_tac_path else None
-    oksm = Path(stg_oksm_path) if stg_oksm_path else None
+    tac = Path(dim_tac_path) if dim_tac_path else None
+    oksm = Path(dim_oksm_path) if dim_oksm_path else None
     out = Path(output_path) if output_path else None
     run_timed_command(
         "build-stg-person",
@@ -929,8 +929,8 @@ def run_build_stg_person(
             src_excl_imsi_path=src_excl_imsi_path,
             src_excl_imei_path=src_excl_imei_path,
             src_excl_msisdn_path=src_excl_msisdn_path,
-            stg_tac_path=tac,
-            stg_oksm_path=oksm,
+            dim_tac_path=tac,
+            dim_oksm_path=oksm,
             output_path=out,
         ),
     )
@@ -1302,7 +1302,7 @@ def run_dq_stg_person(
     *,
     report_date: date | None,
     stg_person_path: str | None,
-    stg_oksm_path: str | None,
+    dim_oksm_path: str | None,
 ) -> None:
     """DQ ``stg_person``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по месяцам."""
     explicit = any((report_date, stg_person_path))
@@ -1320,13 +1320,13 @@ def run_dq_stg_person(
             )
         month = report_month_start(report_date)
         path = resolve_stg_monthly_parquet_path(stg_person_path, month)
-        oksm = resolve_project_path(stg_oksm_path) if stg_oksm_path else None
+        oksm = resolve_project_path(dim_oksm_path) if dim_oksm_path else None
         run_timed_command(
             f"dq-stg-person-{month.isoformat()}",
             lambda m=month, p=path, o=oksm: dq_stg_person.run_dq(
                 report_date=m,
                 stg_person_path=p,
-                stg_oksm_path=o,
+                dim_oksm_path=o,
             ),
         )
         return
@@ -1554,17 +1554,17 @@ def _run_command(
     target_per_operator: int | None = None,
     excl_pct_of_ab: float | None = None,
 ) -> None:
-    if command == "build-stg-oktmo":
-        run_build_stg_oktmo(csv_path=None, output_path=None)
+    if command == "build-dim-oktmo":
+        run_build_dim_oktmo(csv_path=None, output_path=None)
         return
-    if command == "build-stg-time-zones":
-        run_build_stg_time_zones(csv_path=None, output_path=None)
+    if command == "build-dim-time-zones":
+        run_build_dim_time_zones(csv_path=None, output_path=None)
         return
-    if command == "build-stg-tac":
-        run_build_stg_tac(csv_path=None, output_path=None)
+    if command == "build-dim-tac":
+        run_build_dim_tac(csv_path=None, output_path=None)
         return
-    if command == "build-stg-oksm":
-        run_build_stg_oksm(csv_path=None, output_path=None)
+    if command == "build-dim-oksm":
+        run_build_dim_oksm(csv_path=None, output_path=None)
         return
     if command == "build-src-person":
         logger.info("Starting %s", command)
@@ -1700,15 +1700,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--csv-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm: входной CSV (по умолчанию {DEFAULT_STG_OKTMO_CSV_PATH}, {DEFAULT_STG_TIME_ZONES_CSV_PATH}, {DEFAULT_STG_TAC_CSV_PATH} или {DEFAULT_STG_OKSM_CSV_PATH})",
+        help=f"build-dim-oktmo / build-dim-time-zones / build-dim-tac / build-dim-oksm: входной CSV (по умолчанию {DEFAULT_DIM_OKTMO_CSV_PATH}, {DEFAULT_DIM_TIME_ZONES_CSV_PATH}, {DEFAULT_DIM_TAC_CSV_PATH} или {DEFAULT_DIM_OKSM_CSV_PATH})",
     )
     parser.add_argument(
         "--oktmo-path",
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-bs / dq-stg-oktmo: stg_oktmo parquet "
-            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH})"
+            f"build-stg-bs / dq-dim-oktmo: dim_oktmo parquet "
+            f"(по умолчанию {DEFAULT_DIM_OKTMO_OUTPUT_PATH})"
         ),
     )
     parser.add_argument(
@@ -1716,8 +1716,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-bs / build-stg-geo-intervals / dq-stg-time-zones: stg_time_zones parquet "
-            f"(по умолчанию {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH})"
+            f"build-stg-bs / build-stg-geo-intervals / dq-dim-time-zones: dim_time_zones parquet "
+            f"(по умолчанию {DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH})"
         ),
     )
     parser.add_argument(
@@ -1725,8 +1725,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-tac: stg_tac parquet "
-            f"(по умолчанию {DEFAULT_STG_TAC_OUTPUT_PATH})"
+            f"dq-dim-tac: dim_tac parquet "
+            f"(по умолчанию {DEFAULT_DIM_TAC_OUTPUT_PATH})"
         ),
     )
     parser.add_argument(
@@ -1734,8 +1734,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-oksm: stg_oksm parquet "
-            f"(по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})"
+            f"dq-dim-oksm: dim_oksm parquet "
+            f"(по умолчанию {DEFAULT_DIM_OKSM_OUTPUT_PATH})"
         ),
     )
     parser.add_argument(
@@ -1814,16 +1814,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"dq-src-person: корень src_person (обязателен с --start-date; по умолчанию {DEFAULT_SRC_PERSON_OUTPUT_ROOT})",
     )
     parser.add_argument(
-        "--stg-tac-path",
+        "--dim-tac-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person: справочник stg_tac для исключения M2M (по умолчанию {DEFAULT_STG_TAC_OUTPUT_PATH})",
+        help=f"build-stg-person: справочник dim_tac для исключения M2M (по умолчанию {DEFAULT_DIM_TAC_OUTPUT_PATH})",
     )
     parser.add_argument(
-        "--stg-oksm-path",
+        "--dim-oksm-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person / dq-stg-person: справочник stg_oksm (по умолчанию {DEFAULT_STG_OKSM_OUTPUT_PATH})",
+        help=f"build-stg-person / dq-stg-person: справочник dim_oksm (по умолчанию {DEFAULT_DIM_OKSM_OUTPUT_PATH})",
     )
     parser.add_argument(
         "--stg-person-path",
@@ -1848,8 +1848,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-event / build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm / build-stg-bs / build-stg-geo-all / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: выходной parquet "
-            f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH}, {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_STG_TAC_OUTPUT_PATH}, {DEFAULT_STG_OKSM_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
+            "build-stg-event / build-dim-oktmo / build-dim-time-zones / build-dim-tac / build-dim-oksm / build-stg-bs / build-stg-geo-all / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: выходной parquet "
+            f"(по умолчанию {DEFAULT_DIM_OKTMO_OUTPUT_PATH}, {DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_DIM_TAC_OUTPUT_PATH}, {DEFAULT_DIM_OKSM_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
             f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
     )
@@ -1896,34 +1896,34 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
             location_path=args.location_path,
             output_path=args.output_path,
         )
-    elif args.command == "build-stg-oktmo":
-        run_build_stg_oktmo(
+    elif args.command == "build-dim-oktmo":
+        run_build_dim_oktmo(
             csv_path=args.csv_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-oktmo":
-        run_dq_stg_oktmo(oktmo_path=args.oktmo_path)
-    elif args.command == "build-stg-time-zones":
-        run_build_stg_time_zones(
+    elif args.command == "dq-dim-oktmo":
+        run_dq_dim_oktmo(oktmo_path=args.oktmo_path)
+    elif args.command == "build-dim-time-zones":
+        run_build_dim_time_zones(
             csv_path=args.csv_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-time-zones":
-        run_dq_stg_time_zones(time_zones_path=args.time_zones_path)
-    elif args.command == "build-stg-tac":
-        run_build_stg_tac(
+    elif args.command == "dq-dim-time-zones":
+        run_dq_dim_time_zones(time_zones_path=args.time_zones_path)
+    elif args.command == "build-dim-tac":
+        run_build_dim_tac(
             csv_path=args.csv_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-tac":
-        run_dq_stg_tac(tac_path=args.tac_path)
-    elif args.command == "build-stg-oksm":
-        run_build_stg_oksm(
+    elif args.command == "dq-dim-tac":
+        run_dq_dim_tac(tac_path=args.tac_path)
+    elif args.command == "build-dim-oksm":
+        run_build_dim_oksm(
             csv_path=args.csv_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-oksm":
-        run_dq_stg_oksm(oksm_path=args.oksm_path)
+    elif args.command == "dq-dim-oksm":
+        run_dq_dim_oksm(oksm_path=args.oksm_path)
     elif args.command == "build-stg-geo-all":
         run_build_stg_geo_all(
             report_date=args.report_date,
@@ -1972,8 +1972,8 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
             src_excl_imsi_path=args.src_imsi_path,
             src_excl_imei_path=args.src_imei_path,
             src_excl_msisdn_path=args.src_msisdn_path,
-            stg_tac_path=args.stg_tac_path,
-            stg_oksm_path=args.stg_oksm_path,
+            dim_tac_path=args.dim_tac_path,
+            dim_oksm_path=args.dim_oksm_path,
             output_path=args.output_path,
         )
     elif args.command == "dq-stg-event":
@@ -1995,7 +1995,7 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
         run_dq_stg_person(
             report_date=args.report_date,
             stg_person_path=args.stg_person_path,
-            stg_oksm_path=args.stg_oksm_path,
+            dim_oksm_path=args.dim_oksm_path,
         )
     elif args.command == "build-stg-bs":
         run_build_stg_bs(
