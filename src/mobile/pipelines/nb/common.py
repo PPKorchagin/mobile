@@ -20,17 +20,17 @@ from mobile.cli_defaults import DEFAULT_SRC_END_DATE
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
-    DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
+    DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_DIM_OKSM_OUTPUT_PATH,
-    stg_bs_output_path,
+    fct_bs_output_path,
     DEFAULT_DIM_OKTMO_OUTPUT_PATH,
     DEFAULT_DIM_TAC_OUTPUT_PATH,
     DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
     stg_geo_all_output_path,
-    stg_geo_intervals_output_path,
-    stg_msisdn_imei_output_path,
-    stg_msisdn_imsi_output_path,
-    stg_person_output_path,
+    fct_geo_intervals_output_path,
+    fct_msisdn_imei_output_path,
+    fct_msisdn_imsi_output_path,
+    fct_person_output_path,
 )
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
@@ -2011,7 +2011,7 @@ def render_src_mobile_dq_marts(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-# --- stg_bs DQ charts ---
+# --- fct_bs DQ charts ---
 
 _STG_BS_OPEN_END_PREFIX = "2262-04-11"
 _STG_BS_CARDINALITY_FOCUS = (
@@ -2027,7 +2027,7 @@ _STG_BS_CARDINALITY_FOCUS = (
 )
 
 
-def stg_bs_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_bs_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for _, record in latest.iterrows():
         check = str(record["check"])
@@ -2051,7 +2051,7 @@ def stg_bs_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return out.head(20)
 
 
-def stg_bs_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_bs_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
     specs: tuple[tuple[str, str, str], ...] = (
         ("key_presence", "null_key_rows", "null CGI rows"),
         ("key_uniqueness_per_snapshot", "duplicate_rows", "duplicate key rows"),
@@ -2071,7 +2071,7 @@ def stg_bs_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def stg_bs_geometry_metrics_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_bs_geometry_metrics_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for geom_check in ("geometry.sector_wkt", "geometry.mapinfo_wkt"):
         metrics = _metrics_for_check(latest, geom_check)
@@ -2090,9 +2090,9 @@ def stg_bs_geometry_metrics_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def render_stg_bs_dq_gates(latest: pd.DataFrame) -> plt.Figure:
-    gates = stg_bs_gate_counts_frame(latest)
-    geom = stg_bs_geometry_quality_frame(latest)
+def render_fct_bs_dq_gates(latest: pd.DataFrame) -> plt.Figure:
+    gates = fct_bs_gate_counts_frame(latest)
+    geom = fct_bs_geometry_quality_frame(latest)
     fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
     if gates.empty:
         axes[0].set_title("Gate counts — нет данных")
@@ -2107,12 +2107,12 @@ def render_stg_bs_dq_gates(latest: pd.DataFrame) -> plt.Figure:
         axes[0].set_xlabel("count")
         axes[0].set_title("Ключи, координаты, словари (DQ)")
     plot_count_bars(geom, title="WKT geometry (DQ)", ax=axes[1], color="#17becf")
-    fig.suptitle("Gate-проверки stg_bs", fontsize=12, y=1.02)
+    fig.suptitle("Gate-проверки fct_bs", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
 
-def render_stg_bs_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_bs_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
     nulls = null_ratio_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 6))
     if nulls.empty:
@@ -2125,8 +2125,8 @@ def render_stg_bs_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_bs_dq_geometry_detail(latest: pd.DataFrame) -> plt.Figure:
-    geom = stg_bs_geometry_metrics_frame(latest)
+def render_fct_bs_dq_geometry_detail(latest: pd.DataFrame) -> plt.Figure:
+    geom = fct_bs_geometry_metrics_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 4))
     if geom.empty:
         ax.set_title("geometry.* — нет данных")
@@ -2142,8 +2142,8 @@ def render_stg_bs_dq_geometry_detail(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_bs_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
-    card = stg_bs_cardinality_frame(latest)
+def render_fct_bs_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
+    card = fct_bs_cardinality_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 5))
     if card.empty:
         ax.set_title("cardinality.* — нет данных")
@@ -2157,8 +2157,8 @@ def render_stg_bs_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_bs_parquet_scd_mix(root: Path) -> plt.Figure:
-    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+def render_fct_bs_parquet_scd_mix(root: Path) -> plt.Figure:
+    bs_parquet = _resolve_parquet(root, fct_bs_output_path())
     if not bs_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
     df = pd.read_parquet(bs_parquet, columns=["date_off", "telecomstandard", "bs_type"])
@@ -2197,7 +2197,7 @@ def render_stg_bs_parquet_scd_mix(root: Path) -> plt.Figure:
         plt.setp(axes[2].get_xticklabels(), rotation=25, ha="right")
     else:
         axes[2].axis("off")
-    fig.suptitle("Профиль parquet stg_bs", fontsize=12, y=1.02)
+    fig.suptitle("Профиль parquet fct_bs", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
@@ -2244,13 +2244,13 @@ def _parquet_columns_subset(parquet: Path, wanted: tuple[str, ...]) -> list[str]
     return [col for col in wanted if col in available]
 
 
-def _stg_bs_filter_options(series: pd.Series) -> list[str]:
+def _fct_bs_filter_options(series: pd.Series) -> list[str]:
     vals = series.dropna().astype("string").str.strip()
     vals = vals[vals != ""].unique()
     return [_STG_BS_FILTER_ALL] + sorted(vals.tolist(), key=str)
 
 
-def _apply_stg_bs_filters(
+def _apply_fct_bs_filters(
     df: pd.DataFrame,
     *,
     mnc: str,
@@ -2267,7 +2267,7 @@ def _apply_stg_bs_filters(
     return out
 
 
-def _stg_bs_tooltip(row: Any, *, wkt_kind: str | None = None) -> str:
+def _fct_bs_tooltip(row: Any, *, wkt_kind: str | None = None) -> str:
     std = getattr(row, "telecomstandard", "—")
     bt = getattr(row, "bs_type", "—")
     tip = (
@@ -2279,9 +2279,9 @@ def _stg_bs_tooltip(row: Any, *, wkt_kind: str | None = None) -> str:
     return tip
 
 
-def _load_stg_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.DataFrame, str]:
+def _load_fct_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.DataFrame, str]:
     """Активные БС с валидными lon/lat и нормализованными полями фильтров."""
-    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+    bs_parquet = _resolve_parquet(root, fct_bs_output_path())
     if not bs_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
 
@@ -2297,7 +2297,7 @@ def _load_stg_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.Dat
     required = ["lon", "lat", "mcc", "mnc", "lac", "cell_id"]
     missing = [col for col in required if col not in df.columns]
     if missing:
-        raise ValueError(f"В stg_bs нет ожидаемых колонок: {missing}")
+        raise ValueError(f"В fct_bs нет ожидаемых колонок: {missing}")
 
     pts = df.copy()
     pts["lon"] = pd.to_numeric(pts["lon"], errors="coerce")
@@ -2315,20 +2315,20 @@ def _load_stg_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.Dat
         rel = bs_parquet.relative_to(root)
     except ValueError:
         rel = bs_parquet
-    print(f"stg_bs ({segment_label}): {len(df):,} rows | файл: {rel}")
+    print(f"fct_bs ({segment_label}): {len(df):,} rows | файл: {rel}")
     print(f"точек lon/lat: {len(pts):,}")
     if pts.empty:
-        raise ValueError("Нет валидных lon/lat для карты stg_bs")
+        raise ValueError("Нет валидных lon/lat для карты fct_bs")
     return pts, segment_label
 
 
-def _stg_bs_map_center(pts: pd.DataFrame) -> tuple[float, float]:
+def _fct_bs_map_center(pts: pd.DataFrame) -> tuple[float, float]:
     if pts.empty:
         return 55.75, 37.62
     return float(pts["lat"].mean()), float(pts["lon"].mean())
 
 
-def _add_stg_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> None:
+def _add_fct_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> None:
     if "oktmo_code_1" not in pts.columns:
         return
     oktmo_parquet = _resolve_parquet(root, DEFAULT_DIM_OKTMO_OUTPUT_PATH)
@@ -2345,7 +2345,7 @@ def _add_stg_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> No
         return
     oktmo_style = {"color": "#b45309", "weight": 2, "fillColor": "#b45309", "fillOpacity": 0.0}
     fg_oktmo = folium.FeatureGroup(
-        name=f"ОКТМО level=1 (коды в stg_bs): {len(oktmo_l1):,}",
+        name=f"ОКТМО level=1 (коды в fct_bs): {len(oktmo_l1):,}",
         show=True,
     )
     bad = 0
@@ -2366,7 +2366,7 @@ def _add_stg_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> No
         print(f"ОКТМО WKT пропущено: {bad}")
 
 
-def build_stg_bs_points_map(
+def build_fct_bs_points_map(
     pts: pd.DataFrame,
     root: Path,
     *,
@@ -2374,7 +2374,7 @@ def build_stg_bs_points_map(
     lite: bool = False,
 ) -> folium.Map:
     """Точки БС: кластер; в полном режиме — маркеры по ``telecomstandard`` и ОКТМО."""
-    center_lat, center_lon = _stg_bs_map_center(pts)
+    center_lat, center_lon = _fct_bs_map_center(pts)
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=5,
@@ -2415,16 +2415,16 @@ def build_stg_bs_points_map(
                     weight=1,
                     fill=True,
                     fill_opacity=0.7,
-                    tooltip=folium.Tooltip(_stg_bs_tooltip(row), sticky=False),
+                    tooltip=folium.Tooltip(_fct_bs_tooltip(row), sticky=False),
                 ).add_to(fg_std)
             fg_std.add_to(m)
 
-    _add_stg_bs_oktmo_level1(m, pts, root)
+    _add_fct_bs_oktmo_level1(m, pts, root)
     folium.LayerControl(collapsed=False).add_to(m)
     return m
 
 
-def build_stg_bs_wkt_map(
+def build_fct_bs_wkt_map(
     pts: pd.DataFrame,
     root: Path,
     wkt_col: str,
@@ -2447,7 +2447,7 @@ def build_stg_bs_wkt_map(
     cap = max_features if max_features is not None else _STG_BS_WKT_FEATURES_MAX
     total = len(work)
     sample = work if total <= cap else work.sample(cap, random_state=42)
-    center_lat, center_lon = _stg_bs_map_center(pts)
+    center_lat, center_lon = _fct_bs_map_center(pts)
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=5,
@@ -2471,7 +2471,7 @@ def build_stg_bs_wkt_map(
             data=geom.__geo_interface__,
             style_function=lambda _, s=style: s,
             tooltip=folium.Tooltip(
-                _stg_bs_tooltip(row, wkt_kind=layer_title),
+                _fct_bs_tooltip(row, wkt_kind=layer_title),
                 sticky=True,
             ),
         ).add_to(fg)
@@ -2480,7 +2480,7 @@ def build_stg_bs_wkt_map(
         return None
     fg.add_to(m)
     if add_oktmo:
-        _add_stg_bs_oktmo_level1(m, pts, root)
+        _add_fct_bs_oktmo_level1(m, pts, root)
     folium.LayerControl(collapsed=False).add_to(m)
     if bad:
         print(f"{layer_title}: WKT не разобрано: {bad}")
@@ -2489,29 +2489,29 @@ def build_stg_bs_wkt_map(
     return m
 
 
-def _display_stg_bs_folium_maps_batch(
+def _display_fct_bs_folium_maps_batch(
     pts: pd.DataFrame,
     root: Path,
     *,
     segment_label: str,
 ) -> None:
-    """Быстрый режим для ``uv run mobile nb-stg-bs`` (кластер точек, без ipywidgets)."""
+    """Быстрый режим для ``uv run mobile nb-fct-bs`` (кластер точек, без ipywidgets)."""
     display_folium_map(
-        build_stg_bs_points_map(pts, root, segment_label=segment_label, lite=True),
+        build_fct_bs_points_map(pts, root, segment_label=segment_label, lite=True),
     )
 
 
-def display_stg_bs_folium_maps(
+def display_fct_bs_folium_maps(
     root: Path,
     *,
     active_only: bool = True,
     interactive: bool | None = None,
 ) -> None:
     """Карта точек lon/lat; в Jupyter — фильтры ipywidgets, в CLI — только кластер."""
-    pts, segment = _load_stg_bs_map_df(root, active_only=active_only)
+    pts, segment = _load_fct_bs_map_df(root, active_only=active_only)
     use_interactive = interactive if interactive is not None else not _notebook_batch_mode()
     if not use_interactive:
-        _display_stg_bs_folium_maps_batch(pts, root, segment_label=segment)
+        _display_fct_bs_folium_maps_batch(pts, root, segment_label=segment)
         return
 
     from ipywidgets import Dropdown, interact
@@ -2522,14 +2522,14 @@ def display_stg_bs_folium_maps(
             .sort_values("rows", ascending=False)
         )
 
-    mnc_opts = _stg_bs_filter_options(pts["mnc"]) if "mnc" in pts.columns else [_STG_BS_FILTER_ALL]
+    mnc_opts = _fct_bs_filter_options(pts["mnc"]) if "mnc" in pts.columns else [_STG_BS_FILTER_ALL]
     std_opts = (
-        _stg_bs_filter_options(pts["telecomstandard"])
+        _fct_bs_filter_options(pts["telecomstandard"])
         if "telecomstandard" in pts.columns
         else [_STG_BS_FILTER_ALL]
     )
     bt_opts = (
-        _stg_bs_filter_options(pts["bs_type"]) if "bs_type" in pts.columns else [_STG_BS_FILTER_ALL]
+        _fct_bs_filter_options(pts["bs_type"]) if "bs_type" in pts.columns else [_STG_BS_FILTER_ALL]
     )
 
     @interact(
@@ -2541,8 +2541,8 @@ def display_stg_bs_folium_maps(
         ),
         bs_type=Dropdown(options=bt_opts, value=bt_opts[0], description="bs_type:"),
     )
-    def _show_stg_bs_maps(mnc: str, telecomstandard: str, bs_type: str) -> None:
-        sub = _apply_stg_bs_filters(
+    def _show_fct_bs_maps(mnc: str, telecomstandard: str, bs_type: str) -> None:
+        sub = _apply_fct_bs_filters(
             pts,
             mnc=mnc,
             telecomstandard=telecomstandard,
@@ -2556,16 +2556,16 @@ def display_stg_bs_folium_maps(
             print("Нет строк для карты")
             return
 
-        display_folium_map(build_stg_bs_points_map(sub, root, segment_label=segment))
+        display_folium_map(build_fct_bs_points_map(sub, root, segment_label=segment))
 
 
-def render_stg_bs_folium_map(root: Path, *, active_only: bool = True) -> folium.Map:
+def render_fct_bs_folium_map(root: Path, *, active_only: bool = True) -> folium.Map:
     """Только точки БС без виджетов (обратная совместимость)."""
-    pts, segment = _load_stg_bs_map_df(root, active_only=active_only)
-    return build_stg_bs_points_map(pts, root, segment_label=segment)
+    pts, segment = _load_fct_bs_map_df(root, active_only=active_only)
+    return build_fct_bs_points_map(pts, root, segment_label=segment)
 
 
-def stg_bs_geometry_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_bs_geometry_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for geom_check in ("geometry.sector_wkt", "geometry.mapinfo_wkt"):
         metrics = _metrics_for_check(latest, geom_check)
@@ -2582,7 +2582,7 @@ def stg_bs_geometry_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def render_stg_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     temporal = _metrics_for_check(latest, "temporal_consistency")
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
@@ -2609,7 +2609,7 @@ def render_stg_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
             ax.text(i, value, str(value), ha="center", va="bottom", fontsize=9)
     else:
         plot_count_bars(
-            stg_bs_geometry_quality_frame(latest),
+            fct_bs_geometry_quality_frame(latest),
             title="WKT geometry (DQ)",
             ax=axes[1, 1],
             color="#17becf",
@@ -2626,8 +2626,8 @@ def render_stg_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def display_stg_bs_parquet_summary(root: Path) -> None:
-    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+def display_fct_bs_parquet_summary(root: Path) -> None:
+    bs_parquet = _resolve_parquet(root, fct_bs_output_path())
     if not bs_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
     df = pd.read_parquet(bs_parquet)
@@ -2635,7 +2635,7 @@ def display_stg_bs_parquet_summary(root: Path) -> None:
         rel = bs_parquet.relative_to(root)
     except ValueError:
         rel = bs_parquet
-    print(f"stg_bs rows: {len(df):,} | файл: {rel}")
+    print(f"fct_bs rows: {len(df):,} | файл: {rel}")
     if "telecomstandard" in df.columns:
         display(df["telecomstandard"].value_counts().head(12).to_frame("rows"))
     if "bs_type" in df.columns:
@@ -2734,7 +2734,7 @@ def stg_geo_all_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
 def render_stg_geo_all_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     required = _metrics_for_check(latest, "required_fields_presence")
-    event_mix = stg_event_counts_frame(latest, "distribution.source_event_type")
+    event_mix = dds_event_counts_frame(latest, "distribution.source_event_type")
     report_date = basic.get("report_date") if basic else None
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -2971,7 +2971,7 @@ def render_stg_geo_all_folium_map(
     return m
 
 
-# --- stg_event DQ charts ---
+# --- dds_event DQ charts ---
 
 _STG_EVENT_SOURCES = ("central", "far-east")
 _STG_EVENT_SOURCE_LABELS = {"central": "Central", "far-east": "Far East"}
@@ -2992,7 +2992,7 @@ _STG_EVENT_RATE_KEYS: tuple[tuple[str, str], ...] = (
 )
 
 
-def stg_event_source_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def dds_event_source_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for _, record in latest.iterrows():
         if record["check"] != "source.coverage":
@@ -3012,7 +3012,7 @@ def stg_event_source_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def stg_event_counts_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
+def dds_event_counts_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
     metrics = _metrics_for_check(latest, check)
     counts = metrics.get("counts")
     if not isinstance(counts, dict):
@@ -3025,7 +3025,7 @@ def stg_event_counts_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("count", ascending=False)
 
 
-def stg_event_null_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def dds_event_null_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
     metrics = _metrics_for_check(latest, "null_rates")
     rates = metrics.get("null_rate_by_column")
     if not isinstance(rates, dict):
@@ -3035,7 +3035,7 @@ def stg_event_null_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
     ).sort_values("null_ratio", ascending=True)
 
 
-def stg_event_gate_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def dds_event_gate_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for check, metric_key in _STG_EVENT_RATE_KEYS:
         value = _metric_scalar(latest, check, metric_key)
@@ -3066,7 +3066,7 @@ def stg_event_gate_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def stg_event_stg_contract_gate_frame(latest: pd.DataFrame, *, source_id: str | None = None) -> pd.DataFrame:
+def dds_event_stg_contract_gate_frame(latest: pd.DataFrame, *, source_id: str | None = None) -> pd.DataFrame:
     prefix = (
         f"source.{source_id}.event.stg_contract."
         if source_id
@@ -3081,7 +3081,7 @@ def stg_event_stg_contract_gate_frame(latest: pd.DataFrame, *, source_id: str | 
     return pd.DataFrame(rows)
 
 
-def _plot_stg_event_source_coverage(coverage: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+def _plot_dds_event_source_coverage(coverage: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
     if ax is None:
         fig, ax = plt.subplots(figsize=(7, 4))
     else:
@@ -3099,7 +3099,7 @@ def _plot_stg_event_source_coverage(coverage: pd.DataFrame, *, ax: plt.Axes | No
     return fig
 
 
-def _plot_stg_event_counts_pie(counts: pd.DataFrame, *, title: str, ax: plt.Axes | None = None) -> plt.Figure:
+def _plot_dds_event_counts_pie(counts: pd.DataFrame, *, title: str, ax: plt.Axes | None = None) -> plt.Figure:
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 4))
     else:
@@ -3121,7 +3121,7 @@ def _plot_stg_event_counts_pie(counts: pd.DataFrame, *, title: str, ax: plt.Axes
     return fig
 
 
-def _plot_stg_event_gate_rates(rates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+def _plot_dds_event_gate_rates(rates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 4))
     else:
@@ -3143,7 +3143,7 @@ def _plot_stg_event_gate_rates(rates: pd.DataFrame, *, ax: plt.Axes | None = Non
     return fig
 
 
-def _plot_stg_event_stg_gate_grid(gates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+def _plot_dds_event_stg_gate_grid(gates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 2.5))
     else:
@@ -3168,15 +3168,15 @@ def _plot_stg_event_stg_gate_grid(gates: pd.DataFrame, *, ax: plt.Axes | None = 
     return fig
 
 
-def render_stg_event_dq_overview(latest: pd.DataFrame) -> plt.Figure:
-    coverage = stg_event_source_coverage_frame(latest)
+def render_dds_event_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    coverage = dds_event_source_coverage_frame(latest)
     agg = _metrics_for_check(latest, "coverage")
-    event_mix = stg_event_counts_frame(latest, "event_distribution")
+    event_mix = dds_event_counts_frame(latest, "event_distribution")
     report_date = agg.get("report_date") if agg else None
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     plot_check_status(latest, ax=axes[0, 0])
-    _plot_stg_event_source_coverage(coverage, ax=axes[0, 1])
-    _plot_stg_event_counts_pie(event_mix, title="event_distribution (код OCC)", ax=axes[1, 0])
+    _plot_dds_event_source_coverage(coverage, ax=axes[0, 1])
+    _plot_dds_event_counts_pie(event_mix, title="event_distribution (код OCC)", ax=axes[1, 0])
     plot_summary_metrics(latest, ax=axes[1, 1])
     title = f"DQ STG EVENT — report_date={report_date}" if report_date else "DQ STG EVENT — обзор"
     fig.suptitle(title, fontsize=13, y=1.02)
@@ -3184,29 +3184,29 @@ def render_stg_event_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_event_dq_quality(latest: pd.DataFrame) -> plt.Figure:
-    rates = stg_event_gate_rates_frame(latest)
-    gates = stg_event_stg_contract_gate_frame(latest)
-    nulls = stg_event_null_rates_frame(latest)
-    buckets = stg_event_counts_frame(latest, "distribution.event_count_bucket")
+def render_dds_event_dq_quality(latest: pd.DataFrame) -> plt.Figure:
+    rates = dds_event_gate_rates_frame(latest)
+    gates = dds_event_stg_contract_gate_frame(latest)
+    nulls = dds_event_null_rates_frame(latest)
+    buckets = dds_event_counts_frame(latest, "distribution.event_count_bucket")
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
-    _plot_stg_event_gate_rates(rates, ax=axes[0, 0])
-    _plot_stg_event_stg_gate_grid(gates, ax=axes[0, 1])
+    _plot_dds_event_gate_rates(rates, ax=axes[0, 0])
+    _plot_dds_event_stg_gate_grid(gates, ax=axes[0, 1])
     plot_null_ratios(nulls, ax=axes[1, 0])
-    _plot_stg_event_counts_pie(buckets, title="event_count_bucket", ax=axes[1, 1])
+    _plot_dds_event_counts_pie(buckets, title="event_count_bucket", ax=axes[1, 1])
     fig.suptitle("Контракт, gate и null_rates (агрегат)", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
 
-def render_stg_event_dq_by_source(latest: pd.DataFrame) -> plt.Figure:
+def render_dds_event_dq_by_source(latest: pd.DataFrame) -> plt.Figure:
     fig, axes = plt.subplots(1, len(_STG_EVENT_SOURCES), figsize=(14, 4))
     if len(_STG_EVENT_SOURCES) == 1:
         axes = [axes]
     for ax, source_id in zip(axes, _STG_EVENT_SOURCES, strict=True):
-        mix = stg_event_counts_frame(latest, f"source.{source_id}.event_distribution")
+        mix = dds_event_counts_frame(latest, f"source.{source_id}.event_distribution")
         label = _STG_EVENT_SOURCE_LABELS.get(source_id, source_id)
-        _plot_stg_event_counts_pie(mix, title=f"{label}: event mix", ax=ax)
+        _plot_dds_event_counts_pie(mix, title=f"{label}: event mix", ax=ax)
     fig.suptitle("Микс событий по ЦОД (DQ-лог)", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
@@ -3219,7 +3219,7 @@ def _stg_binding_report_month(latest: pd.DataFrame | None) -> date:
             raw = metrics.get("report_date")
             if raw:
                 return date.fromisoformat(str(raw))
-    for resolver in (stg_msisdn_imei_output_path, stg_msisdn_imsi_output_path):
+    for resolver in (fct_msisdn_imei_output_path, fct_msisdn_imsi_output_path):
         path = resolver(DEFAULT_SRC_END_DATE)
         parent = path.parent
         if parent.is_dir():
@@ -3332,7 +3332,7 @@ def _render_stg_binding_dq_overview(
     return fig
 
 
-def render_stg_msisdn_imei_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_msisdn_imei_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return _render_stg_binding_dq_overview(
         latest,
         title="DQ STG MSISDN IMEI",
@@ -3340,7 +3340,7 @@ def render_stg_msisdn_imei_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     )
 
 
-def render_stg_msisdn_imsi_operator_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_msisdn_imsi_operator_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return _render_stg_binding_dq_overview(
         latest,
         title="DQ STG MSISDN IMSI",
@@ -3359,8 +3359,8 @@ def _print_per_msisdn_interval_stats(per_msisdn: pd.Series) -> None:
     )
 
 
-def display_stg_msisdn_imei_parquet_summary(root: Path, report_month: date) -> None:
-    parquet = _resolve_parquet(root, stg_msisdn_imei_output_path(report_month))
+def display_fct_msisdn_imei_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, fct_msisdn_imei_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet)
@@ -3368,7 +3368,7 @@ def display_stg_msisdn_imei_parquet_summary(root: Path, report_month: date) -> N
         rel = parquet.relative_to(root)
     except ValueError:
         rel = parquet
-    print(f"stg_msisdn_imei ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    print(f"fct_msisdn_imei ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
     if df.empty:
         print("distinct msisdn: 0, distinct imei: 0")
         _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
@@ -3379,8 +3379,8 @@ def display_stg_msisdn_imei_parquet_summary(root: Path, report_month: date) -> N
     display(per_msisdn.value_counts().head(10).to_frame("msisdn_count"))
 
 
-def display_stg_msisdn_imsi_parquet_summary(root: Path, report_month: date) -> None:
-    parquet = _resolve_parquet(root, stg_msisdn_imsi_output_path(report_month))
+def display_fct_msisdn_imsi_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, fct_msisdn_imsi_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet)
@@ -3388,7 +3388,7 @@ def display_stg_msisdn_imsi_parquet_summary(root: Path, report_month: date) -> N
         rel = parquet.relative_to(root)
     except ValueError:
         rel = parquet
-    print(f"stg_msisdn_imsi ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    print(f"fct_msisdn_imsi ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
     if df.empty:
         print("distinct msisdn: 0, imsi: 0, operator_id: 0")
         _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
@@ -3402,8 +3402,8 @@ def display_stg_msisdn_imsi_parquet_summary(root: Path, report_month: date) -> N
     _print_per_msisdn_interval_stats(per_msisdn)
 
 
-def render_stg_msisdn_imei_parquet_profile(root: Path, report_month: date) -> plt.Figure:
-    parquet = _resolve_parquet(root, stg_msisdn_imei_output_path(report_month))
+def render_fct_msisdn_imei_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, fct_msisdn_imei_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet, columns=["msisdn", "imei"])
@@ -3412,7 +3412,7 @@ def render_stg_msisdn_imei_parquet_profile(root: Path, report_month: date) -> pl
         for ax in axes:
             ax.set_title("нет данных (пустой parquet)")
             ax.axis("off")
-        fig.suptitle(f"stg_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.suptitle(f"fct_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
         fig.tight_layout()
         return fig
     per_msisdn = df.groupby("msisdn", sort=False).size()
@@ -3430,13 +3430,13 @@ def render_stg_msisdn_imei_parquet_profile(root: Path, report_month: date) -> pl
         axes[1].barh(tac_vc.index.astype(str), tac_vc.values, color="#ff7f0e", alpha=0.88)
         axes[1].set_xlabel("interval rows")
         axes[1].set_title("Top IMEI TAC (первые 8 цифр)")
-    fig.suptitle(f"stg_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
+    fig.suptitle(f"fct_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
 
-def render_stg_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> plt.Figure:
-    parquet = _resolve_parquet(root, stg_msisdn_imsi_output_path(report_month))
+def render_fct_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, fct_msisdn_imsi_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet, columns=["msisdn", "operator_id", "imsi"])
@@ -3445,7 +3445,7 @@ def render_stg_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> pl
         for ax in axes:
             ax.set_title("нет данных (пустой parquet)")
             ax.axis("off")
-        fig.suptitle(f"stg_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.suptitle(f"fct_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
         fig.tight_layout()
         return fig
     per_msisdn = df.groupby("msisdn", sort=False).size()
@@ -3462,7 +3462,7 @@ def render_stg_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> pl
         axes[1].barh(op_vc.index.astype(str), op_vc.values, color="#9467bd", alpha=0.88)
         axes[1].set_xlabel("interval rows")
         axes[1].set_title("Top operator_id")
-    fig.suptitle(f"stg_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
+    fig.suptitle(f"fct_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
@@ -3485,14 +3485,14 @@ _STG_GEO_INTERVALS_BS_COLORS = {
 }
 
 
-def _stg_geo_intervals_report_date(latest: pd.DataFrame | None) -> date:
+def _fct_geo_intervals_report_date(latest: pd.DataFrame | None) -> date:
     if latest is not None:
         for check in ("dataset_basic", "dataset_presence"):
             metrics = _metrics_for_check(latest, check)
             raw = metrics.get("report_date")
             if raw:
                 return date.fromisoformat(str(raw))
-    root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    root = DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT
     if root.is_dir():
         files = sorted(root.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
         if files:
@@ -3503,7 +3503,7 @@ def _stg_geo_intervals_report_date(latest: pd.DataFrame | None) -> date:
     return DEFAULT_SRC_END_DATE
 
 
-def stg_geo_intervals_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_geo_intervals_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for _, record in latest.iterrows():
         check = str(record["check"])
@@ -3527,7 +3527,7 @@ def stg_geo_intervals_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return out.head(20)
 
 
-def stg_geo_intervals_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
+def fct_geo_intervals_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
     specs: tuple[tuple[str, str, str], ...] = (
         ("required_fields_presence", "invalid_rows", "invalid required rows"),
         ("temporal_order", "invalid_order_count", "invalid time order"),
@@ -3549,10 +3549,10 @@ def stg_geo_intervals_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def render_stg_geo_intervals_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_geo_intervals_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     required = _metrics_for_check(latest, "required_fields_presence")
-    cgi_mix = stg_event_counts_frame(latest, "distribution.cgi_list_len")
+    cgi_mix = dds_event_counts_frame(latest, "distribution.cgi_list_len")
     report_date = basic.get("report_date") if basic else None
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -3576,7 +3576,7 @@ def render_stg_geo_intervals_dq_overview(latest: pd.DataFrame) -> plt.Figure:
         ax.set_title("required_fields_presence (DQ)")
         ax.text(0, invalid, str(invalid), ha="center", va="bottom", fontsize=9)
     else:
-        plot_count_bars(stg_geo_intervals_gate_counts_frame(latest).head(6), title="Gate counts (DQ)", ax=ax)
+        plot_count_bars(fct_geo_intervals_gate_counts_frame(latest).head(6), title="Gate counts (DQ)", ax=ax)
     title = (
         f"DQ STG GEO INTERVALS — report_date={report_date}, rows={int(basic.get('row_count') or 0):,}"
         if basic and report_date
@@ -3587,7 +3587,7 @@ def render_stg_geo_intervals_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_geo_intervals_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_geo_intervals_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
     nulls = null_ratio_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 6))
     if nulls.empty:
@@ -3600,8 +3600,8 @@ def render_stg_geo_intervals_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_geo_intervals_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
-    card = stg_geo_intervals_cardinality_frame(latest)
+def render_fct_geo_intervals_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
+    card = fct_geo_intervals_cardinality_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 5))
     if card.empty:
         ax.set_title("cardinality.* — нет данных")
@@ -3615,8 +3615,8 @@ def render_stg_geo_intervals_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def render_stg_geo_intervals_dq_gates(latest: pd.DataFrame) -> plt.Figure:
-    gates = stg_geo_intervals_gate_counts_frame(latest)
+def render_fct_geo_intervals_dq_gates(latest: pd.DataFrame) -> plt.Figure:
+    gates = fct_geo_intervals_gate_counts_frame(latest)
     fig, ax = plt.subplots(figsize=(10, 5))
     if gates.empty:
         ax.set_title("Gate counts — нет данных")
@@ -3629,13 +3629,13 @@ def render_stg_geo_intervals_dq_gates(latest: pd.DataFrame) -> plt.Figure:
     work = gates.sort_values("count", ascending=True)
     ax.barh(work["metric"], work["count"], color=colors, alpha=0.88)
     ax.set_xlabel("count")
-    ax.set_title("Gate-проверки stg_geo_intervals (DQ)")
+    ax.set_title("Gate-проверки fct_geo_intervals (DQ)")
     fig.tight_layout()
     return fig
 
 
-def display_stg_geo_intervals_parquet_summary(root: Path, report_date: date) -> None:
-    parquet = _resolve_parquet(root, stg_geo_intervals_output_path(report_date))
+def display_fct_geo_intervals_parquet_summary(root: Path, report_date: date) -> None:
+    parquet = _resolve_parquet(root, fct_geo_intervals_output_path(report_date))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet)
@@ -3643,7 +3643,7 @@ def display_stg_geo_intervals_parquet_summary(root: Path, report_date: date) -> 
         rel = parquet.relative_to(root)
     except ValueError:
         rel = parquet
-    print(f"stg_geo_intervals ({report_date.isoformat()}): {len(df):,} rows | файл: {rel}")
+    print(f"fct_geo_intervals ({report_date.isoformat()}): {len(df):,} rows | файл: {rel}")
     if df.empty:
         print("distinct msisdn: 0")
         _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
@@ -3661,8 +3661,8 @@ def display_stg_geo_intervals_parquet_summary(root: Path, report_date: date) -> 
         print(f"\ncgi_list len: min={int(lens.min())}, median={float(lens.median()):.1f}, max={int(lens.max())}")
 
 
-def render_stg_geo_intervals_parquet_profile(root: Path, report_date: date) -> plt.Figure:
-    parquet = _resolve_parquet(root, stg_geo_intervals_output_path(report_date))
+def render_fct_geo_intervals_parquet_profile(root: Path, report_date: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, fct_geo_intervals_output_path(report_date))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     import pyarrow.parquet as pq
@@ -3710,7 +3710,7 @@ def render_stg_geo_intervals_parquet_profile(root: Path, report_date: date) -> p
         axes[2].set_title("Число CGI в интервале")
     else:
         axes[2].axis("off")
-    fig.suptitle(f"Профиль parquet stg_geo_intervals ({report_date.isoformat()})", fontsize=12, y=1.02)
+    fig.suptitle(f"Профиль parquet fct_geo_intervals ({report_date.isoformat()})", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
 
@@ -3730,14 +3730,14 @@ _STG_PERSON_GATE_SPECS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _stg_person_report_month(latest: pd.DataFrame | None) -> date:
+def _fct_person_report_month(latest: pd.DataFrame | None) -> date:
     if latest is not None:
         for check in ("dataset_basic", "dataset_presence"):
             metrics = _metrics_for_check(latest, check)
             raw = metrics.get("report_date")
             if raw:
                 return date.fromisoformat(str(raw))
-    parent = stg_person_output_path(DEFAULT_SRC_END_DATE).parent
+    parent = fct_person_output_path(DEFAULT_SRC_END_DATE).parent
     if parent.is_dir():
         files = sorted(parent.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
         if files:
@@ -3748,7 +3748,7 @@ def _stg_person_report_month(latest: pd.DataFrame | None) -> date:
     return DEFAULT_SRC_END_DATE.replace(day=1)
 
 
-def render_stg_person_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+def render_fct_person_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     basic = _metrics_for_check(latest, "dataset_basic")
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     plot_check_status(latest, ax=axes[0, 0])
@@ -3782,8 +3782,8 @@ def render_stg_person_dq_overview(latest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def display_stg_person_parquet_summary(root: Path, report_month: date) -> None:
-    parquet = _resolve_parquet(root, stg_person_output_path(report_month))
+def display_fct_person_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, fct_person_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     df = pd.read_parquet(parquet)
@@ -3791,7 +3791,7 @@ def display_stg_person_parquet_summary(root: Path, report_month: date) -> None:
         rel = parquet.relative_to(root)
     except ValueError:
         rel = parquet
-    print(f"stg_person ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    print(f"fct_person ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
     if df.empty:
         print("distinct person_id: 0")
         return
@@ -3817,8 +3817,8 @@ def display_stg_person_parquet_summary(root: Path, report_month: date) -> None:
         display(df["operator_id"].value_counts().head(12).to_frame("rows"))
 
 
-def render_stg_person_parquet_profile(root: Path, report_month: date) -> plt.Figure:
-    parquet = _resolve_parquet(root, stg_person_output_path(report_month))
+def render_fct_person_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, fct_person_output_path(report_month))
     if not parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {parquet}")
     import pyarrow.parquet as pq
@@ -3831,7 +3831,7 @@ def render_stg_person_parquet_profile(root: Path, report_month: date) -> plt.Fig
         for ax in axes.flat:
             ax.set_title("нет данных (пустой parquet)")
             ax.axis("off")
-        fig.suptitle(f"stg_person — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.suptitle(f"fct_person — {report_month.isoformat()}", fontsize=12, y=1.02)
         fig.tight_layout()
         return fig
     if "gender" in df.columns:
@@ -3868,6 +3868,6 @@ def render_stg_person_parquet_profile(root: Path, report_month: date) -> plt.Fig
         axes[1, 1].set_title("Top operator_id")
     else:
         axes[1, 1].axis("off")
-    fig.suptitle(f"stg_person — {report_month.isoformat()}", fontsize=12, y=1.02)
+    fig.suptitle(f"fct_person — {report_month.isoformat()}", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig

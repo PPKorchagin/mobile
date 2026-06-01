@@ -1,4 +1,4 @@
-"""DQ витрины ``stg_geo_intervals`` за отчётный день."""
+"""DQ витрины ``fct_geo_intervals`` за отчётный день."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pandas as pd
 from mobile.project_paths import resolve_stg_daily_parquet_path
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_GEO_INTERVALS"
+LOG_TAG = "DQ_FCT_GEO_INTERVALS"
 _BS_TYPES = frozenset({"m", "f", "i", "x", "o"})
 
 _EXPECTED_COLUMNS: tuple[str, ...] = (
@@ -33,9 +33,9 @@ _EXPECTED_COLUMNS: tuple[str, ...] = (
 )
 
 
-def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str, Any]:
-    """DQ ``stg_geo_intervals``; ``report_date`` и ``stg_geo_intervals_path`` обязательны (пути задаёт CLI)."""
-    source_path = _resolve_source_path(report_date=report_date, stg_geo_intervals_path=stg_geo_intervals_path)
+def run_dq(*, report_date: date, fct_geo_intervals_path: str | Path) -> dict[str, Any]:
+    """DQ ``fct_geo_intervals``; ``report_date`` и ``fct_geo_intervals_path`` обязательны (пути задаёт CLI)."""
+    source_path = _resolve_source_path(report_date=report_date, fct_geo_intervals_path=fct_geo_intervals_path)
     checks = 0
     warnings = 0
     failed = 0
@@ -56,7 +56,7 @@ def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str
             {
                 "reason": "parquet_not_found",
                 "report_date": report_date.isoformat(),
-                "stg_geo_intervals_path": str(source_path),
+                "fct_geo_intervals_path": str(source_path),
             },
         )
         _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
@@ -66,7 +66,7 @@ def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str
             "warning_checks": warnings,
             "failed_checks": failed,
             "report_date": report_date.isoformat(),
-            "stg_geo_intervals_path": str(source_path),
+            "fct_geo_intervals_path": str(source_path),
         }
 
     data = pd.read_parquet(source_path)
@@ -75,7 +75,7 @@ def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str
         "ok",
         {
             "report_date": report_date.isoformat(),
-            "stg_geo_intervals_path": str(source_path),
+            "fct_geo_intervals_path": str(source_path),
             "row_count": int(len(data)),
             "column_count": int(len(data.columns)),
         },
@@ -163,13 +163,13 @@ def run_dq(*, report_date: date, stg_geo_intervals_path: str | Path) -> dict[str
         "warning_checks": warnings,
         "failed_checks": failed,
         "report_date": report_date.isoformat(),
-        "stg_geo_intervals_path": str(source_path),
+        "fct_geo_intervals_path": str(source_path),
         "row_count": int(len(data)),
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_geo_intervals_path: str | Path) -> Path:
-    return resolve_stg_daily_parquet_path(stg_geo_intervals_path, report_date)
+def _resolve_source_path(*, report_date: date, fct_geo_intervals_path: str | Path) -> Path:
+    return resolve_stg_daily_parquet_path(fct_geo_intervals_path, report_date)
 
 
 def _safe_nunique(series: pd.Series) -> int:

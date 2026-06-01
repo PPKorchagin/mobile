@@ -28,14 +28,14 @@ from mobile.notebook_runner import (
     run_nb_src_bs,
     run_nb_src_excl,
     run_nb_src_mobile,
-    run_nb_stg_event,
+    run_nb_dds_event,
     run_nb_src_person,
-    run_nb_stg_bs,
+    run_nb_fct_bs,
     run_nb_stg_geo_all,
-    run_nb_stg_msisdn_imei,
-    run_nb_stg_msisdn_imsi_operator,
-    run_nb_stg_geo_intervals,
-    run_nb_stg_person,
+    run_nb_fct_msisdn_imei,
+    run_nb_fct_msisdn_imsi_operator,
+    run_nb_fct_geo_intervals,
+    run_nb_fct_person,
     run_nb_dim_oksm,
     run_nb_dim_oktmo,
     run_nb_dim_tac,
@@ -46,21 +46,21 @@ from mobile.pipelines.dq.src import bs as dq_src_bs
 from mobile.pipelines.dq.src import excl as dq_src_excl
 from mobile.pipelines.dq.src import mobile as dq_src_mobile
 from mobile.pipelines.dq.src import person as dq_src_person
-from mobile.pipelines.stg import event as stg_event
+from mobile.pipelines.stg import event as dds_event
 from mobile.pipelines.stg import geo_all as stg_geo_all
-from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
-from mobile.pipelines.stg import person as stg_person
+from mobile.pipelines.stg import geo_intervals as fct_geo_intervals
+from mobile.pipelines.stg import person as fct_person
 from mobile.pipelines.stg import move_event as stg_move_event
-from mobile.pipelines.stg import bs as stg_bs
-from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
-from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
-from mobile.pipelines.dq.stg import event as dq_stg_event
-from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
+from mobile.pipelines.stg import bs as fct_bs
+from mobile.pipelines.stg import msisdn_imei as fct_msisdn_imei
+from mobile.pipelines.stg import msisdn_imsi as fct_msisdn_imsi
+from mobile.pipelines.dq.stg import event as dq_dds_event
+from mobile.pipelines.dq.stg import geo_intervals as dq_fct_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
-from mobile.pipelines.dq.stg import msisdn_imei as dq_stg_msisdn_imei
-from mobile.pipelines.dq.stg import msisdn_imsi_operator as dq_stg_msisdn_imsi_operator
-from mobile.pipelines.dq.stg import person as dq_stg_person
-from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
+from mobile.pipelines.dq.stg import msisdn_imei as dq_fct_msisdn_imei
+from mobile.pipelines.dq.stg import msisdn_imsi_operator as dq_fct_msisdn_imsi_operator
+from mobile.pipelines.dq.stg import person as dq_fct_person
+from mobile.pipelines.dq.stg import bs as dq_fct_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
@@ -69,16 +69,16 @@ from mobile.project_paths import (
     DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
     DEFAULT_SRC_PERSON_OUTPUT_ROOT,
     DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
-    DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT,
+    DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT,
     DEFAULT_DIM_OKTMO_CSV_PATH,
     DEFAULT_DIM_OKTMO_OUTPUT_PATH,
     DEFAULT_DIM_OKSM_CSV_PATH,
     DEFAULT_DIM_OKSM_OUTPUT_PATH,
     DEFAULT_DIM_TAC_CSV_PATH,
-    DEFAULT_STG_EVENT_DDS_ROOT,
-    STG_BS_LAYOUT_TEMPLATE,
-    STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
-    STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
+    DEFAULT_DDS_EVENT_DDS_ROOT,
+    FCT_BS_LAYOUT_TEMPLATE,
+    FCT_MSISDN_IMSI_LAYOUT_TEMPLATE,
+    FCT_MSISDN_IMEI_LAYOUT_TEMPLATE,
     DEFAULT_DIM_TAC_OUTPUT_PATH,
     DEFAULT_DIM_TIME_ZONES_CSV_PATH,
     DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
@@ -88,14 +88,14 @@ from mobile.project_paths import (
     resolve_oktmo_layout,
     report_month_start,
     resolve_project_path,
-    stg_bs_output_path,
-    stg_event_dds_output_path,
-    stg_event_output_path,
+    fct_bs_output_path,
+    dds_event_dds_output_path,
+    dds_event_output_path,
     stg_geo_all_output_path,
-    stg_geo_intervals_output_path,
-    stg_msisdn_imei_output_path,
-    stg_msisdn_imsi_output_path,
-    stg_person_output_path,
+    fct_geo_intervals_output_path,
+    fct_msisdn_imei_output_path,
+    fct_msisdn_imsi_output_path,
+    fct_person_output_path,
     resolve_stg_daily_parquet_path,
     resolve_stg_monthly_parquet_path,
 )
@@ -121,17 +121,17 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-dim-time-zones": run_nb_dim_time_zones,
     "nb-dim-tac": run_nb_dim_tac,
     "nb-dim-oksm": run_nb_dim_oksm,
-    "nb-stg-bs": run_nb_stg_bs,
+    "nb-fct-bs": run_nb_fct_bs,
     "nb-stg-geo-all": run_nb_stg_geo_all,
-    "nb-stg-msisdn-imei": run_nb_stg_msisdn_imei,
-    "nb-stg-msisdn-imsi-operator": run_nb_stg_msisdn_imsi_operator,
-    "nb-stg-geo-intervals": run_nb_stg_geo_intervals,
-    "nb-stg-person": run_nb_stg_person,
+    "nb-fct-msisdn-imei": run_nb_fct_msisdn_imei,
+    "nb-fct-msisdn-imsi-operator": run_nb_fct_msisdn_imsi_operator,
+    "nb-fct-geo-intervals": run_nb_fct_geo_intervals,
+    "nb-fct-person": run_nb_fct_person,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
     "nb-src-mobile": run_nb_src_mobile,
-    "nb-stg-event": run_nb_stg_event,
+    "nb-dds-event": run_nb_dds_event,
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
@@ -161,28 +161,28 @@ RUN_ALL_COMMANDS: tuple[str, ...] = (
     "build-src-mobile",
     "dq-src-mobile",
     "nb-src-mobile",
-    "build-stg-event",
-    "build-move-event",
-    "dq-stg-event",
-    "nb-stg-event",
-    "build-stg-bs",
-    "dq-stg-bs",
-    "nb-stg-bs",
+    "build-dds-event",
+    "build-dds-move-event",
+    "dq-dds-event",
+    "nb-dds-event",
+    "build-fct-bs",
+    "dq-fct-bs",
+    "nb-fct-bs",
     "build-stg-geo-all",
     "dq-stg-geo-all",
     "nb-stg-geo-all",
-    "build-stg-msisdn-imei",
-    "dq-stg-msisdn-imei",
-    "nb-stg-msisdn-imei",
-    "build-stg-msisdn-imsi-operator",
-    "dq-stg-msisdn-imsi-operator",
-    "nb-stg-msisdn-imsi-operator",
-    "build-stg-geo-intervals",
-    "dq-stg-geo-intervals",
-    "nb-stg-geo-intervals",
-    "build-stg-person",
-    "dq-stg-person",
-    "nb-stg-person",
+    "build-fct-msisdn-imei",
+    "dq-fct-msisdn-imei",
+    "nb-fct-msisdn-imei",
+    "build-fct-msisdn-imsi-operator",
+    "dq-fct-msisdn-imsi-operator",
+    "nb-fct-msisdn-imsi-operator",
+    "build-fct-geo-intervals",
+    "dq-fct-geo-intervals",
+    "nb-fct-geo-intervals",
+    "build-fct-person",
+    "dq-fct-person",
+    "nb-fct-person",
     "nb-perf-metrics",
 )
 
@@ -226,7 +226,7 @@ def _run_all_argv_steps() -> list[tuple[str, list[str]]]:
     """Шаги run-all: (метка лога, argv для argparse)."""
     steps: list[tuple[str, list[str]]] = []
     for command in RUN_ALL_COMMANDS:
-        if command == "build-stg-person":
+        if command == "build-fct-person":
             for month in _distinct_report_months_in_src_window():
                 label = f"{command} ({month.isoformat()})"
                 argv = [command, "--report-date", month.isoformat()]
@@ -341,7 +341,7 @@ def _mobile_mart_run_paths(
     }
 
 
-def build_stg_event_run(
+def build_dds_event_run(
     *,
     report_date: date,
     cdr_path: Path,
@@ -350,7 +350,7 @@ def build_stg_event_run(
     location_path: Path,
     output_path: Path,
 ) -> dict:
-    return stg_event.run_build(
+    return dds_event.run_build(
         report_date,
         cdr_path,
         sms_path,
@@ -360,7 +360,7 @@ def build_stg_event_run(
     )
 
 
-def _resolve_build_stg_event_job(
+def _resolve_build_dds_event_job(
     *,
     datacenter: str | None,
     report_date: date,
@@ -381,7 +381,7 @@ def _resolve_build_stg_event_job(
             gprs_path=gprs_path,
             location_path=location_path,
         )
-        out = Path(output_path) if output_path else stg_event_output_path(datacenter, report_date)
+        out = Path(output_path) if output_path else dds_event_output_path(datacenter, report_date)
         return paths, out
 
     missing = [
@@ -397,7 +397,7 @@ def _resolve_build_stg_event_job(
     ]
     if missing:
         raise SystemExit(
-            "build-stg-event: pass --dc or all of: " + ", ".join(missing)
+            "build-dds-event: pass --dc or all of: " + ", ".join(missing)
         )
     return (
         {
@@ -410,7 +410,7 @@ def _resolve_build_stg_event_job(
     )
 
 
-def _build_stg_event_subprocess_cmd(
+def _build_dds_event_subprocess_cmd(
     *,
     datacenter: str,
     report_date: date,
@@ -420,7 +420,7 @@ def _build_stg_event_subprocess_cmd(
         sys.executable,
         "-m",
         "mobile",
-        "build-stg-event",
+        "build-dds-event",
         "--dc",
         datacenter,
         "--report-date",
@@ -431,7 +431,7 @@ def _build_stg_event_subprocess_cmd(
     return cmd
 
 
-def _run_build_stg_event_dc_subprocesses(
+def _run_build_dds_event_dc_subprocesses(
     *,
     datacenter: str,
     days: list[date],
@@ -444,12 +444,12 @@ def _run_build_stg_event_dc_subprocesses(
     while pending or running:
         while pending and len(running) < _BUILD_STG_EVENT_DC_WORKERS:
             day = pending.pop(0)
-            cmd = _build_stg_event_subprocess_cmd(
+            cmd = _build_dds_event_subprocess_cmd(
                 datacenter=datacenter,
                 report_date=day,
                 mobile_root=mobile_root,
             )
-            logger.info("build-stg-event spawn: %s", " ".join(cmd))
+            logger.info("build-dds-event spawn: %s", " ".join(cmd))
             running[subprocess.Popen(cmd)] = day
 
         if not running:
@@ -462,7 +462,7 @@ def _run_build_stg_event_dc_subprocesses(
             if rc != 0:
                 raise subprocess.CalledProcessError(rc, proc.args, None, None)
             logger.info(
-                "build-stg-event subprocess ok: dc=%s report_date=%s",
+                "build-dds-event subprocess ok: dc=%s report_date=%s",
                 datacenter,
                 day.isoformat(),
             )
@@ -532,12 +532,12 @@ def run_dq_dim_oksm(*, oksm_path: str | None) -> None:
     )
 
 
-def run_dq_stg_bs(*, stg_bs_path: str | None) -> None:
-    """DQ ``stg_bs`` (read-only проверки)."""
-    path = resolve_project_path(stg_bs_path) if stg_bs_path else stg_bs_output_path()
+def run_dq_fct_bs(*, fct_bs_path: str | None) -> None:
+    """DQ ``fct_bs`` (read-only проверки)."""
+    path = resolve_project_path(fct_bs_path) if fct_bs_path else fct_bs_output_path()
     run_timed_command(
-        "dq-stg-bs",
-        lambda: dq_stg_bs.run_dq(path),
+        "dq-fct-bs",
+        lambda: dq_fct_bs.run_dq(path),
     )
 
 
@@ -569,14 +569,14 @@ def run_build_dim_oktmo(
     )
 
 
-def run_build_stg_bs(
+def run_build_fct_bs(
     *,
     src_bs_path: str | None,
     oktmo_path: str | None,
     time_zones_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-bs: явный прогон (4 параметра) или один прогон с путями по умолчанию."""
+    """build-fct-bs: явный прогон (4 параметра) или один прогон с путями по умолчанию."""
     explicit = any((src_bs_path, oktmo_path, time_zones_path, output_path))
 
     if explicit:
@@ -591,12 +591,12 @@ def run_build_stg_bs(
             missing.append("--output-path")
         if missing:
             raise SystemExit(
-                "build-stg-bs: explicit run requires all parameters; "
+                "build-fct-bs: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
         run_timed_command(
-            "build-stg-bs",
-            lambda: stg_bs.run_build(
+            "build-fct-bs",
+            lambda: fct_bs.run_build(
                 src_bs_path=Path(src_bs_path),
                 oktmo_path=Path(oktmo_path),
                 time_zones_path=Path(time_zones_path),
@@ -606,12 +606,12 @@ def run_build_stg_bs(
         return
 
     run_timed_command(
-        "build-stg-bs",
-        lambda: stg_bs.run_build(
+        "build-fct-bs",
+        lambda: fct_bs.run_build(
             src_bs_path=DEFAULT_BS_LAYOUT,
             oktmo_path=DEFAULT_DIM_OKTMO_OUTPUT_PATH,
             time_zones_path=DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
-            output_path=stg_bs_output_path(),
+            output_path=fct_bs_output_path(),
         ),
     )
 
@@ -620,11 +620,11 @@ def run_build_stg_geo_all(
     *,
     report_date: date | None,
     event_dds_path: str | None,
-    stg_bs_path: str | None,
+    fct_bs_path: str | None,
     output_path: str | None,
 ) -> None:
     """build-stg-geo-all: явный прогон (4 параметра) или цикл DEFAULT_SRC_* по дням."""
-    explicit = any((report_date, event_dds_path, stg_bs_path, output_path))
+    explicit = any((report_date, event_dds_path, fct_bs_path, output_path))
 
     if explicit:
         missing: list[str] = []
@@ -632,8 +632,8 @@ def run_build_stg_geo_all(
             missing.append("--report-date")
         if event_dds_path is None:
             missing.append("--event-dds-path")
-        if stg_bs_path is None:
-            missing.append("--stg-bs-path")
+        if fct_bs_path is None:
+            missing.append("--fct-bs-path")
         if output_path is None:
             missing.append("--output-path")
         if missing:
@@ -646,7 +646,7 @@ def run_build_stg_geo_all(
             lambda: stg_geo_all.run_build(
                 report_date=report_date,
                 event_dds_path=Path(event_dds_path),
-                stg_bs_path=Path(stg_bs_path),
+                fct_bs_path=Path(fct_bs_path),
                 output_path=Path(output_path),
             ),
         )
@@ -655,10 +655,10 @@ def run_build_stg_geo_all(
     lo = DEFAULT_SRC_START_DATE
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
-    dds = DEFAULT_STG_EVENT_DDS_ROOT
-    bs = stg_bs_output_path()
+    dds = DEFAULT_DDS_EVENT_DDS_ROOT
+    bs = fct_bs_output_path()
     logger.info(
-        "Starting build-stg-geo-all: days=%s (%s .. %s) event_dds=%s stg_bs=%s",
+        "Starting build-stg-geo-all: days=%s (%s .. %s) event_dds=%s fct_bs=%s",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
@@ -672,7 +672,7 @@ def run_build_stg_geo_all(
             lambda d=day, o=out: stg_geo_all.run_build(
                 report_date=d,
                 event_dds_path=dds,
-                stg_bs_path=bs,
+                fct_bs_path=bs,
                 output_path=o,
             ),
         )
@@ -683,42 +683,42 @@ def _geo_intervals_run_build_kwargs(
     report_date: date,
     *,
     stg_geo_all_path: str | Path,
-    stg_bs_path: str | Path,
+    fct_bs_path: str | Path,
     time_zones_path: str | Path,
-    stg_msisdn_imsi_path: str | Path,
-    stg_msisdn_imei_path: str | Path,
+    fct_msisdn_imsi_path: str | Path,
+    fct_msisdn_imei_path: str | Path,
     output_path: str | Path,
 ) -> dict[str, Any]:
     return {
         "report_date": report_date,
         "stg_geo_all_path": resolve_stg_daily_parquet_path(stg_geo_all_path, report_date),
-        "stg_bs_path": resolve_project_path(stg_bs_path),
+        "fct_bs_path": resolve_project_path(fct_bs_path),
         "time_zones_path": resolve_project_path(time_zones_path),
-        "stg_msisdn_imsi_path": resolve_stg_monthly_parquet_path(stg_msisdn_imsi_path, report_date),
-        "stg_msisdn_imei_path": resolve_stg_monthly_parquet_path(stg_msisdn_imei_path, report_date),
+        "fct_msisdn_imsi_path": resolve_stg_monthly_parquet_path(fct_msisdn_imsi_path, report_date),
+        "fct_msisdn_imei_path": resolve_stg_monthly_parquet_path(fct_msisdn_imei_path, report_date),
         "output_path": resolve_stg_daily_parquet_path(output_path, report_date),
     }
 
 
-def run_build_stg_geo_intervals(
+def run_build_fct_geo_intervals(
     *,
     report_date: date | None,
     stg_geo_all_path: str | None,
-    stg_bs_path: str | None,
+    fct_bs_path: str | None,
     time_zones_path: str | None,
-    stg_msisdn_imsi_path: str | None,
-    stg_msisdn_imei_path: str | None,
+    fct_msisdn_imsi_path: str | None,
+    fct_msisdn_imei_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-geo-intervals: явный прогон (7 параметров) или цикл DEFAULT_SRC_* по дням."""
+    """build-fct-geo-intervals: явный прогон (7 параметров) или цикл DEFAULT_SRC_* по дням."""
     explicit = any(
         (
             report_date,
             stg_geo_all_path,
-            stg_bs_path,
+            fct_bs_path,
             time_zones_path,
-            stg_msisdn_imsi_path,
-            stg_msisdn_imei_path,
+            fct_msisdn_imsi_path,
+            fct_msisdn_imei_path,
             output_path,
         )
     )
@@ -729,52 +729,52 @@ def run_build_stg_geo_intervals(
             missing.append("--report-date")
         if stg_geo_all_path is None:
             missing.append("--stg-geo-all-path")
-        if stg_bs_path is None:
-            missing.append("--stg-bs-path")
+        if fct_bs_path is None:
+            missing.append("--fct-bs-path")
         if time_zones_path is None:
             missing.append("--time-zones-path")
-        if stg_msisdn_imsi_path is None:
-            missing.append("--stg-msisdn-imsi-path")
-        if stg_msisdn_imei_path is None:
-            missing.append("--stg-msisdn-imei-path")
+        if fct_msisdn_imsi_path is None:
+            missing.append("--fct-msisdn-imsi-path")
+        if fct_msisdn_imei_path is None:
+            missing.append("--fct-msisdn-imei-path")
         if output_path is None:
             missing.append("--output-path")
         if missing:
             raise SystemExit(
-                "build-stg-geo-intervals: explicit run requires all parameters; "
+                "build-fct-geo-intervals: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
         kwargs = _geo_intervals_run_build_kwargs(
             report_date,
             stg_geo_all_path=stg_geo_all_path,
-            stg_bs_path=stg_bs_path,
+            fct_bs_path=fct_bs_path,
             time_zones_path=time_zones_path,
-            stg_msisdn_imsi_path=stg_msisdn_imsi_path,
-            stg_msisdn_imei_path=stg_msisdn_imei_path,
+            fct_msisdn_imsi_path=fct_msisdn_imsi_path,
+            fct_msisdn_imei_path=fct_msisdn_imei_path,
             output_path=output_path,
         )
         run_timed_command(
-            f"build-stg-geo-intervals-{report_date.isoformat()}",
-            lambda kw=kwargs: stg_geo_intervals.run_build(**kw),
+            f"build-fct-geo-intervals-{report_date.isoformat()}",
+            lambda kw=kwargs: fct_geo_intervals.run_build(**kw),
         )
         return
 
     lo = DEFAULT_SRC_START_DATE
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
-    bs = stg_bs_output_path()
+    bs = fct_bs_output_path()
     tz = DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH
     geo_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT
     imsi_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imsi"
     imei_root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT.parent / "msisdn_imei"
-    out_root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    out_root = DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT
     if not bs.exists():
-        raise SystemExit(f"build-stg-geo-intervals: stg_bs not found: {bs}")
+        raise SystemExit(f"build-fct-geo-intervals: fct_bs not found: {bs}")
     if not tz.exists():
-        raise SystemExit(f"build-stg-geo-intervals: time_zones not found: {tz}")
+        raise SystemExit(f"build-fct-geo-intervals: time_zones not found: {tz}")
 
     logger.info(
-        "Starting build-stg-geo-intervals: days=%s (%s .. %s)",
+        "Starting build-fct-geo-intervals: days=%s (%s .. %s)",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
@@ -783,11 +783,11 @@ def run_build_stg_geo_intervals(
         geo_file = stg_geo_all_output_path(day)
         if not geo_file.exists():
             continue
-        imsi_file = stg_msisdn_imsi_output_path(day)
-        imei_file = stg_msisdn_imei_output_path(day)
+        imsi_file = fct_msisdn_imsi_output_path(day)
+        imei_file = fct_msisdn_imei_output_path(day)
         if not imsi_file.exists() or not imei_file.exists():
             logger.info(
-                "build-stg-geo-intervals: skip %s (binding missing imsi=%s imei=%s)",
+                "build-fct-geo-intervals: skip %s (binding missing imsi=%s imei=%s)",
                 day.isoformat(),
                 imsi_file.exists(),
                 imei_file.exists(),
@@ -796,17 +796,17 @@ def run_build_stg_geo_intervals(
         kwargs = _geo_intervals_run_build_kwargs(
             day,
             stg_geo_all_path=geo_root,
-            stg_bs_path=bs,
+            fct_bs_path=bs,
             time_zones_path=tz,
-            stg_msisdn_imsi_path=imsi_root,
-            stg_msisdn_imei_path=imei_root,
+            fct_msisdn_imsi_path=imsi_root,
+            fct_msisdn_imei_path=imei_root,
             output_path=out_root,
         )
         run_timed_command(
-            f"build-stg-geo-intervals-{day.isoformat()}",
-            lambda kw=kwargs: stg_geo_intervals.run_build(**kw),
+            f"build-fct-geo-intervals-{day.isoformat()}",
+            lambda kw=kwargs: fct_geo_intervals.run_build(**kw),
         )
-    logger.info("build-stg-geo-intervals completed successfully")
+    logger.info("build-fct-geo-intervals completed successfully")
 
 
 def _run_build_stg_geo_binding(
@@ -818,7 +818,7 @@ def _run_build_stg_geo_binding(
     runner: Callable[..., dict],
     default_output: Callable[[date], Path],
 ) -> None:
-    """build-stg-msisdn-imei / build-stg-msisdn-imsi-operator: явный прогон (3 параметра) или цикл по дням."""
+    """build-fct-msisdn-imei / build-fct-msisdn-imsi-operator: явный прогон (3 параметра) или цикл по дням."""
     explicit = any((report_date, stg_geo_all_path, output_path))
 
     if explicit:
@@ -863,44 +863,44 @@ def _run_build_stg_geo_binding(
     logger.info("%s completed successfully", command)
 
 
-def run_build_stg_msisdn_imei(
+def run_build_fct_msisdn_imei(
     *,
     report_date: date | None,
     stg_geo_all_path: str | None,
     output_path: str | None,
 ) -> None:
     _run_build_stg_geo_binding(
-        "build-stg-msisdn-imei",
+        "build-fct-msisdn-imei",
         report_date=report_date,
         stg_geo_all_path=stg_geo_all_path,
         output_path=output_path,
-        runner=stg_msisdn_imei.run_build,
-        default_output=stg_msisdn_imei_output_path,
+        runner=fct_msisdn_imei.run_build,
+        default_output=fct_msisdn_imei_output_path,
     )
 
 
-def run_build_stg_msisdn_imsi_operator(
+def run_build_fct_msisdn_imsi_operator(
     *,
     report_date: date | None,
     stg_geo_all_path: str | None,
     output_path: str | None,
 ) -> None:
     _run_build_stg_geo_binding(
-        "build-stg-msisdn-imsi-operator",
+        "build-fct-msisdn-imsi-operator",
         report_date=report_date,
         stg_geo_all_path=stg_geo_all_path,
         output_path=output_path,
-        runner=stg_msisdn_imsi.run_build,
-        default_output=stg_msisdn_imsi_output_path,
+        runner=fct_msisdn_imsi.run_build,
+        default_output=fct_msisdn_imsi_output_path,
     )
 
 
-def run_build_stg_person(
+def run_build_fct_person(
     *,
     report_date: date | None,
     src_person_path: str | None,
-    stg_msisdn_imsi_path: str | None,
-    stg_msisdn_imei_path: str | None,
+    fct_msisdn_imsi_path: str | None,
+    fct_msisdn_imei_path: str | None,
     src_excl_imsi_path: str | None,
     src_excl_imei_path: str | None,
     src_excl_msisdn_path: str | None,
@@ -908,24 +908,24 @@ def run_build_stg_person(
     dim_oksm_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
+    """build-fct-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
     if report_date is None:
-        raise SystemExit("build-stg-person: --report-date is required")
+        raise SystemExit("build-fct-person: --report-date is required")
     if report_date.day != 1:
-        raise SystemExit(f"build-stg-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+        raise SystemExit(f"build-fct-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
     src = Path(src_person_path) if src_person_path else None
-    imsi = Path(stg_msisdn_imsi_path) if stg_msisdn_imsi_path else None
-    imei = Path(stg_msisdn_imei_path) if stg_msisdn_imei_path else None
+    imsi = Path(fct_msisdn_imsi_path) if fct_msisdn_imsi_path else None
+    imei = Path(fct_msisdn_imei_path) if fct_msisdn_imei_path else None
     tac = Path(dim_tac_path) if dim_tac_path else None
     oksm = Path(dim_oksm_path) if dim_oksm_path else None
     out = Path(output_path) if output_path else None
     run_timed_command(
-        "build-stg-person",
-        lambda: stg_person.run_build(
+        "build-fct-person",
+        lambda: fct_person.run_build(
             report_date=report_date,
             src_person_path=src,
-            stg_msisdn_imsi_path=imsi,
-            stg_msisdn_imei_path=imei,
+            fct_msisdn_imsi_path=imsi,
+            fct_msisdn_imei_path=imei,
             src_excl_imsi_path=src_excl_imsi_path,
             src_excl_imei_path=src_excl_imei_path,
             src_excl_msisdn_path=src_excl_msisdn_path,
@@ -936,11 +936,11 @@ def run_build_stg_person(
     )
 
 
-def run_build_move_event(*, report_date: date | None) -> None:
-    """build-move-event: один день или цикл DEFAULT_SRC_START_DATE..END."""
+def run_build_dds_move_event(*, report_date: date | None) -> None:
+    """build-dds-move-event: один день или цикл DEFAULT_SRC_START_DATE..END."""
     if report_date is not None:
         run_timed_command(
-            "build-move-event",
+            "build-dds-move-event",
             lambda: stg_move_event.run_move(report_date),
         )
         return
@@ -949,20 +949,20 @@ def run_build_move_event(*, report_date: date | None) -> None:
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
     logger.info(
-        "Starting build-move-event: days=%s (%s .. %s)",
+        "Starting build-dds-move-event: days=%s (%s .. %s)",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
     )
     for day in days:
         run_timed_command(
-            f"build-move-event-{day.isoformat()}",
+            f"build-dds-move-event-{day.isoformat()}",
             lambda d=day: stg_move_event.run_move(d),
         )
-    logger.info("build-move-event completed successfully")
+    logger.info("build-dds-move-event completed successfully")
 
 
-def run_build_stg_event(
+def run_build_dds_event(
     *,
     datacenter: str | None,
     report_date: date | None,
@@ -973,7 +973,7 @@ def run_build_stg_event(
     location_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-event: явный прогон (5 параметров) или оркестратор DEFAULT_SRC_* × ЦОД (2 subprocess/ЦОД)."""
+    """build-dds-event: явный прогон (5 параметров) или оркестратор DEFAULT_SRC_* × ЦОД (2 subprocess/ЦОД)."""
     root = Path(mobile_root) if mobile_root else None
     explicit = any(
         (
@@ -989,8 +989,8 @@ def run_build_stg_event(
 
     if explicit:
         if report_date is None:
-            raise SystemExit("build-stg-event: --report-date is required for explicit run")
-        paths, out = _resolve_build_stg_event_job(
+            raise SystemExit("build-dds-event: --report-date is required for explicit run")
+        paths, out = _resolve_build_dds_event_job(
             datacenter=datacenter,
             report_date=report_date,
             mobile_root=root,
@@ -1001,13 +1001,13 @@ def run_build_stg_event(
             output_path=output_path,
         )
         label = (
-            f"build-stg-event-{datacenter}-{report_date.isoformat()}"
+            f"build-dds-event-{datacenter}-{report_date.isoformat()}"
             if datacenter
-            else f"build-stg-event-{report_date.isoformat()}"
+            else f"build-dds-event-{report_date.isoformat()}"
         )
         run_timed_command(
             label,
-            lambda: build_stg_event_run(
+            lambda: build_dds_event_run(
                 report_date=report_date,
                 output_path=out,
                 **paths,
@@ -1020,7 +1020,7 @@ def run_build_stg_event(
     days = _calendar_days_inclusive(lo, hi)
     dcs = mobile_datacenter_ids()
     logger.info(
-        "Starting build-stg-event: days=%s datacenters=%s processes_per_dc=%s (%s .. %s)",
+        "Starting build-dds-event: days=%s datacenters=%s processes_per_dc=%s (%s .. %s)",
         len(days),
         ", ".join(dcs),
         _BUILD_STG_EVENT_DC_WORKERS,
@@ -1030,39 +1030,39 @@ def run_build_stg_event(
     mobile_root_str = str(root) if root is not None else None
     for dc in dcs:
         logger.info(
-            "build-stg-event datacenter=%s: %s days, %s parallel subprocesses",
+            "build-dds-event datacenter=%s: %s days, %s parallel subprocesses",
             dc,
             len(days),
             _BUILD_STG_EVENT_DC_WORKERS,
         )
-        _run_build_stg_event_dc_subprocesses(
+        _run_build_dds_event_dc_subprocesses(
             datacenter=dc,
             days=days,
             mobile_root=mobile_root_str,
         )
-    logger.info("build-stg-event completed successfully")
+    logger.info("build-dds-event completed successfully")
 
 
-def dq_stg_event_run(
+def dq_dds_event_run(
     *,
     report_date: date,
     event_dds_root: Path,
 ) -> dict:
-    return dq_stg_event.run_dq(report_date, event_dds_root)
+    return dq_dds_event.run_dq(report_date, event_dds_root)
 
 
-def run_dq_stg_event(
+def run_dq_dds_event(
     *,
     report_date: date | None,
     event_dds_path: str | None,
 ) -> None:
     """DQ event_dds: один день (``--report-date``) или цикл DEFAULT_SRC_* по дням."""
-    root = Path(event_dds_path) if event_dds_path else DEFAULT_STG_EVENT_DDS_ROOT
+    root = Path(event_dds_path) if event_dds_path else DEFAULT_DDS_EVENT_DDS_ROOT
 
     if report_date is not None:
         run_timed_command(
-            f"dq-stg-event-{report_date.isoformat()}",
-            lambda: dq_stg_event_run(report_date=report_date, event_dds_root=root),
+            f"dq-dds-event-{report_date.isoformat()}",
+            lambda: dq_dds_event_run(report_date=report_date, event_dds_root=root),
         )
         return
 
@@ -1070,7 +1070,7 @@ def run_dq_stg_event(
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
     logger.info(
-        "Starting dq-stg-event: days=%s (%s .. %s) event_dds_root=%s",
+        "Starting dq-dds-event: days=%s (%s .. %s) event_dds_root=%s",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
@@ -1078,10 +1078,10 @@ def run_dq_stg_event(
     )
     for day in days:
         run_timed_command(
-            f"dq-stg-event-{day.isoformat()}",
-            lambda d=day: dq_stg_event_run(report_date=d, event_dds_root=root),
+            f"dq-dds-event-{day.isoformat()}",
+            lambda d=day: dq_dds_event_run(report_date=d, event_dds_root=root),
         )
-    logger.info("dq-stg-event completed successfully")
+    logger.info("dq-dds-event completed successfully")
 
 
 def run_dq_stg_geo_all(
@@ -1129,32 +1129,32 @@ def run_dq_stg_geo_all(
     logger.info("dq-stg-geo-all completed successfully")
 
 
-def run_dq_stg_msisdn_imei(
+def run_dq_fct_msisdn_imei(
     *,
     report_date: date | None,
-    stg_msisdn_imei_path: str | None,
+    fct_msisdn_imei_path: str | None,
 ) -> None:
-    """DQ ``stg_msisdn_imei``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
-    explicit = any((report_date, stg_msisdn_imei_path))
+    """DQ ``fct_msisdn_imei``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
+    explicit = any((report_date, fct_msisdn_imei_path))
 
     if explicit:
         missing: list[str] = []
         if report_date is None:
             missing.append("--report-date")
-        if stg_msisdn_imei_path is None:
-            missing.append("--stg-msisdn-imei-path")
+        if fct_msisdn_imei_path is None:
+            missing.append("--fct-msisdn-imei-path")
         if missing:
             raise SystemExit(
-                "dq-stg-msisdn-imei: explicit run requires all parameters; "
+                "dq-fct-msisdn-imei: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
-        path = resolve_project_path(stg_msisdn_imei_path)
+        path = resolve_project_path(fct_msisdn_imei_path)
         month = report_month_start(report_date)
         run_timed_command(
-            f"dq-stg-msisdn-imei-{month.isoformat()}",
-            lambda rd=report_date, p=path: dq_stg_msisdn_imei.run_dq(
+            f"dq-fct-msisdn-imei-{month.isoformat()}",
+            lambda rd=report_date, p=path: dq_fct_msisdn_imei.run_dq(
                 report_date=rd,
-                stg_msisdn_imei_path=p,
+                fct_msisdn_imei_path=p,
             ),
         )
         return
@@ -1164,53 +1164,53 @@ def run_dq_stg_msisdn_imei(
     days = _calendar_days_inclusive(lo, hi)
     seen_months: set[date] = set()
     logger.info(
-        "Starting dq-stg-msisdn-imei: days=%s (%s .. %s) layout=%s",
+        "Starting dq-fct-msisdn-imei: days=%s (%s .. %s) layout=%s",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
-        STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
+        FCT_MSISDN_IMEI_LAYOUT_TEMPLATE,
     )
     for day in days:
         month = report_month_start(day)
         if month in seen_months:
             continue
-        out = stg_msisdn_imei_output_path(day)
+        out = fct_msisdn_imei_output_path(day)
         if not out.exists():
             continue
         seen_months.add(month)
         run_timed_command(
-            f"dq-stg-msisdn-imei-{month.isoformat()}",
-            lambda m=month, p=out: dq_stg_msisdn_imei.run_dq(report_date=m, stg_msisdn_imei_path=p),
+            f"dq-fct-msisdn-imei-{month.isoformat()}",
+            lambda m=month, p=out: dq_fct_msisdn_imei.run_dq(report_date=m, fct_msisdn_imei_path=p),
         )
-    logger.info("dq-stg-msisdn-imei completed successfully")
+    logger.info("dq-fct-msisdn-imei completed successfully")
 
 
-def run_dq_stg_msisdn_imsi_operator(
+def run_dq_fct_msisdn_imsi_operator(
     *,
     report_date: date | None,
-    stg_msisdn_imsi_path: str | None,
+    fct_msisdn_imsi_path: str | None,
 ) -> None:
-    """DQ ``stg_msisdn_imsi``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
-    explicit = any((report_date, stg_msisdn_imsi_path))
+    """DQ ``fct_msisdn_imsi``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
+    explicit = any((report_date, fct_msisdn_imsi_path))
 
     if explicit:
         missing: list[str] = []
         if report_date is None:
             missing.append("--report-date")
-        if stg_msisdn_imsi_path is None:
-            missing.append("--stg-msisdn-imsi-path")
+        if fct_msisdn_imsi_path is None:
+            missing.append("--fct-msisdn-imsi-path")
         if missing:
             raise SystemExit(
-                "dq-stg-msisdn-imsi-operator: explicit run requires all parameters; "
+                "dq-fct-msisdn-imsi-operator: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
-        path = resolve_project_path(stg_msisdn_imsi_path)
+        path = resolve_project_path(fct_msisdn_imsi_path)
         month = report_month_start(report_date)
         run_timed_command(
-            f"dq-stg-msisdn-imsi-operator-{month.isoformat()}",
-            lambda rd=report_date, p=path: dq_stg_msisdn_imsi_operator.run_dq(
+            f"dq-fct-msisdn-imsi-operator-{month.isoformat()}",
+            lambda rd=report_date, p=path: dq_fct_msisdn_imsi_operator.run_dq(
                 report_date=rd,
-                stg_msisdn_imsi_path=p,
+                fct_msisdn_imsi_path=p,
             ),
         )
         return
@@ -1220,55 +1220,55 @@ def run_dq_stg_msisdn_imsi_operator(
     days = _calendar_days_inclusive(lo, hi)
     seen_months: set[date] = set()
     logger.info(
-        "Starting dq-stg-msisdn-imsi-operator: days=%s (%s .. %s) layout=%s",
+        "Starting dq-fct-msisdn-imsi-operator: days=%s (%s .. %s) layout=%s",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
-        STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
+        FCT_MSISDN_IMSI_LAYOUT_TEMPLATE,
     )
     for day in days:
         month = report_month_start(day)
         if month in seen_months:
             continue
-        out = stg_msisdn_imsi_output_path(day)
+        out = fct_msisdn_imsi_output_path(day)
         if not out.exists():
             continue
         seen_months.add(month)
         run_timed_command(
-            f"dq-stg-msisdn-imsi-operator-{month.isoformat()}",
-            lambda m=month, p=out: dq_stg_msisdn_imsi_operator.run_dq(
+            f"dq-fct-msisdn-imsi-operator-{month.isoformat()}",
+            lambda m=month, p=out: dq_fct_msisdn_imsi_operator.run_dq(
                 report_date=m,
-                stg_msisdn_imsi_path=p,
+                fct_msisdn_imsi_path=p,
             ),
         )
-    logger.info("dq-stg-msisdn-imsi-operator completed successfully")
+    logger.info("dq-fct-msisdn-imsi-operator completed successfully")
 
 
-def run_dq_stg_geo_intervals(
+def run_dq_fct_geo_intervals(
     *,
     report_date: date | None,
-    stg_geo_intervals_path: str | None,
+    fct_geo_intervals_path: str | None,
 ) -> None:
-    """DQ ``stg_geo_intervals``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по дням."""
-    explicit = any((report_date, stg_geo_intervals_path))
+    """DQ ``fct_geo_intervals``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по дням."""
+    explicit = any((report_date, fct_geo_intervals_path))
 
     if explicit:
         missing: list[str] = []
         if report_date is None:
             missing.append("--report-date")
-        if stg_geo_intervals_path is None:
-            missing.append("--stg-geo-intervals-path")
+        if fct_geo_intervals_path is None:
+            missing.append("--fct-geo-intervals-path")
         if missing:
             raise SystemExit(
-                "dq-stg-geo-intervals: explicit run requires all parameters; "
+                "dq-fct-geo-intervals: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
-        path = resolve_stg_daily_parquet_path(stg_geo_intervals_path, report_date)
+        path = resolve_stg_daily_parquet_path(fct_geo_intervals_path, report_date)
         run_timed_command(
-            f"dq-stg-geo-intervals-{report_date.isoformat()}",
-            lambda rd=report_date, p=path: dq_stg_geo_intervals.run_dq(
+            f"dq-fct-geo-intervals-{report_date.isoformat()}",
+            lambda rd=report_date, p=path: dq_fct_geo_intervals.run_dq(
                 report_date=rd,
-                stg_geo_intervals_path=p,
+                fct_geo_intervals_path=p,
             ),
         )
         return
@@ -1276,56 +1276,56 @@ def run_dq_stg_geo_intervals(
     lo = DEFAULT_SRC_START_DATE
     hi = DEFAULT_SRC_END_DATE
     days = _calendar_days_inclusive(lo, hi)
-    root = DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT
+    root = DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT
     logger.info(
-        "Starting dq-stg-geo-intervals: days=%s (%s .. %s) stg_geo_intervals_root=%s",
+        "Starting dq-fct-geo-intervals: days=%s (%s .. %s) fct_geo_intervals_root=%s",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
         root,
     )
     for day in days:
-        out = stg_geo_intervals_output_path(day)
+        out = fct_geo_intervals_output_path(day)
         if not out.exists():
             continue
         run_timed_command(
-            f"dq-stg-geo-intervals-{day.isoformat()}",
-            lambda d=day, p=out: dq_stg_geo_intervals.run_dq(
+            f"dq-fct-geo-intervals-{day.isoformat()}",
+            lambda d=day, p=out: dq_fct_geo_intervals.run_dq(
                 report_date=d,
-                stg_geo_intervals_path=p,
+                fct_geo_intervals_path=p,
             ),
         )
-    logger.info("dq-stg-geo-intervals completed successfully")
+    logger.info("dq-fct-geo-intervals completed successfully")
 
 
-def run_dq_stg_person(
+def run_dq_fct_person(
     *,
     report_date: date | None,
-    stg_person_path: str | None,
+    fct_person_path: str | None,
     dim_oksm_path: str | None,
 ) -> None:
-    """DQ ``stg_person``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по месяцам."""
-    explicit = any((report_date, stg_person_path))
+    """DQ ``fct_person``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по месяцам."""
+    explicit = any((report_date, fct_person_path))
 
     if explicit:
         missing: list[str] = []
         if report_date is None:
             missing.append("--report-date")
-        if stg_person_path is None:
-            missing.append("--stg-person-path")
+        if fct_person_path is None:
+            missing.append("--fct-person-path")
         if missing:
             raise SystemExit(
-                "dq-stg-person: explicit run requires all parameters; "
+                "dq-fct-person: explicit run requires all parameters; "
                 f"missing: {', '.join(missing)}"
             )
         month = report_month_start(report_date)
-        path = resolve_stg_monthly_parquet_path(stg_person_path, month)
+        path = resolve_stg_monthly_parquet_path(fct_person_path, month)
         oksm = resolve_project_path(dim_oksm_path) if dim_oksm_path else None
         run_timed_command(
-            f"dq-stg-person-{month.isoformat()}",
-            lambda m=month, p=path, o=oksm: dq_stg_person.run_dq(
+            f"dq-fct-person-{month.isoformat()}",
+            lambda m=month, p=path, o=oksm: dq_fct_person.run_dq(
                 report_date=m,
-                stg_person_path=p,
+                fct_person_path=p,
                 dim_oksm_path=o,
             ),
         )
@@ -1336,7 +1336,7 @@ def run_dq_stg_person(
     days = _calendar_days_inclusive(lo, hi)
     seen_months: set[date] = set()
     logger.info(
-        "Starting dq-stg-person: days=%s (%s .. %s)",
+        "Starting dq-fct-person: days=%s (%s .. %s)",
         len(days),
         lo.isoformat(),
         hi.isoformat(),
@@ -1345,18 +1345,18 @@ def run_dq_stg_person(
         month = report_month_start(day)
         if month in seen_months:
             continue
-        out = stg_person_output_path(month)
+        out = fct_person_output_path(month)
         if not out.exists():
             continue
         seen_months.add(month)
         run_timed_command(
-            f"dq-stg-person-{month.isoformat()}",
-            lambda m=month, p=out: dq_stg_person.run_dq(
+            f"dq-fct-person-{month.isoformat()}",
+            lambda m=month, p=out: dq_fct_person.run_dq(
                 report_date=m,
-                stg_person_path=p,
+                fct_person_path=p,
             ),
         )
-    logger.info("dq-stg-person completed successfully")
+    logger.info("dq-fct-person completed successfully")
 
 
 def run_dq_src_mobile(
@@ -1648,7 +1648,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dc",
         choices=list(mobile_datacenter_ids()),
         default=None,
-        help="build-stg-event / dq-src-mobile: ЦОД (central / far-east); с --report-date — резолв путей витрин",
+        help="build-dds-event / dq-src-mobile: ЦОД (central / far-east); с --report-date — резолв путей витрин",
     )
     parser.add_argument(
         "--report-date",
@@ -1656,25 +1656,25 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="YYYY-MM-DD",
         help=(
-            "dq-src-mobile / build-stg-event: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); "
-            "dq-stg-event / build-move-event / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-all / "
-            "build-stg-geo-intervals / dq-stg-geo-all / dq-stg-geo-intervals — календарный день; "
-            "dq-stg-msisdn-imei / dq-stg-msisdn-imsi-operator — любой день месяца (→ YYYY-MM-01); "
-            "build-stg-person / dq-stg-person — YYYY-MM-01"
+            "dq-src-mobile / build-dds-event: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); "
+            "dq-dds-event / build-dds-move-event / build-fct-msisdn-imei / build-fct-msisdn-imsi-operator / build-stg-geo-all / "
+            "build-fct-geo-intervals / dq-stg-geo-all / dq-fct-geo-intervals — календарный день; "
+            "dq-fct-msisdn-imei / dq-fct-msisdn-imsi-operator — любой день месяца (→ YYYY-MM-01); "
+            "build-fct-person / dq-fct-person — YYYY-MM-01"
         ),
     )
     parser.add_argument(
         "--src-bs-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-bs / dq-src-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
+        help=f"build-fct-bs / dq-src-bs: входной src_bs parquet (по умолчанию {DEFAULT_BS_LAYOUT})",
     )
     parser.add_argument(
         "--src-imsi-path",
         default=None,
         metavar="PATH",
         help=(
-            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_imsi "
+            f"build-src-excl / dq-src-excl / build-fct-person: parquet src_imsi "
             f"(по умолчанию {DEFAULT_SRC_EXCL_IMSI_OUTPUT})"
         ),
     )
@@ -1683,7 +1683,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_imei "
+            f"build-src-excl / dq-src-excl / build-fct-person: parquet src_imei "
             f"(по умолчанию {DEFAULT_SRC_EXCL_IMEI_OUTPUT})"
         ),
     )
@@ -1692,7 +1692,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"build-src-excl / dq-src-excl / build-stg-person: parquet src_msisdn "
+            f"build-src-excl / dq-src-excl / build-fct-person: parquet src_msisdn "
             f"(по умолчанию {DEFAULT_SRC_EXCL_MSISDN_OUTPUT})"
         ),
     )
@@ -1707,7 +1707,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-bs / dq-dim-oktmo: dim_oktmo parquet "
+            f"build-fct-bs / dq-dim-oktmo: dim_oktmo parquet "
             f"(по умолчанию {DEFAULT_DIM_OKTMO_OUTPUT_PATH})"
         ),
     )
@@ -1716,7 +1716,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-bs / build-stg-geo-intervals / dq-dim-time-zones: dim_time_zones parquet "
+            f"build-fct-bs / build-fct-geo-intervals / dq-dim-time-zones: dim_time_zones parquet "
             f"(по умолчанию {DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH})"
         ),
     )
@@ -1739,73 +1739,73 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--stg-bs-path",
+        "--fct-bs-path",
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-bs / build-stg-geo-all / build-stg-geo-intervals: stg_bs parquet "
-            f"(по умолчанию {stg_bs_output_path()})"
+            f"dq-fct-bs / build-stg-geo-all / build-fct-geo-intervals: fct_bs parquet "
+            f"(по умолчанию {fct_bs_output_path()})"
         ),
     )
     parser.add_argument(
         "--stg-geo-all-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+        help=f"build-fct-msisdn-imei / build-fct-msisdn-imsi-operator / build-fct-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
     )
     parser.add_argument(
-        "--stg-geo-intervals-path",
+        "--fct-geo-intervals-path",
         default=None,
         metavar="PATH",
-        help=f"dq-stg-geo-intervals: входной stg_geo_intervals parquet или каталог (по умолчанию {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT})",
+        help=f"dq-fct-geo-intervals: входной fct_geo_intervals parquet или каталог (по умолчанию {DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT})",
     )
     parser.add_argument(
-        "--stg-msisdn-imsi-path",
+        "--fct-msisdn-imsi-path",
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-msisdn-imsi-operator / dq-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: "
-            f"stg_msisdn_imsi parquet или каталог (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})"
+            f"build-fct-msisdn-imsi-operator / dq-fct-msisdn-imsi-operator / build-fct-geo-intervals / build-fct-person: "
+            f"fct_msisdn_imsi parquet или каталог (по умолчанию {FCT_MSISDN_IMSI_LAYOUT_TEMPLATE})"
         ),
     )
     parser.add_argument(
-        "--stg-msisdn-imei-path",
+        "--fct-msisdn-imei-path",
         default=None,
         metavar="PATH",
         help=(
-            f"build-stg-msisdn-imei / dq-stg-msisdn-imei / build-stg-geo-intervals / build-stg-person: "
-            f"stg_msisdn_imei parquet или каталог (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})"
+            f"build-fct-msisdn-imei / dq-fct-msisdn-imei / build-fct-geo-intervals / build-fct-person: "
+            f"fct_msisdn_imei parquet или каталог (по умолчанию {FCT_MSISDN_IMEI_LAYOUT_TEMPLATE})"
         ),
     )
     parser.add_argument(
         "--mobile-root",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень витрин ЦОД при --dc (по умолчанию data/src/mobile/{dc})",
+        help="dq-src-mobile / build-dds-event: корень витрин ЦОД при --dc (по умолчанию data/src/mobile/{dc})",
     )
     parser.add_argument(
         "--cdr-path",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень CDR (по умолчанию data/src/mobile/{dc}/operator/cdr)",
+        help="dq-src-mobile / build-dds-event: корень CDR (по умолчанию data/src/mobile/{dc}/operator/cdr)",
     )
     parser.add_argument(
         "--sms-path",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень SMS (по умолчанию data/src/mobile/{dc}/operator/sms)",
+        help="dq-src-mobile / build-dds-event: корень SMS (по умолчанию data/src/mobile/{dc}/operator/sms)",
     )
     parser.add_argument(
         "--gprs-path",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень GPRS (по умолчанию data/src/mobile/{dc}/operator/gprs)",
+        help="dq-src-mobile / build-dds-event: корень GPRS (по умолчанию data/src/mobile/{dc}/operator/gprs)",
     )
     parser.add_argument(
         "--location-path",
         default=None,
         metavar="PATH",
-        help="dq-src-mobile / build-stg-event: корень location (по умолчанию data/src/mobile/{dc}/operator/location)",
+        help="dq-src-mobile / build-dds-event: корень location (по умолчанию data/src/mobile/{dc}/operator/location)",
     )
     parser.add_argument(
         "--src-person-path",
@@ -1817,20 +1817,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dim-tac-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person: справочник dim_tac для исключения M2M (по умолчанию {DEFAULT_DIM_TAC_OUTPUT_PATH})",
+        help=f"build-fct-person: справочник dim_tac для исключения M2M (по умолчанию {DEFAULT_DIM_TAC_OUTPUT_PATH})",
     )
     parser.add_argument(
         "--dim-oksm-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-person / dq-stg-person: справочник dim_oksm (по умолчанию {DEFAULT_DIM_OKSM_OUTPUT_PATH})",
+        help=f"build-fct-person / dq-fct-person: справочник dim_oksm (по умолчанию {DEFAULT_DIM_OKSM_OUTPUT_PATH})",
     )
     parser.add_argument(
-        "--stg-person-path",
+        "--fct-person-path",
         default=None,
         metavar="PATH",
         help=(
-            "dq-stg-person: входной stg_person parquet или каталог "
+            "dq-fct-person: входной fct_person parquet или каталог "
             "(явный прогон: обязателен вместе с --report-date)"
         ),
     )
@@ -1839,7 +1839,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            f"dq-stg-event: корень каталога event_dds (по умолчанию {DEFAULT_STG_EVENT_DDS_ROOT}); "
+            f"dq-dds-event: корень каталога event_dds (по умолчанию {DEFAULT_DDS_EVENT_DDS_ROOT}); "
             f"build-stg-geo-all: корень event_dds или каталог/файл дня"
         ),
     )
@@ -1848,9 +1848,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-event / build-dim-oktmo / build-dim-time-zones / build-dim-tac / build-dim-oksm / build-stg-bs / build-stg-geo-all / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: выходной parquet "
-            f"(по умолчанию {DEFAULT_DIM_OKTMO_OUTPUT_PATH}, {DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_DIM_TAC_OUTPUT_PATH}, {DEFAULT_DIM_OKSM_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
-            f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
+            "build-dds-event / build-dim-oktmo / build-dim-time-zones / build-dim-tac / build-dim-oksm / build-fct-bs / build-stg-geo-all / build-fct-msisdn-imei / build-fct-msisdn-imsi-operator / build-fct-geo-intervals / build-fct-person: выходной parquet "
+            f"(по умолчанию {DEFAULT_DIM_OKTMO_OUTPUT_PATH}, {DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_DIM_TAC_OUTPUT_PATH}, {DEFAULT_DIM_OKSM_OUTPUT_PATH}, {FCT_MSISDN_IMSI_LAYOUT_TEMPLATE}, {FCT_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
+            f"{FCT_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/fct/person/{{report_date}}.parquet)"
         ),
     )
     return parser
@@ -1883,10 +1883,10 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
             src_imei_path=args.src_imei_path,
             src_msisdn_path=args.src_msisdn_path,
         )
-    elif args.command == "build-move-event":
-        run_build_move_event(report_date=args.report_date)
-    elif args.command == "build-stg-event":
-        run_build_stg_event(
+    elif args.command == "build-dds-move-event":
+        run_build_dds_move_event(report_date=args.report_date)
+    elif args.command == "build-dds-event":
+        run_build_dds_event(
             datacenter=args.dc,
             report_date=args.report_date,
             mobile_root=args.mobile_root,
@@ -1928,47 +1928,47 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
         run_build_stg_geo_all(
             report_date=args.report_date,
             event_dds_path=args.event_dds_path,
-            stg_bs_path=args.stg_bs_path,
+            fct_bs_path=args.fct_bs_path,
             output_path=args.output_path,
         )
-    elif args.command == "build-stg-geo-intervals":
-        run_build_stg_geo_intervals(
+    elif args.command == "build-fct-geo-intervals":
+        run_build_fct_geo_intervals(
             report_date=args.report_date,
             stg_geo_all_path=args.stg_geo_all_path,
-            stg_bs_path=args.stg_bs_path,
+            fct_bs_path=args.fct_bs_path,
             time_zones_path=args.time_zones_path,
-            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
-            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            fct_msisdn_imsi_path=args.fct_msisdn_imsi_path,
+            fct_msisdn_imei_path=args.fct_msisdn_imei_path,
             output_path=args.output_path,
         )
-    elif args.command == "build-stg-msisdn-imei":
-        run_build_stg_msisdn_imei(
+    elif args.command == "build-fct-msisdn-imei":
+        run_build_fct_msisdn_imei(
             report_date=args.report_date,
             stg_geo_all_path=args.stg_geo_all_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-msisdn-imei":
-        run_dq_stg_msisdn_imei(
+    elif args.command == "dq-fct-msisdn-imei":
+        run_dq_fct_msisdn_imei(
             report_date=args.report_date,
-            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            fct_msisdn_imei_path=args.fct_msisdn_imei_path,
         )
-    elif args.command == "build-stg-msisdn-imsi-operator":
-        run_build_stg_msisdn_imsi_operator(
+    elif args.command == "build-fct-msisdn-imsi-operator":
+        run_build_fct_msisdn_imsi_operator(
             report_date=args.report_date,
             stg_geo_all_path=args.stg_geo_all_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-msisdn-imsi-operator":
-        run_dq_stg_msisdn_imsi_operator(
+    elif args.command == "dq-fct-msisdn-imsi-operator":
+        run_dq_fct_msisdn_imsi_operator(
             report_date=args.report_date,
-            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+            fct_msisdn_imsi_path=args.fct_msisdn_imsi_path,
         )
-    elif args.command == "build-stg-person":
-        run_build_stg_person(
+    elif args.command == "build-fct-person":
+        run_build_fct_person(
             report_date=args.report_date,
             src_person_path=args.src_person_path,
-            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
-            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            fct_msisdn_imsi_path=args.fct_msisdn_imsi_path,
+            fct_msisdn_imei_path=args.fct_msisdn_imei_path,
             src_excl_imsi_path=args.src_imsi_path,
             src_excl_imei_path=args.src_imei_path,
             src_excl_msisdn_path=args.src_msisdn_path,
@@ -1976,8 +1976,8 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
             dim_oksm_path=args.dim_oksm_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-event":
-        run_dq_stg_event(
+    elif args.command == "dq-dds-event":
+        run_dq_dds_event(
             report_date=args.report_date,
             event_dds_path=args.event_dds_path,
         )
@@ -1986,26 +1986,26 @@ def _execute_parsed_args(args: argparse.Namespace) -> None:
             report_date=args.report_date,
             stg_geo_all_path=args.stg_geo_all_path,
         )
-    elif args.command == "dq-stg-geo-intervals":
-        run_dq_stg_geo_intervals(
+    elif args.command == "dq-fct-geo-intervals":
+        run_dq_fct_geo_intervals(
             report_date=args.report_date,
-            stg_geo_intervals_path=args.stg_geo_intervals_path,
+            fct_geo_intervals_path=args.fct_geo_intervals_path,
         )
-    elif args.command == "dq-stg-person":
-        run_dq_stg_person(
+    elif args.command == "dq-fct-person":
+        run_dq_fct_person(
             report_date=args.report_date,
-            stg_person_path=args.stg_person_path,
+            fct_person_path=args.fct_person_path,
             dim_oksm_path=args.dim_oksm_path,
         )
-    elif args.command == "build-stg-bs":
-        run_build_stg_bs(
+    elif args.command == "build-fct-bs":
+        run_build_fct_bs(
             src_bs_path=args.src_bs_path,
             oktmo_path=args.oktmo_path,
             time_zones_path=args.time_zones_path,
             output_path=args.output_path,
         )
-    elif args.command == "dq-stg-bs":
-        run_dq_stg_bs(stg_bs_path=args.stg_bs_path)
+    elif args.command == "dq-fct-bs":
+        run_dq_fct_bs(fct_bs_path=args.fct_bs_path)
     else:
         run_timed_command(
             args.command,
@@ -2032,7 +2032,7 @@ def run_all(
         start_message=(
             f"Starting run-all: {len(steps)} steps "
             f"({DEFAULT_SRC_START_DATE.isoformat()} .. {DEFAULT_SRC_END_DATE.isoformat()}, "
-            f"build-stg-person × {len(_distinct_report_months_in_src_window())} months)"
+            f"build-fct-person × {len(_distinct_report_months_in_src_window())} months)"
         ),
     )
 

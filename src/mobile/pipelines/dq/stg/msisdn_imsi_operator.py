@@ -1,4 +1,4 @@
-"""DQ месячной витрины ``stg_msisdn_imsi`` (команда ``dq-stg-msisdn-imsi-operator``)."""
+"""DQ месячной витрины ``fct_msisdn_imsi`` (команда ``dq-fct-msisdn-imsi-operator``)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.msisdn_imsi import STG_MSISDN_IMSI_FIELDS, operator_id_from_imsi_series
+from mobile.pipelines.stg.msisdn_imsi import FCT_MSISDN_IMSI_FIELDS, operator_id_from_imsi_series
 from mobile.pipelines.stg.subscriber_ids import (
     IMSI_MAX_LEN,
     IMSI_MIN_LEN,
@@ -22,17 +22,17 @@ from mobile.pipelines.stg.subscriber_ids import (
 from mobile.project_paths import report_month_start, resolve_project_path
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_MSISDN_IMSI_OPERATOR"
+LOG_TAG = "DQ_FCT_MSISDN_IMSI_OPERATOR"
 
-_EXPECTED_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in STG_MSISDN_IMSI_FIELDS)
+_EXPECTED_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in FCT_MSISDN_IMSI_FIELDS)
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(_EXPECTED_COLUMNS) - {"operator_id"}
 _INTERVAL_GROUP_COLS: tuple[str, ...] = ("msisdn", "operator_id", "imsi")
 
 
-def run_dq(*, report_date: date, stg_msisdn_imsi_path: str | Path) -> dict[str, Any]:
-    """DQ ``stg_msisdn_imsi``; ``report_date`` — любой день месяца, приводится к 1-му числу."""
+def run_dq(*, report_date: date, fct_msisdn_imsi_path: str | Path) -> dict[str, Any]:
+    """DQ ``fct_msisdn_imsi``; ``report_date`` — любой день месяца, приводится к 1-му числу."""
     report_month = report_month_start(report_date)
-    source_path = _resolve_source_path(report_date=report_month, stg_msisdn_imsi_path=stg_msisdn_imsi_path)
+    source_path = _resolve_source_path(report_date=report_month, fct_msisdn_imsi_path=fct_msisdn_imsi_path)
     checks = 0
     warnings = 0
     failed = 0
@@ -48,7 +48,7 @@ def run_dq(*, report_date: date, stg_msisdn_imsi_path: str | Path) -> dict[str, 
 
     base: dict[str, Any] = {
         "report_date": report_month.isoformat(),
-        "stg_msisdn_imsi_path": str(source_path),
+        "fct_msisdn_imsi_path": str(source_path),
     }
     if report_date != report_month:
         base["report_date_input"] = report_date.isoformat()
@@ -233,8 +233,8 @@ def run_dq(*, report_date: date, stg_msisdn_imsi_path: str | Path) -> dict[str, 
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_msisdn_imsi_path: str | Path) -> Path:
-    resolved = resolve_project_path(stg_msisdn_imsi_path)
+def _resolve_source_path(*, report_date: date, fct_msisdn_imsi_path: str | Path) -> Path:
+    resolved = resolve_project_path(fct_msisdn_imsi_path)
     if resolved.is_dir():
         month = report_month_start(report_date)
         return resolved / f"{month.isoformat()}.parquet"

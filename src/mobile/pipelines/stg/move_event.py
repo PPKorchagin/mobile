@@ -1,4 +1,4 @@
-"""Перенос ``stg_event`` в витрину DDS: ``event/{dc}`` → ``event_dds/{date}/{dc}.parquet``."""
+"""Перенос ``dds_event`` в витрину DDS: ``event/{dc}`` → ``event_dds/{date}/{dc}.parquet``."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import mobile_datacenter_ids, stg_event_dds_output_path, stg_event_output_path
+from mobile.project_paths import mobile_datacenter_ids, dds_event_dds_output_path, dds_event_output_path
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ def _fast_copy(src: Path, dst: Path) -> tuple[str, int]:
 
 
 def _move_one_datacenter(report_date: date, dc: str) -> dict[str, Any]:
-    src = stg_event_output_path(dc, report_date)
-    dst = stg_event_dds_output_path(dc, report_date)
+    src = dds_event_output_path(dc, report_date)
+    dst = dds_event_dds_output_path(dc, report_date)
     entry: dict[str, Any] = {
         "source_id": dc,
         "source_path": str(src),
@@ -45,7 +45,7 @@ def _move_one_datacenter(report_date: date, dc: str) -> dict[str, Any]:
     if not src.exists():
         entry["status"] = "missing_source"
         logger.warning(
-            "build-move-event skip: missing source source_id=%s report_date=%s path=%s",
+            "build-dds-move-event skip: missing source source_id=%s report_date=%s path=%s",
             dc,
             report_date.isoformat(),
             src,
@@ -56,7 +56,7 @@ def _move_one_datacenter(report_date: date, dc: str) -> dict[str, Any]:
     entry["copy_method"] = method
     entry["bytes"] = nbytes
     logger.info(
-        "build-move-event source_id=%s report_date=%s method=%s src=%s dst=%s bytes=%s",
+        "build-dds-move-event source_id=%s report_date=%s method=%s src=%s dst=%s bytes=%s",
         dc,
         report_date.isoformat(),
         method,
@@ -87,6 +87,6 @@ def run_move(report_date: date) -> dict[str, Any]:
         "moves": moves,
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-move-event", metrics={**stats, **perf})
-    logger.info("build-move-event completed: %s", stats)
+    append_command_metrics(command="build-dds-move-event", metrics={**stats, **perf})
+    logger.info("build-dds-move-event completed: %s", stats)
     return stats

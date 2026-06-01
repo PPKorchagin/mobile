@@ -1779,7 +1779,7 @@ _DTO_TZ_RE = re.compile(r"^(?P<dt>\d{8}T\d{6})(?P<tz>Z|[+-]\d{2}(?:\d{2})?)?$")
 
 
 def filter_physical_person_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep natural persons (client_type=0) for OSS / stg_person alignment."""
+    """Keep natural persons (client_type=0) for OSS / fct_person alignment."""
     if df.empty or "client_type" not in df.columns:
         return df
     ct = pd.to_numeric(df["client_type"], errors="coerce")

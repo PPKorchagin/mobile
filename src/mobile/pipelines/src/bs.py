@@ -907,7 +907,7 @@ def filter_src_bs_active_in_date_range(
     start_date: date,
     end_date: date,
 ) -> pd.DataFrame:
-    """Rows overlapping ``[start_date, end_date]`` (``dq-src-bs``, ``build-stg-bs``)."""
+    """Rows overlapping ``[start_date, end_date]`` (``dq-src-bs``, ``build-fct-bs``)."""
     if not {"date_on", "date_off"}.issubset(data.columns):
         return data
     date_on = pd.to_datetime(data["date_on"], errors="coerce")

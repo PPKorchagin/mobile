@@ -1,4 +1,4 @@
-"""Сборка ``stg_geo_all`` из ``event_dds`` + ``stg_bs`` без binding-fill."""
+"""Сборка ``stg_geo_all`` из ``event_dds`` + ``fct_bs`` без binding-fill."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import stg_event_dds_day_key_from_path
+from mobile.project_paths import dds_event_dds_day_key_from_path
 from mobile.project_paths import (
-    DEFAULT_STG_EVENT_DDS_ROOT,
+    DEFAULT_DDS_EVENT_DDS_ROOT,
     resolve_project_path,
-    stg_bs_output_path,
+    fct_bs_output_path,
     stg_geo_all_output_path,
 )
 
@@ -67,18 +67,18 @@ def run_build(
     *,
     report_date: date,
     event_dds_path: str | Path | None = None,
-    stg_bs_path: str | Path | None = None,
+    fct_bs_path: str | Path | None = None,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Собрать ``stg_geo_all`` за отчётный день из ``event_dds`` без binding-fill."""
     started = time.perf_counter()
     perf: dict[str, Any] = {}
 
-    dds_root = resolve_project_path(event_dds_path or DEFAULT_STG_EVENT_DDS_ROOT)
+    dds_root = resolve_project_path(event_dds_path or DEFAULT_DDS_EVENT_DDS_ROOT)
     out_path = resolve_project_path(output_path) if output_path is not None else stg_geo_all_output_path(report_date)
-    bs_path = resolve_project_path(stg_bs_path) if stg_bs_path is not None else stg_bs_output_path()
+    bs_path = resolve_project_path(fct_bs_path) if fct_bs_path is not None else fct_bs_output_path()
     if not bs_path.exists():
-        raise FileNotFoundError(f"stg_bs parquet not found: {bs_path}")
+        raise FileNotFoundError(f"fct_bs parquet not found: {bs_path}")
 
     with timed_stage("read_event_dds_sec", perf):
         source_df = _read_event_dds_day(dds_root, report_date)
@@ -99,7 +99,7 @@ def run_build(
     stats: dict[str, Any] = {
         "report_date": report_date.isoformat(),
         "event_dds_path": str(dds_root),
-        "stg_bs_path": str(bs_path),
+        "fct_bs_path": str(bs_path),
         "output_path": str(out_path),
         "rows_read_event_dds": int(len(source_df)),
         "rows_after_transform": int(len(merged)),
@@ -147,7 +147,7 @@ def _discover_event_dds_paths_for_utc_day(path: Path, report_date: date) -> list
         return []
     out: list[Path] = []
     for p in sorted(path.rglob("*.parquet")):
-        key = stg_event_dds_day_key_from_path(p)
+        key = dds_event_dds_day_key_from_path(p)
         if key is None or key in day_keys:
             out.append(p)
     return out

@@ -32,14 +32,14 @@ COMMANDS_WITH_DETAILED_TIMING: frozenset[str] = frozenset(
         "build-src-person",
         "build-src-excl",
         "build-src-mobile",
-        "build-stg-event",
+        "build-dds-event",
         "build-stg-geo-all",
-        "build-stg-geo-intervals",
-        "build-stg-person",
-        "build-stg-msisdn-imei",
-        "build-stg-msisdn-imsi-operator",
-        "build-move-event",
-        "build-stg-bs",
+        "build-fct-geo-intervals",
+        "build-fct-person",
+        "build-fct-msisdn-imei",
+        "build-fct-msisdn-imsi-operator",
+        "build-dds-move-event",
+        "build-fct-bs",
     }
 )
 

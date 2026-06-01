@@ -1,0 +1,26 @@
+{
+    "table": "fct_msisdn_imei",
+    "description": "Месячные интервалы MSISDN–IMEI (файл YYYY-MM-01), пополняются ежедневно из stg_geo_all",
+    "fields": [
+        {
+            "name": "msisdn",
+            "type": "string",
+            "comment": "MSISDN, E.164 (RU и иностранные номера)"
+        },
+        {
+            "name": "imei",
+            "type": "string",
+            "comment": "IMEI, 14–16 цифр"
+        },
+        {
+            "name": "valid_from",
+            "type": "timestamp",
+            "comment": "Первое событие интервала (локальное время event_timestamp)"
+        },
+        {
+            "name": "valid_to",
+            "type": "timestamp",
+            "comment": "Последнее событие интервала (локальное время)"
+        }
+    ]
+}

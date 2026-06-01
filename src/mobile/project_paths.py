@@ -41,27 +41,27 @@ SRC_SMS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/sms/{name_operator}/100
 SRC_GPRS_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/gprs/{name_operator}/10003/{YYYY}/{MM}/{DD}"
 SRC_LOCATION_LAYOUT_TEMPLATE = "data/src/mobile/{dc}/operator/location/{name_operator}/10004/{YYYY}/{MM}/{DD}"
 
-STG_EVENT_LAYOUT_TEMPLATE = "data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet"
-STG_EVENT_DDS_LAYOUT_TEMPLATE = "data/stg/event_dds/{report_date}/{source_id}.parquet"
-STG_MSISDN_IMSI_LAYOUT_TEMPLATE = "data/stg/msisdn_imsi/{report_date}.parquet"
-STG_MSISDN_IMEI_LAYOUT_TEMPLATE = "data/stg/msisdn_imei/{report_date}.parquet"
+DDS_EVENT_LAYOUT_TEMPLATE = "data/dds/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet"
+DDS_EVENT_DDS_LAYOUT_TEMPLATE = "data/dds/event_dds/{report_date}/{source_id}.parquet"
+FCT_MSISDN_IMSI_LAYOUT_TEMPLATE = "data/fct/msisdn_imsi/{report_date}.parquet"
+FCT_MSISDN_IMEI_LAYOUT_TEMPLATE = "data/fct/msisdn_imei/{report_date}.parquet"
 # report_date в шаблоне — всегда YYYY-MM-01 (месячный срез, обновляется ежедневно)
 STG_GEO_ALL_LAYOUT_TEMPLATE = "data/stg/geo_all/{report_date}.parquet"
-STG_GEO_INTERVALS_LAYOUT_TEMPLATE = "data/stg/geo_intervals/{report_date}.parquet"
-STG_PERSON_LAYOUT_TEMPLATE = "data/stg/person/{report_date}.parquet"
-STG_BS_LAYOUT_TEMPLATE = "data/stg/bs.parquet"
-DEFAULT_STG_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
-DEFAULT_STG_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
+FCT_GEO_INTERVALS_LAYOUT_TEMPLATE = "data/fct/geo_intervals/{report_date}.parquet"
+FCT_PERSON_LAYOUT_TEMPLATE = "data/fct/person/{report_date}.parquet"
+FCT_BS_LAYOUT_TEMPLATE = "data/fct/bs.parquet"
+DEFAULT_DDS_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
+DEFAULT_DDS_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
 DEFAULT_STG_GEO_ALL_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "geo_all"
-DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "geo_intervals"
-DEFAULT_STG_PERSON_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "person"
-DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imsi.json"
-DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imei.json"
-DEFAULT_STG_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person.json"
+DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "geo_intervals"
+DEFAULT_FCT_PERSON_OUTPUT_ROOT = PROJECT_ROOT / "data" / "stg" / "person"
+DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imsi.json"
+DEFAULT_FCT_MSISDN_IMEI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imei.json"
+DEFAULT_FCT_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person.json"
 DEFAULT_SRC_BS_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "bs.json"
-DEFAULT_STG_BS_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "bs.json"
-DEFAULT_STG_BS_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "bs.parquet"
-DEFAULT_STG_EVENT_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "event.json"
+DEFAULT_FCT_BS_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "bs.json"
+DEFAULT_FCT_BS_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "bs.parquet"
+DEFAULT_DDS_EVENT_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "event.json"
 
 MOBILE_DATA_ROOT = PROJECT_ROOT / "data" / "src" / "mobile"
 
@@ -158,7 +158,7 @@ def calendar_day_key_from_path(path: Path) -> str | None:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
 
 
-def stg_event_dds_day_key_from_path(path: Path) -> str | None:
+def dds_event_dds_day_key_from_path(path: Path) -> str | None:
     """Ключ отчётного дня из DDS-пути: ``…/event_dds/YYYY-MM-DD/{source_id}.parquet``."""
     m = _DDS_EVENT_IN_PATH.search(path.as_posix())
     if not m:
@@ -166,7 +166,7 @@ def stg_event_dds_day_key_from_path(path: Path) -> str | None:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
 
 
-def stg_event_dds_source_id_from_path(path: Path) -> str | None:
+def dds_event_dds_source_id_from_path(path: Path) -> str | None:
     """``source_id`` (ЦОД) из DDS-пути ``…/event_dds/YYYY-MM-DD/{source_id}.parquet``."""
     m = _DDS_EVENT_IN_PATH.search(path.as_posix())
     if not m:
@@ -260,20 +260,20 @@ DEFAULT_NB_SRC_EXCL_NOTEBOOK_PATH = _NB / "7_src_excl.ipynb"
 DEFAULT_NB_SRC_EXCL_EXECUTED_PATH = _DATA_NOTEBOOKS / "7_src_excl.executed.ipynb"
 DEFAULT_NB_SRC_MOBILE_NOTEBOOK_PATH = _NB / "8_src_mobile.ipynb"
 DEFAULT_NB_SRC_MOBILE_EXECUTED_PATH = _DATA_NOTEBOOKS / "8_src_mobile.executed.ipynb"
-DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH = _NB / "9_stg_event.ipynb"
-DEFAULT_NB_STG_EVENT_EXECUTED_PATH = _DATA_NOTEBOOKS / "9_stg_event.executed.ipynb"
-DEFAULT_NB_STG_BS_NOTEBOOK_PATH = _NB / "10_stg_bs.ipynb"
-DEFAULT_NB_STG_BS_EXECUTED_PATH = _DATA_NOTEBOOKS / "10_stg_bs.executed.ipynb"
+DEFAULT_NB_DDS_EVENT_NOTEBOOK_PATH = _NB / "9_dds_event.ipynb"
+DEFAULT_NB_DDS_EVENT_EXECUTED_PATH = _DATA_NOTEBOOKS / "9_dds_event.executed.ipynb"
+DEFAULT_NB_FCT_BS_NOTEBOOK_PATH = _NB / "10_fct_bs.ipynb"
+DEFAULT_NB_FCT_BS_EXECUTED_PATH = _DATA_NOTEBOOKS / "10_fct_bs.executed.ipynb"
 DEFAULT_NB_STG_GEO_ALL_NOTEBOOK_PATH = _NB / "11_stg_geo_all.ipynb"
 DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH = _DATA_NOTEBOOKS / "11_stg_geo_all.executed.ipynb"
-DEFAULT_NB_STG_MSISDN_IMEI_NOTEBOOK_PATH = _NB / "12_stg_msisdn_imei.ipynb"
-DEFAULT_NB_STG_MSISDN_IMEI_EXECUTED_PATH = _DATA_NOTEBOOKS / "12_stg_msisdn_imei.executed.ipynb"
-DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_NOTEBOOK_PATH = _NB / "13_stg_msisdn_imsi_operator.ipynb"
-DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_EXECUTED_PATH = _DATA_NOTEBOOKS / "13_stg_msisdn_imsi_operator.executed.ipynb"
-DEFAULT_NB_STG_GEO_INTERVALS_NOTEBOOK_PATH = _NB / "14_stg_geo_intervals.ipynb"
-DEFAULT_NB_STG_GEO_INTERVALS_EXECUTED_PATH = _DATA_NOTEBOOKS / "14_stg_geo_intervals.executed.ipynb"
-DEFAULT_NB_STG_PERSON_NOTEBOOK_PATH = _NB / "15_stg_person.ipynb"
-DEFAULT_NB_STG_PERSON_EXECUTED_PATH = _DATA_NOTEBOOKS / "15_stg_person.executed.ipynb"
+DEFAULT_NB_FCT_MSISDN_IMEI_NOTEBOOK_PATH = _NB / "12_fct_msisdn_imei.ipynb"
+DEFAULT_NB_FCT_MSISDN_IMEI_EXECUTED_PATH = _DATA_NOTEBOOKS / "12_fct_msisdn_imei.executed.ipynb"
+DEFAULT_NB_FCT_MSISDN_IMSI_OPERATOR_NOTEBOOK_PATH = _NB / "13_fct_msisdn_imsi_operator.ipynb"
+DEFAULT_NB_FCT_MSISDN_IMSI_OPERATOR_EXECUTED_PATH = _DATA_NOTEBOOKS / "13_fct_msisdn_imsi_operator.executed.ipynb"
+DEFAULT_NB_FCT_GEO_INTERVALS_NOTEBOOK_PATH = _NB / "14_fct_geo_intervals.ipynb"
+DEFAULT_NB_FCT_GEO_INTERVALS_EXECUTED_PATH = _DATA_NOTEBOOKS / "14_fct_geo_intervals.executed.ipynb"
+DEFAULT_NB_FCT_PERSON_NOTEBOOK_PATH = _NB / "15_fct_person.ipynb"
+DEFAULT_NB_FCT_PERSON_EXECUTED_PATH = _DATA_NOTEBOOKS / "15_fct_person.executed.ipynb"
 DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
@@ -282,9 +282,9 @@ def resolve_oktmo_layout() -> Path:
     return DEFAULT_DIM_OKTMO_OUTPUT_PATH
 
 
-def stg_event_output_path(source_id: str, day: date) -> Path:
-    """Parquet событий за отчётный день и ЦОД: ``data/stg/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet``."""
-    resolved = STG_EVENT_LAYOUT_TEMPLATE.format(
+def dds_event_output_path(source_id: str, day: date) -> Path:
+    """Parquet событий за отчётный день и ЦОД: ``data/dds/event/{YYYY}/{MM}/{DD}/{source_id}/events.parquet``."""
+    resolved = DDS_EVENT_LAYOUT_TEMPLATE.format(
         YYYY=day.strftime("%Y"),
         MM=day.strftime("%m"),
         DD=day.strftime("%d"),
@@ -293,9 +293,9 @@ def stg_event_output_path(source_id: str, day: date) -> Path:
     return PROJECT_ROOT / resolved
 
 
-def stg_event_dds_output_path(source_id: str, day: date) -> Path:
-    """DDS-слой: ``data/stg/event_dds/{YYYY-MM-DD}/{source_id}.parquet``."""
-    resolved = STG_EVENT_DDS_LAYOUT_TEMPLATE.format(
+def dds_event_dds_output_path(source_id: str, day: date) -> Path:
+    """DDS-слой: ``data/dds/event_dds/{YYYY-MM-DD}/{source_id}.parquet``."""
+    resolved = DDS_EVENT_DDS_LAYOUT_TEMPLATE.format(
         report_date=day.isoformat(),
         source_id=source_id,
     )
@@ -307,21 +307,21 @@ def report_month_start(day: date) -> date:
     return day.replace(day=1)
 
 
-def stg_msisdn_imsi_output_path(day: date) -> Path:
-    """Месячный ``stg_msisdn_imsi``: ``data/stg/msisdn_imsi/{YYYY-MM-01}.parquet``."""
+def fct_msisdn_imsi_output_path(day: date) -> Path:
+    """Месячный ``fct_msisdn_imsi``: ``data/fct/msisdn_imsi/{YYYY-MM-01}.parquet``."""
     month = report_month_start(day)
-    return PROJECT_ROOT / STG_MSISDN_IMSI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
+    return PROJECT_ROOT / FCT_MSISDN_IMSI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
 
 
-def stg_msisdn_imei_output_path(day: date) -> Path:
-    """Месячный ``stg_msisdn_imei``: ``data/stg/msisdn_imei/{YYYY-MM-01}.parquet``."""
+def fct_msisdn_imei_output_path(day: date) -> Path:
+    """Месячный ``fct_msisdn_imei``: ``data/fct/msisdn_imei/{YYYY-MM-01}.parquet``."""
     month = report_month_start(day)
-    return PROJECT_ROOT / STG_MSISDN_IMEI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
+    return PROJECT_ROOT / FCT_MSISDN_IMEI_LAYOUT_TEMPLATE.format(report_date=month.isoformat())
 
 
-def stg_bs_output_path() -> Path:
-    """``data/stg/bs.parquet``."""
-    return PROJECT_ROOT / STG_BS_LAYOUT_TEMPLATE
+def fct_bs_output_path() -> Path:
+    """``data/fct/bs.parquet``."""
+    return PROJECT_ROOT / FCT_BS_LAYOUT_TEMPLATE
 
 
 def resolve_stg_daily_parquet_path(base: str | Path, day: date) -> Path:
@@ -346,14 +346,14 @@ def stg_geo_all_output_path(day: date) -> Path:
     return PROJECT_ROOT / STG_GEO_ALL_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
 
 
-def stg_geo_intervals_output_path(day: date) -> Path:
-    """``data/stg/geo_intervals/{YYYY-MM-DD}.parquet``."""
-    return PROJECT_ROOT / STG_GEO_INTERVALS_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+def fct_geo_intervals_output_path(day: date) -> Path:
+    """``data/fct/geo_intervals/{YYYY-MM-DD}.parquet``."""
+    return PROJECT_ROOT / FCT_GEO_INTERVALS_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
 
 
-def stg_person_output_path(day: date) -> Path:
-    """``data/stg/person/{YYYY-MM-01}.parquet`` (месячный срез)."""
-    return PROJECT_ROOT / STG_PERSON_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
+def fct_person_output_path(day: date) -> Path:
+    """``data/fct/person/{YYYY-MM-01}.parquet`` (месячный срез)."""
+    return PROJECT_ROOT / FCT_PERSON_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
 
 
 

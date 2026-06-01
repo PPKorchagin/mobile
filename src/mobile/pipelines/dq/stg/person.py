@@ -1,4 +1,4 @@
-"""DQ месячной витрины ``stg_person``."""
+"""DQ месячной витрины ``fct_person``."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.person import STG_PERSON_FIELDS
+from mobile.pipelines.stg.person import FCT_PERSON_FIELDS
 from mobile.project_paths import (
     DEFAULT_DIM_OKSM_OUTPUT_PATH,
     report_month_start,
@@ -20,7 +20,7 @@ from mobile.project_paths import (
 )
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_PERSON"
+LOG_TAG = "DQ_FCT_PERSON"
 
 _PERSON_ID_RE = re.compile(r"^prs_[0-9a-f]{24}$")
 _DIGITS_RE = re.compile(r"^\d+$")
@@ -29,7 +29,7 @@ _GENDER_VALUES = frozenset({"M", "F", "U"})
 _CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
 _LOW_CONFIDENCE_WARN_RATIO = 0.30
 
-_PERSON_COLUMNS = [field["name"] for field in STG_PERSON_FIELDS]
+_PERSON_COLUMNS = [field["name"] for field in FCT_PERSON_FIELDS]
 _PERSON_CRITICAL_NULLS = (
     "person_id",
     "person_cluster_key",
@@ -45,12 +45,12 @@ _PERSON_DEMO_NULLS = ("gender", "age", "citizenship")
 def run_dq(
     *,
     report_date: date,
-    stg_person_path: str | Path,
+    fct_person_path: str | Path,
     dim_oksm_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Read-only DQ ``stg_person``; ``report_date`` и ``stg_person_path`` обязательны (пути задаёт CLI)."""
+    """Read-only DQ ``fct_person``; ``report_date`` и ``fct_person_path`` обязательны (пути задаёт CLI)."""
     report_month = report_month_start(report_date)
-    person_path = _resolve_source_path(report_date=report_month, stg_person_path=stg_person_path)
+    person_path = _resolve_source_path(report_date=report_month, fct_person_path=fct_person_path)
     oksm_path = resolve_project_path(dim_oksm_path or DEFAULT_DIM_OKSM_OUTPUT_PATH)
 
     checks = 0
@@ -68,7 +68,7 @@ def run_dq(
 
     base: dict[str, Any] = {
         "report_date": report_month.isoformat(),
-        "stg_person_path": str(person_path),
+        "fct_person_path": str(person_path),
     }
     if report_date != report_month:
         base["report_date_input"] = report_date.isoformat()
@@ -274,8 +274,8 @@ def run_dq(
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_person_path: str | Path) -> Path:
-    return resolve_stg_monthly_parquet_path(stg_person_path, report_date)
+def _resolve_source_path(*, report_date: date, fct_person_path: str | Path) -> Path:
+    return resolve_stg_monthly_parquet_path(fct_person_path, report_date)
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:

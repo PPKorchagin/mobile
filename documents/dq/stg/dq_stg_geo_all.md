@@ -15,7 +15,7 @@
 | 3 | Проверить доменные и временные правила | Gate-статусы `ok/warning/failed` |
 | 4 | Выдать `summary` | Счётчики checks |
 
-**Бизнес-назначение:** контроль качества дневной гео-витрины после [`build-stg-geo-all`](../../stg/build_stg_geo_all.md) перед `build-stg-geo-intervals` и связками MSISDN↔IMSI/IMEI.
+**Бизнес-назначение:** контроль качества дневной гео-витрины после [`build-stg-geo-all`](../../stg/build_stg_geo_all.md) перед `build-fct-geo-intervals` и связками MSISDN↔IMSI/IMEI.
 
 **В scope:** наличие файла, контракт `_OUTPUT_COLUMNS`, координаты, время, словари, дубликаты ключа события.
 
@@ -139,8 +139,8 @@ uv run mobile nb-stg-geo-all
 | `temporal_order` | **failed** | `end < start` | Интервал события некорректен |
 | `event_count_valid` | **failed** | `event_count < 1` | После 5m-агрегации в группе минимум одно событие |
 | `source_event_type_vocab` | **failed** | неизвестный тип | Согласованность с `event_dds` |
-| `utc_offset_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_bs.timezone` / `dim_time_zones` |
-| `bs_type_vocab` | **warning** | неизвестный `bs_type` | Тип БС из enrich `stg_bs` |
+| `utc_offset_range` | **warning** | offset вне [-12, 14] | Согласованность с `fct_bs.timezone` / `dim_time_zones` |
+| `bs_type_vocab` | **warning** | неизвестный `bs_type` | Тип БС из enrich `fct_bs` |
 | `duplicate_event_key` | **warning** | дубли ключа события | Риск двойного учёта в downstream |
 | `summary` | **ok** | счётчики checks | Сводка прогона |
 
@@ -156,4 +156,4 @@ uv run mobile nb-stg-geo-all
 | CLI | [`cli.py`](../../../src/mobile/cli.py) |
 | Схема | [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
 
-Сквозная цепочка: `build-stg-event` → `build-move-event` → `build-stg-bs` → `build-stg-geo-all` → **`dq-stg-geo-all`** → **`nb-stg-geo-all`** → `build-stg-geo-intervals` → downstream.
+Сквозная цепочка: `build-dds-event` → `build-dds-move-event` → `build-fct-bs` → `build-stg-geo-all` → **`dq-stg-geo-all`** → **`nb-stg-geo-all`** → `build-fct-geo-intervals` → downstream.

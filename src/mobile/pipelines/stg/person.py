@@ -1,4 +1,4 @@
-"""Сборка месячной витрины ``stg_person`` из ``src_person``, binding-витрин и списков исключений."""
+"""Сборка месячной витрины ``fct_person`` из ``src_person``, binding-витрин и списков исключений."""
 
 from __future__ import annotations
 
@@ -28,24 +28,24 @@ from mobile.project_paths import (
     DEFAULT_SRC_EXCL_IMSI_OUTPUT,
     DEFAULT_SRC_EXCL_MSISDN_OUTPUT,
     DEFAULT_DIM_OKSM_OUTPUT_PATH,
-    DEFAULT_STG_PERSON_SCHEMA_PATH,
+    DEFAULT_FCT_PERSON_SCHEMA_PATH,
     DEFAULT_DIM_TAC_OUTPUT_PATH,
     SRC_PERSON_LAYOUT_TEMPLATE,
     SRC_PERSON_SUCCESS_FLAG,
     resolve_project_path,
     resolve_stg_monthly_parquet_path,
     stg_geo_all_output_path,
-    stg_msisdn_imei_output_path,
-    stg_msisdn_imsi_output_path,
-    stg_person_output_path,
+    fct_msisdn_imei_output_path,
+    fct_msisdn_imsi_output_path,
+    fct_person_output_path,
 )
 
 logger = logging.getLogger(__name__)
 
 _OPEN_ACTUALLY_TO = pd.Timestamp("2999-12-31 23:59:59")
 
-STG_PERSON_TABLE = "stg_person"
-STG_PERSON_FIELDS: list[dict[str, str]] = []
+STG_PERSON_TABLE = "fct_person"
+FCT_PERSON_FIELDS: list[dict[str, str]] = []
 
 
 def _identity_node(prefix: str, value: Any) -> str | None:
@@ -300,7 +300,7 @@ def _read_src_person_latest_snapshot(
             try:
                 frame = pd.read_parquet(resolved, columns=_SRC_PERSON_READ_COLUMNS)
             except Exception:
-                logger.exception("build-stg-person: failed to read src_person at %s", resolved)
+                logger.exception("build-fct-person: failed to read src_person at %s", resolved)
                 return pd.DataFrame(columns=_SRC_PERSON_READ_COLUMNS), []
             return frame, []
 
@@ -323,7 +323,7 @@ def _read_src_person_latest_snapshot(
     latest_day, latest_path = max(candidates, key=lambda item: item[0])
     latest = pd.read_parquet(latest_path, columns=_SRC_PERSON_READ_COLUMNS)
     logger.info(
-        "build-stg-person: src_person load_day=%s rows=%s",
+        "build-fct-person: src_person load_day=%s rows=%s",
         latest_day.isoformat(),
         len(latest),
     )
@@ -331,19 +331,19 @@ def _read_src_person_latest_snapshot(
 
 
 def _load_schema_contract(schema_path: Path) -> None:
-    global STG_PERSON_TABLE, STG_PERSON_FIELDS
+    global STG_PERSON_TABLE, FCT_PERSON_FIELDS
     with schema_path.open(encoding="utf-8") as file:
         cfg = json.load(file)
     STG_PERSON_TABLE = str(cfg.get("table", STG_PERSON_TABLE))
-    STG_PERSON_FIELDS = [{"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", [])]
+    FCT_PERSON_FIELDS = [{"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", [])]
 
 
-_load_schema_contract(DEFAULT_STG_PERSON_SCHEMA_PATH)
+_load_schema_contract(DEFAULT_FCT_PERSON_SCHEMA_PATH)
 
 
 def _validate_report_month(report_date: date) -> date:
     if report_date.day != 1:
-        raise ValueError(f"build-stg-person: report_date must be YYYY-MM-01, got {report_date.isoformat()}")
+        raise ValueError(f"build-fct-person: report_date must be YYYY-MM-01, got {report_date.isoformat()}")
     return report_date
 
 
@@ -364,8 +364,8 @@ def run_build(
     report_date: date,
     *,
     src_person_path: str | Path | None = None,
-    stg_msisdn_imsi_path: str | Path | None = None,
-    stg_msisdn_imei_path: str | Path | None = None,
+    fct_msisdn_imsi_path: str | Path | None = None,
+    fct_msisdn_imei_path: str | Path | None = None,
     src_excl_imsi_path: str | Path | None = None,
     src_excl_imei_path: str | Path | None = None,
     src_excl_msisdn_path: str | Path | None = None,
@@ -374,7 +374,7 @@ def run_build(
     output_path: str | Path | None = None,
     sync_bindings_from_geo: bool = True,
 ) -> dict[str, Any]:
-    command = "build-stg-person"
+    command = "build-fct-person"
     perf: dict[str, Any] = {}
     started = time.perf_counter()
     report_month = _validate_report_month(report_date)
@@ -382,18 +382,18 @@ def run_build(
     month_start = pd.Timestamp(report_month)
     month_end = _month_end_ts(report_month)
 
-    person_out = resolve_project_path(output_path) if output_path else stg_person_output_path(report_month)
-    field_names = [f["name"] for f in STG_PERSON_FIELDS]
+    person_out = resolve_project_path(output_path) if output_path else fct_person_output_path(report_month)
+    field_names = [f["name"] for f in FCT_PERSON_FIELDS]
 
     imsi_month_path = _resolve_monthly_binding_path(
         report_month=report_month,
         kind="imsi",
-        explicit_path=stg_msisdn_imsi_path,
+        explicit_path=fct_msisdn_imsi_path,
     )
     imei_month_path = _resolve_monthly_binding_path(
         report_month=report_month,
         kind="imei",
-        explicit_path=stg_msisdn_imei_path,
+        explicit_path=fct_msisdn_imei_path,
     )
 
     binding_days_synced = 0
@@ -476,8 +476,8 @@ def run_build(
         "excluded_m2m_tac_rows": int(excluded_m2m_tac_rows),
         "binding_days_synced": int(binding_days_synced),
         "output_path": str(person_out),
-        "stg_msisdn_imsi_path": str(imsi_month_path),
-        "stg_msisdn_imei_path": str(imei_month_path),
+        "fct_msisdn_imsi_path": str(imsi_month_path),
+        "fct_msisdn_imei_path": str(imei_month_path),
         "src_excl_imsi_path": str(excl_imsi_path),
         "src_excl_imei_path": str(excl_imei_path),
         "src_excl_msisdn_path": str(excl_msisdn_path),
@@ -510,7 +510,7 @@ def _sync_monthly_bindings_from_geo(
     imsi_month_path: Path,
     imei_month_path: Path,
 ) -> int:
-    """Инкремент месячных ``stg_msisdn_imsi`` / ``stg_msisdn_imei`` из ``stg_geo_all`` по дням месяца."""
+    """Инкремент месячных ``fct_msisdn_imsi`` / ``fct_msisdn_imei`` из ``stg_geo_all`` по дням месяца."""
     days_run = 0
     for day in _month_days(report_month):
         geo = stg_geo_all_output_path(day)
@@ -527,7 +527,7 @@ def _sync_monthly_bindings_from_geo(
             output_path=imei_month_path,
         )
         days_run += 1
-    logger.info("build-stg-person: synced bindings for %s days in %s", days_run, report_month.isoformat())
+    logger.info("build-fct-person: synced bindings for %s days in %s", days_run, report_month.isoformat())
     return days_run
 
 
@@ -540,15 +540,15 @@ def _resolve_monthly_binding_path(
     if explicit_path is not None:
         return resolve_stg_monthly_parquet_path(explicit_path, report_month)
     if kind == "imsi":
-        return stg_msisdn_imsi_output_path(report_month)
-    return stg_msisdn_imei_output_path(report_month)
+        return fct_msisdn_imsi_output_path(report_month)
+    return fct_msisdn_imei_output_path(report_month)
 
 
 def _read_binding_parquet(path: Path, *, kind: str) -> pd.DataFrame:
     value_col = "imsi" if kind == "imsi" else "imei"
     columns = ["msisdn", value_col, "valid_from", "valid_to"]
     if not path.exists():
-        logger.warning("build-stg-person: binding not found at %s", path)
+        logger.warning("build-fct-person: binding not found at %s", path)
         return pd.DataFrame(columns=columns)
     binding = pd.read_parquet(path, columns=columns)
     out = binding.copy()
@@ -563,7 +563,7 @@ def _read_binding_parquet(path: Path, *, kind: str) -> pd.DataFrame:
 
 
 def _load_previous_person(prev_month: date) -> pd.DataFrame | None:
-    path = stg_person_output_path(prev_month)
+    path = fct_person_output_path(prev_month)
     if not path.exists():
         return None
     return pd.read_parquet(path, columns=["person_id", "person_cluster_key"])
@@ -571,7 +571,7 @@ def _load_previous_person(prev_month: date) -> pd.DataFrame | None:
 
 def _read_m2m_tac_set(tac_path: Path) -> set[str]:
     if not tac_path.exists():
-        logger.warning("build-stg-person: dim_tac not found, skipping M2M TAC exclusion: %s", tac_path)
+        logger.warning("build-fct-person: dim_tac not found, skipping M2M TAC exclusion: %s", tac_path)
         return set()
     tac_df = pd.read_parquet(tac_path, columns=["tac", "is_m2m"])
     m2m = tac_df[tac_df["is_m2m"].fillna(False).astype(bool)]
@@ -605,7 +605,7 @@ def _load_excl_sets(imsi_path: Path, imei_path: Path, msisdn_path: Path) -> _Exc
 
 def _load_excl_value_set(path: Path, *, normalize: Callable[[pd.Series | None], pd.Series]) -> set[str]:
     if not path.exists():
-        logger.warning("build-stg-person: excl list not found at %s", path)
+        logger.warning("build-fct-person: excl list not found at %s", path)
         return set()
     frame = pd.read_parquet(path, columns=["value"])
     values = normalize(to_digit_string_series(frame.get("value")))
@@ -997,7 +997,7 @@ def _derive_citizenship(
     return "U"
 
 
-# Подстроки в bio → ISO alpha-2; в ``stg_person.citizenship`` — numeric_code из ``dim_oksm``.
+# Подстроки в bio → ISO alpha-2; в ``fct_person.citizenship`` — numeric_code из ``dim_oksm``.
 _DEPT_MAP = {
     "мвд": "RU",
     "овд": "RU",

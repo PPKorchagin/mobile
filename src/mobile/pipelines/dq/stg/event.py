@@ -11,18 +11,18 @@ from typing import Any, Callable
 import pandas as pd
 import pyarrow.parquet as pq
 
-from mobile.pipelines.stg.event import EVENT_CODES, STG_EVENT_FIELDS
+from mobile.pipelines.stg.event import EVENT_CODES, DDS_EVENT_FIELDS
 from mobile.project_paths import (
     resolve_project_path,
     started_parseable_mask,
-    stg_event_dds_day_key_from_path,
-    stg_event_dds_source_id_from_path,
+    dds_event_dds_day_key_from_path,
+    dds_event_dds_source_id_from_path,
 )
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_EVENT"
+LOG_TAG = "DQ_DDS_EVENT"
 
-STG_EVENT_CRITICAL_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in STG_EVENT_FIELDS)
+STG_EVENT_CRITICAL_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in DDS_EVENT_FIELDS)
 
 _EVENT_TYPES = tuple(EVENT_CODES.values())
 _EVENT_NAMES_VALID = frozenset(EVENT_CODES.keys())
@@ -40,7 +40,7 @@ _DISTRIBUTION_SCALAR_COLUMNS: tuple[str, ...] = (
 def run_dq(report_date: date, event_dds_root: str | Path) -> dict[str, Any]:
     """DQ ``event_dds`` за отчётную дату и корень каталога layout.
 
-    ``event_dds_root`` — каталог ``data/stg/event_dds/`` (или аналог). Обход всех
+    ``event_dds_root`` — каталог ``data/dds/event_dds/`` (или аналог). Обход всех
     ``*.parquet`` за ``report_date`` (сегмент ``YYYY-MM-DD`` в пути); строки фильтруются
     по ``event_timestamp[:8]`` (локальные сутки).
     """
@@ -167,7 +167,7 @@ def _discover_event_dds_parquet_paths(path: Path, report_date: date) -> list[Pat
     if path.is_file():
         if path.suffix.lower() != ".parquet":
             return []
-        key = stg_event_dds_day_key_from_path(path)
+        key = dds_event_dds_day_key_from_path(path)
         if key is not None and key != day_key:
             return []
         return [path]
@@ -177,7 +177,7 @@ def _discover_event_dds_parquet_paths(path: Path, report_date: date) -> list[Pat
             return sorted(day_dir.glob("*.parquet"))
         out: list[Path] = []
         for p in sorted(path.rglob("*.parquet")):
-            key = stg_event_dds_day_key_from_path(p)
+            key = dds_event_dds_day_key_from_path(p)
             if key is None or key == day_key:
                 out.append(p)
         return out
@@ -185,7 +185,7 @@ def _discover_event_dds_parquet_paths(path: Path, report_date: date) -> list[Pat
 
 
 def _source_id_from_path(path: Path) -> str | None:
-    return stg_event_dds_source_id_from_path(path)
+    return dds_event_dds_source_id_from_path(path)
 
 
 def _group_paths_by_source_id(paths: list[Path]) -> dict[str, list[Path]]:
@@ -271,7 +271,7 @@ def _emit_deep_metrics(
         vc = df["event_name"].astype("string").str.lower().value_counts(dropna=False).to_dict()
         emit_metric(chk("event_name_distribution"), {**base, "counts": {str(k): int(v) for k, v in vc.items()}})
 
-    _emit_stg_event_distributions(df, emit_metric, chk, base)
+    _emit_dds_event_distributions(df, emit_metric, chk, base)
 
     if "event_timestamp" in df.columns:
         ok = started_parseable_mask(df["event_timestamp"])
@@ -304,10 +304,10 @@ def _emit_deep_metrics(
             {**base, "duplicate_rows": dup, "rows": int(len(df))},
         )
 
-    _emit_stg_event_field_checks(emit_gate, chk("event"), df, base={**base, "rows": int(len(df))})
+    _emit_dds_event_field_checks(emit_gate, chk("event"), df, base={**base, "rows": int(len(df))})
 
 
-def _emit_stg_event_distributions(
+def _emit_dds_event_distributions(
     df: pd.DataFrame,
     emit_metric: Callable[[str, dict[str, Any]], None],
     chk: Callable[[str], str],
@@ -467,7 +467,7 @@ def _distribution_bundle(series: pd.Series, *, row_count: int, top_n: int) -> di
     }
 
 
-def _emit_stg_event_field_checks(
+def _emit_dds_event_field_checks(
     emit: Callable[[str, str, dict[str, Any]], None],
     check_prefix: str,
     df: pd.DataFrame,

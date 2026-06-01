@@ -103,7 +103,7 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
    - `distribution.date_on_month`, `distribution.date_off_month` — помесячные профили.
 4. **Spatial:** `spatial_ranges` — `coord_x`/`coord_y` (lon/lat) в диапазонах; `contract.coords_null`, `contract.coords_out_of_range`.
 5. **Радио:** `contract.range.*`, `contract.generation_vocab`, `contract.azimuth_semantics`, `contract.frequency_list.*`; профили `radio.profile.*` и полнота `radio.presence.*` по фактическим данным.
-6. **`stg_contract.*`:** сравнение имён/типов с ожидаемым маппингом в [`build-stg-bs`](../../stg/build_stg_bs.md) (покрытие полей, которые должны пережить трансформацию).
+6. **`stg_contract.*`:** сравнение имён/типов с ожидаемым маппингом в [`build-fct-bs`](../../fct/build_fct_bs.md) (покрытие полей, которые должны пережить трансформацию).
 7. Каждый check логируется: `{"tag":"DQ_SRC_BS","check":"...","status":"...","metrics":{...}}`.
 
 ### Шаг 4. Итог
@@ -128,8 +128,8 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 | Check | Статус при сбое | Смысл | Обоснование |
 |-------|-----------------|-------|-------------|
-| `dataset_presence` | **failed** | Parquet по `--src-bs-path` не найден | Без файла витрины DQ и downstream (`build-stg-bs`, `build-src-mobile`) не имеют входа |
-| `report_scope` | **failed/warning** | **failed** если нет `date_on`/`date_off`; **warning** если витрина пуста | Temporal-колонки обязательны для SCD-логики и трансформации в `stg_bs` |
+| `dataset_presence` | **failed** | Parquet по `--src-bs-path` не найден | Без файла витрины DQ и downstream (`build-fct-bs`, `build-src-mobile`) не имеют входа |
+| `report_scope` | **failed/warning** | **failed** если нет `date_on`/`date_off`; **warning** если витрина пуста | Temporal-колонки обязательны для SCD-логики и трансформации в `fct_bs` |
 | `dataset_basic` | **warning** | Пустая витрина (`row_count=0`) | Фиксация объёма среза; пустой справочник блокирует geo/mobile-пайплайны |
 
 ### Профили полей
@@ -148,7 +148,7 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 | Check | Статус при сбое | Смысл | Обоснование |
 |-------|-----------------|-------|-------------|
-| `key_integrity` | **warning** | Дубли по `(mcc,mnc,lac,cell,date_on)` | Бизнес-ключ сектора; дубликаты ломают джойны и SCD в `stg_bs` |
+| `key_integrity` | **warning** | Дубли по `(mcc,mnc,lac,cell,date_on)` | Бизнес-ключ сектора; дубликаты ломают джойны и SCD в `fct_bs` |
 | `temporal_consistency` | **warning** | Строки с `date_off < date_on`; min/max temporal-полей | Интервал активности БС должен быть логически согласован |
 | `temporal_date_off_tail` | **ok** | Хвост `date_off`: max, p95, доля строк на max | Профиль «открытых» интервалов по факту данных, без внешнего sentinel |
 | `spatial_ranges` | **warning** | Координаты вне lon/lat диапазонов | Невалидные координаты недопустимы для geo-джойнов и карт |
@@ -157,9 +157,9 @@ uv run mobile dq-src-bs --src-bs-path data/src/bs.parquet
 
 | Check | Статус при сбое | Смысл | Обоснование |
 |-------|-----------------|-------|-------------|
-| `stg_contract.columns` | **failed** | Нет критичных полей для STG-контракта | `build-stg-bs` ожидает фиксированный набор колонок из `src_bs` |
+| `stg_contract.columns` | **failed** | Нет критичных полей для STG-контракта | `build-fct-bs` ожидает фиксированный набор колонок из `src_bs` |
 | `stg_contract.lac_cell` | **failed/warning** | Доля валидных `lac/cell` ниже порогов | LAC/Cell — часть CGI; без них сектор не идентифицируется |
-| `stg_contract.coords` | **failed/warning** | Доля валидных координат ниже порогов | Координаты нужны для `stg_bs` и последующих geo-витрин |
+| `stg_contract.coords` | **failed/warning** | Доля валидных координат ниже порогов | Координаты нужны для `fct_bs` и последующих geo-витрин |
 | `stg_contract.temporal_order` | **failed/warning** | Доля корректного порядка дат ниже порогов | STG переносит интервалы as-is; инверсия дат — дефект источника |
 | `stg_contract.generation_present` | **failed/warning** | Низкая доля непустой `generation` | Поколение RAT используется в профиле и фильтрах downstream |
 

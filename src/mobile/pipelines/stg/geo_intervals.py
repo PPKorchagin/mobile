@@ -1,4 +1,4 @@
-"""Сборка ``stg_geo_intervals`` из ``stg_geo_all`` + ``stg_bs`` + ``dim_time_zones``."""
+"""Сборка ``fct_geo_intervals`` из ``stg_geo_all`` + ``fct_bs`` + ``dim_time_zones``."""
 
 from __future__ import annotations
 
@@ -56,26 +56,26 @@ def run_build(
     *,
     report_date: date,
     stg_geo_all_path: str | Path,
-    stg_bs_path: str | Path,
+    fct_bs_path: str | Path,
     time_zones_path: str | Path,
-    stg_msisdn_imsi_path: str | Path,
-    stg_msisdn_imei_path: str | Path,
+    fct_msisdn_imsi_path: str | Path,
+    fct_msisdn_imei_path: str | Path,
     output_path: str | Path,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     perf: dict[str, Any] = {}
 
     geo_all_file = resolve_stg_daily_parquet_path(stg_geo_all_path, report_date)
-    bs_file = resolve_project_path(stg_bs_path)
+    bs_file = resolve_project_path(fct_bs_path)
     tz_file = resolve_project_path(time_zones_path)
-    imsi_file = resolve_stg_monthly_parquet_path(stg_msisdn_imsi_path, report_date)
-    imei_file = resolve_stg_monthly_parquet_path(stg_msisdn_imei_path, report_date)
+    imsi_file = resolve_stg_monthly_parquet_path(fct_msisdn_imsi_path, report_date)
+    imei_file = resolve_stg_monthly_parquet_path(fct_msisdn_imei_path, report_date)
     out_file = resolve_stg_daily_parquet_path(output_path, report_date)
 
     if not geo_all_file.exists():
         raise FileNotFoundError(f"stg_geo_all parquet not found: {geo_all_file}")
     if not bs_file.exists():
-        raise FileNotFoundError(f"stg_bs parquet not found: {bs_file}")
+        raise FileNotFoundError(f"fct_bs parquet not found: {bs_file}")
     if not tz_file.exists():
         raise FileNotFoundError(f"dim_time_zones parquet not found: {tz_file}")
 
@@ -99,17 +99,17 @@ def run_build(
     stats: dict[str, Any] = {
         "report_date": report_date.isoformat(),
         "stg_geo_all_path": str(geo_all_file),
-        "stg_bs_path": str(bs_file),
+        "fct_bs_path": str(bs_file),
         "time_zones_path": str(tz_file),
-        "stg_msisdn_imsi_path": str(imsi_file),
-        "stg_msisdn_imei_path": str(imei_file),
+        "fct_msisdn_imsi_path": str(imsi_file),
+        "fct_msisdn_imei_path": str(imei_file),
         "output_path": str(out_file),
         "rows_read_geo_all": int(len(geo)),
         "rows_written": int(len(result)),
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-geo-intervals", metrics={**stats, **perf})
-    logger.info("build-stg-geo-intervals completed: %s", stats)
+    append_command_metrics(command="build-fct-geo-intervals", metrics={**stats, **perf})
+    logger.info("build-fct-geo-intervals completed: %s", stats)
     return {**stats, **perf}
 
 
@@ -120,12 +120,12 @@ def _empty_df() -> pd.DataFrame:
 def _read_binding(*, path: Path, value_col: str) -> pd.DataFrame:
     cols = ["msisdn", value_col, "valid_from", "valid_to"]
     if not path.exists():
-        logger.warning("build-stg-geo-intervals: binding file not found: %s", path)
+        logger.warning("build-fct-geo-intervals: binding file not found: %s", path)
         return pd.DataFrame(columns=cols)
     try:
         binding = pd.read_parquet(path, columns=cols)
     except Exception:
-        logger.exception("build-stg-geo-intervals: failed to read binding file: %s", path)
+        logger.exception("build-fct-geo-intervals: failed to read binding file: %s", path)
         return pd.DataFrame(columns=cols)
     binding["msisdn"] = normalize_msisdn(binding.get("msisdn"))
     if value_col == "imsi":

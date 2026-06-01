@@ -1,4 +1,4 @@
-"""Сборка ``stg_msisdn_imsi``: MSISDN–IMSI + ``operator_id`` из наблюдений ``stg_geo_all``."""
+"""Сборка ``fct_msisdn_imsi``: MSISDN–IMSI + ``operator_id`` из наблюдений ``stg_geo_all``."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.pipelines.stg.subscriber_ids import normalize_imsi, normalize_msisdn, to_digit_string_series
 from mobile.project_paths import (
-    DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH,
+    DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH,
     resolve_project_path,
     stg_geo_all_output_path,
 )
@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 _OPEN_TO = pd.Timestamp("2999-12-31 23:59:59")
 _PAIR_VALUE_COL = "imsi"
 
-STG_MSISDN_IMSI_TABLE = "stg_msisdn_imsi"
-STG_MSISDN_IMSI_FIELDS: list[dict[str, str]] = [
+STG_MSISDN_IMSI_TABLE = "fct_msisdn_imsi"
+FCT_MSISDN_IMSI_FIELDS: list[dict[str, str]] = [
     {"name": "msisdn", "type": "string"},
     {"name": "imsi", "type": "string"},
     {"name": "operator_id", "type": "long"},
@@ -36,17 +36,17 @@ STG_MSISDN_IMSI_FIELDS: list[dict[str, str]] = [
 
 
 def _load_schema_contract(schema_path: Path) -> None:
-    global STG_MSISDN_IMSI_TABLE, STG_MSISDN_IMSI_FIELDS
+    global STG_MSISDN_IMSI_TABLE, FCT_MSISDN_IMSI_FIELDS
     with schema_path.open(encoding="utf-8") as file:
         cfg = json.load(file)
     STG_MSISDN_IMSI_TABLE = str(cfg.get("table", STG_MSISDN_IMSI_TABLE))
-    STG_MSISDN_IMSI_FIELDS = [
-        {"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", STG_MSISDN_IMSI_FIELDS)
+    FCT_MSISDN_IMSI_FIELDS = [
+        {"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", FCT_MSISDN_IMSI_FIELDS)
     ]
 
 
-_load_schema_contract(DEFAULT_STG_MSISDN_IMSI_SCHEMA_PATH)
-_FIELD_NAMES = [f["name"] for f in STG_MSISDN_IMSI_FIELDS]
+_load_schema_contract(DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH)
+_FIELD_NAMES = [f["name"] for f in FCT_MSISDN_IMSI_FIELDS]
 
 
 def _drop_intervals_overlapping_day(
@@ -110,7 +110,7 @@ def build_imsi_intervals_with_operator(imsi_intervals: pd.DataFrame) -> pd.DataF
 
 
 def build_imsi_intervals_from_src(raw: pd.DataFrame, *, report_month: date) -> pd.DataFrame:
-    """Интервалы из ``src_person`` (MNP) для ``build-stg-person``; ``operator_id`` из IMSI."""
+    """Интервалы из ``src_person`` (MNP) для ``build-fct-person``; ``operator_id`` из IMSI."""
     if raw.empty:
         return pd.DataFrame(columns=_FIELD_NAMES)
 
@@ -149,8 +149,8 @@ def run_build(
     stg_geo_all_path: str | Path,
     output_path: str | Path,
 ) -> dict[str, Any]:
-    """Собрать ``stg_msisdn_imsi`` за день из ``stg_geo_all`` (IMSI + operator_id из MNC)."""
-    command = "build-stg-msisdn-imsi-operator"
+    """Собрать ``fct_msisdn_imsi`` за день из ``stg_geo_all`` (IMSI + operator_id из MNC)."""
+    command = "build-fct-msisdn-imsi-operator"
     perf: dict[str, Any] = {}
     started = time.perf_counter()
     day_start = datetime.combine(report_date, datetime.min.time())
@@ -266,7 +266,7 @@ def upsert_imsi_daily_into_month_parquet(
     merged = _merge_imsi_intervals(combined)
     if not day_part.empty and merged.empty:
         logger.warning(
-            "build-stg-msisdn-imsi-operator: merge dropped %s day rows (check groupby null keys)",
+            "build-fct-msisdn-imsi-operator: merge dropped %s day rows (check groupby null keys)",
             len(day_part),
         )
     result = _coerce_imsi_frame(merged)
@@ -303,12 +303,12 @@ def _resolve_geo_all_source_path(report_date: date, source_path: str | Path | No
 
 def _read_geo_all(report_date: date, source_path: Path) -> pd.DataFrame:
     if not source_path.exists():
-        logger.warning("build-stg-msisdn-imsi-operator: stg_geo_all not found for %s at %s", report_date, source_path)
+        logger.warning("build-fct-msisdn-imsi-operator: stg_geo_all not found for %s at %s", report_date, source_path)
         return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
     try:
         return pd.read_parquet(source_path, columns=["msisdn", "imsi", "start_time_utc"])
     except Exception:
-        logger.exception("build-stg-msisdn-imsi-operator: failed to read stg_geo_all at %s", source_path)
+        logger.exception("build-fct-msisdn-imsi-operator: failed to read stg_geo_all at %s", source_path)
         return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
 
 

@@ -1,0 +1,20 @@
+{
+    "table": "fct_person",
+    "description": "Месячный профиль физлиц: кластер ID+bio+SIM+bindings+MNP",
+    "fields": [
+        { "name": "report_date", "type": "date", "comment": "1-е число отчетного месяца (YYYY-MM-01)" },
+        { "name": "person_id", "type": "string", "comment": "prs_ + SHA256(person_cluster_key); стабилен через ledger" },
+        { "name": "person_cluster_key", "type": "string", "comment": "Канонический ключ кластера (bio/iccid/tech)" },
+        { "name": "person_confidence", "type": "string", "comment": "high / medium / low — сила идентификации" },
+        { "name": "sim_count", "type": "long", "comment": "Число distinct SIM (imsi|iccid) у персоны в месяце" },
+        { "name": "msisdn", "type": "string", "comment": "Основной MSISDN (последний интервал)" },
+        { "name": "imsi", "type": "string", "comment": "Основной IMSI" },
+        { "name": "imei", "type": "string", "comment": "Основной IMEI" },
+        { "name": "gender", "type": "string", "comment": "M / F / U" },
+        { "name": "age", "type": "string", "comment": "Возраст на начало месяца или U" },
+        { "name": "citizenship", "type": "string", "comment": "Цифровой код ОКСМ (numeric_code) или U" },
+        { "name": "operator_id", "type": "long", "comment": "operator_Id основной подписки" },
+        { "name": "actually_from", "type": "timestamp", "comment": "Начало интервала основной подписки" },
+        { "name": "actually_to", "type": "timestamp", "comment": "Конец интервала основной подписки" }
+    ]
+}

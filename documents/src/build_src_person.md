@@ -157,7 +157,7 @@ uv run mobile build-src-person --target-per-operator 5000
 | Идентичность | `home_operator` = serving; с вероятностью `movement_ratio` — соседний оператор (`_neighbor_operator_vectorized`); с `inter_operator_transition_ratio` — другой оператор для triplet (`_neighbor_operator`) |
 | MSISDN/IMSI/IMEI | `_identity_triplet(home_for_ids, sid)`; ~2% `INVALID_ISDN_PROBABILITY` → `_sample_invalid_isdn_digits`; ~3% `IDENTITY_FIELD_LEAK_PROBABILITY` — imsi/imei в «чужих» `identity_type` |
 | Статусы | `closed_contract_ratio`, `inactive_ratio` → `active_now`; `abonent_status` 0/1 |
-| Тип клиента | `corporate_ratio` → `client_type` 0/1; ФЛ/ЮЛ поля, иностранцы `foreign_subscriber_ratio` → `_assign_citizenship_codes` (alpha-2 в генераторе; в `stg_person` → `numeric_code` через [`build-stg-person`](../stg/build_stg_person.md)) |
+| Тип клиента | `corporate_ratio` → `client_type` 0/1; ФЛ/ЮЛ поля, иностранцы `foreign_subscriber_ratio` → `_assign_citizenship_codes` (alpha-2 в генераторе; в `fct_person` → `numeric_code` через [`build-fct-person`](../fct/build_fct_person.md)) |
 | identity_type | веса `[0.74, 0.12, 0.06, 0.05, 0.03]` для типов 2/4/5/3/1; условные колонки GSM/data/VoIP/CDMA |
 | Интервалы | `actually_from = day`; `actually_to` = `ACTUALLY_TO_OPEN` если активен, иначе конец дня; договор/услуги согласованы с `closed_contract` |
 | Локация | `abonent_last_location` с весами; `lac`/`cell` только при `== 0` |
@@ -167,7 +167,7 @@ uv run mobile build-src-person --target-per-operator 5000
 
 Возвращается `DataFrame` → `_align_columns_for_schema` → `pa.Table.from_pandas(..., schema=arrow_schema)`.
 
-### Шаг 2a. MNP и вторая SIM (для `build-stg-person`)
+### Шаг 2a. MNP и вторая SIM (для `build-fct-person`)
 
 Вызов: `_append_mnp_and_multi_sim_rows` после склейки чанков операторов, до записи parquet дня.
 
@@ -189,7 +189,7 @@ uv run mobile build-src-person --target-per-operator 5000
 2. Выбор строк; копия с тем же `contract_number` и `isdn`;
 3. Новые `imsi` + `iccid`; `actually_from` = день; `actually_to` = open.
 
-**Downstream:** при нескольких `load_day` в месяце [`build-stg-person`](../stg/build_stg_person.md) (MNP из `src_person`) видит две записи с одним MSISDN и разными `operator_Id`; гео-наблюдения — [`build-stg-msisdn-imsi-operator`](../stg/build_stg_msisdn_imsi_operator.md).
+**Downstream:** при нескольких `load_day` в месяце [`build-fct-person`](../fct/build_fct_person.md) (MNP из `src_person`) видит две записи с одним MSISDN и разными `operator_Id`; гео-наблюдения — [`build-fct-msisdn-imsi-operator`](../fct/build_fct_msisdn_imsi_operator.md).
 
 ### Шаг 3. Завершение оркестратора
 
@@ -213,5 +213,5 @@ uv run mobile build-src-person --target-per-operator 5000
 |----------|------|
 | Схема витрины | [`src/mobile/schema/src/person.json`](../../src/mobile/schema/src/person.json) |
 | ETL | [`src/mobile/pipelines/src/person.py`](../../src/mobile/pipelines/src/person.py) |
-| STG person | [`build_stg_person.md`](../stg/build_stg_person.md) |
+| STG person | [`build_fct_person.md`](../fct/build_fct_person.md) |
 | Пути по умолчанию | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |

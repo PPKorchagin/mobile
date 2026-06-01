@@ -9,11 +9,11 @@ import pandas as pd
 from shapely import wkt
 from shapely.errors import GEOSException
 
-from mobile.pipelines.stg.bs import STG_BS_FIELDS
+from mobile.pipelines.stg.bs import FCT_BS_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_BS"
+LOG_TAG = "DQ_FCT_BS"
 _OPEN_END_TS = pd.Timestamp("2262-04-11 00:00:00")
 _ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
 _BS_TYPES = frozenset({"m", "f", "i", "x", "o"})
@@ -21,9 +21,9 @@ _TELECOMSTANDARD = frozenset({"2G", "3G", "4G"})
 
 
 def run_dq(parquet_path: str | Path) -> dict[str, Any]:
-    """DQ витрины ``stg_bs`` по пути parquet (контракт полей — ``STG_BS_FIELDS``)."""
+    """DQ витрины ``fct_bs`` по пути parquet (контракт полей — ``FCT_BS_FIELDS``)."""
     resolved = _resolve_parquet_path(parquet_path)
-    expected_columns = [field["name"] for field in STG_BS_FIELDS]
+    expected_columns = [field["name"] for field in FCT_BS_FIELDS]
 
     if not resolved.exists():
         summary = {"status": "failed", "reason": "parquet_not_found", "parquet_path": str(resolved)}

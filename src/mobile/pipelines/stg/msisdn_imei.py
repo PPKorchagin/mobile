@@ -1,4 +1,4 @@
-"""Сборка ``stg_msisdn_imei``: интервалы MSISDN–IMEI из ``stg_geo_all`` за отчётный день."""
+"""Сборка ``fct_msisdn_imei``: интервалы MSISDN–IMEI из ``stg_geo_all`` за отчётный день."""
 
 from __future__ import annotations
 
@@ -16,16 +16,16 @@ from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.pipelines.stg.subscriber_ids import normalize_imei, normalize_msisdn
 from mobile.project_paths import report_month_start
 from mobile.project_paths import (
-    DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH,
+    DEFAULT_FCT_MSISDN_IMEI_SCHEMA_PATH,
     resolve_project_path,
     stg_geo_all_output_path,
-    stg_msisdn_imei_output_path,
+    fct_msisdn_imei_output_path,
 )
 
 logger = logging.getLogger(__name__)
 
-STG_MSISDN_IMEI_TABLE = "stg_msisdn_imei"
-STG_MSISDN_IMEI_FIELDS: list[dict[str, str]] = [
+STG_MSISDN_IMEI_TABLE = "fct_msisdn_imei"
+FCT_MSISDN_IMEI_FIELDS: list[dict[str, str]] = [
     {"name": "msisdn", "type": "string"},
     {"name": "imei", "type": "string"},
     {"name": "valid_from", "type": "timestamp"},
@@ -35,16 +35,16 @@ _PAIR_VALUE_COL = "imei"
 
 
 def _load_schema_contract(schema_path: Path) -> None:
-    global STG_MSISDN_IMEI_TABLE, STG_MSISDN_IMEI_FIELDS
+    global STG_MSISDN_IMEI_TABLE, FCT_MSISDN_IMEI_FIELDS
     with schema_path.open(encoding="utf-8") as file:
         cfg = json.load(file)
     STG_MSISDN_IMEI_TABLE = str(cfg.get("table", STG_MSISDN_IMEI_TABLE))
-    STG_MSISDN_IMEI_FIELDS = [
-        {"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", STG_MSISDN_IMEI_FIELDS)
+    FCT_MSISDN_IMEI_FIELDS = [
+        {"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", FCT_MSISDN_IMEI_FIELDS)
     ]
 
 
-_load_schema_contract(DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH)
+_load_schema_contract(DEFAULT_FCT_MSISDN_IMEI_SCHEMA_PATH)
 
 
 def _drop_intervals_overlapping_day(
@@ -116,9 +116,9 @@ def run_build(
     *,
     stg_geo_all_path: str | Path,
     output_path: str | Path,
-    command: str = "build-stg-msisdn-imei",
+    command: str = "build-fct-msisdn-imei",
 ) -> dict[str, Any]:
-    """Собрать ``stg_msisdn_imei`` за ``report_date``."""
+    """Собрать ``fct_msisdn_imei`` за ``report_date``."""
     out = resolve_project_path(output_path)
     geo = resolve_project_path(stg_geo_all_path)
     return _run_build(
@@ -144,7 +144,7 @@ def _run_build(
     started = time.perf_counter()
     day_start = datetime.combine(report_date, datetime.min.time())
     day_end = datetime.combine(report_date, datetime.max.time())
-    field_names = [f["name"] for f in STG_MSISDN_IMEI_FIELDS]
+    field_names = [f["name"] for f in FCT_MSISDN_IMEI_FIELDS]
     source_path = _resolve_geo_all_source_path(report_date, stg_geo_all_path)
 
     with timed_stage("read_events_sec", perf):
@@ -218,12 +218,12 @@ def _resolve_geo_all_source_path(report_date: date, source_path: str | Path | No
 
 def _read_geo_all(report_date: date, source_path: Path) -> pd.DataFrame:
     if not source_path.exists():
-        logger.warning("build-stg-msisdn-imei: stg_geo_all not found for %s at %s", report_date, source_path)
+        logger.warning("build-fct-msisdn-imei: stg_geo_all not found for %s at %s", report_date, source_path)
         return pd.DataFrame(columns=["msisdn", "imei", "start_time_utc"])
     try:
         return pd.read_parquet(source_path, columns=["msisdn", "imei", "start_time_utc"])
     except Exception:
-        logger.exception("build-stg-msisdn-imei: failed to read stg_geo_all at %s", source_path)
+        logger.exception("build-fct-msisdn-imei: failed to read stg_geo_all at %s", source_path)
         return pd.DataFrame(columns=["msisdn", "imei", "start_time_utc"])
 
 

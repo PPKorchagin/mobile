@@ -20,17 +20,17 @@ from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_SRC_BS_SCHEMA_PATH,
-    DEFAULT_STG_BS_SCHEMA_PATH,
+    DEFAULT_FCT_BS_SCHEMA_PATH,
     DEFAULT_DIM_OKTMO_OUTPUT_PATH,
     DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
     resolve_project_path,
-    stg_bs_output_path,
+    fct_bs_output_path,
 )
 
 logger = logging.getLogger(__name__)
 
-STG_BS_TABLE = "stg_bs"
-STG_BS_FIELDS: list[dict[str, Any]] = []
+STG_BS_TABLE = "fct_bs"
+FCT_BS_FIELDS: list[dict[str, Any]] = []
 SRC_BS_FIELD_TYPES: dict[str, str] = {}
 
 SRC_BS_READ_COLUMNS = (
@@ -81,11 +81,11 @@ _M_PER_DEG_LON_AT_EQUATOR = 111_320.0
 
 
 def _load_schema_contract(schema_path: Path) -> None:
-    global STG_BS_TABLE, STG_BS_FIELDS
+    global STG_BS_TABLE, FCT_BS_FIELDS
     with schema_path.open(encoding="utf-8") as file:
         cfg = json.load(file)
     STG_BS_TABLE = str(cfg.get("table", STG_BS_TABLE))
-    STG_BS_FIELDS = list(cfg.get("fields", STG_BS_FIELDS))
+    FCT_BS_FIELDS = list(cfg.get("fields", FCT_BS_FIELDS))
 
 
 def _load_src_bs_schema(schema_path: Path) -> None:
@@ -97,7 +97,7 @@ def _load_src_bs_schema(schema_path: Path) -> None:
     }
 
 
-_load_schema_contract(DEFAULT_STG_BS_SCHEMA_PATH)
+_load_schema_contract(DEFAULT_FCT_BS_SCHEMA_PATH)
 _load_src_bs_schema(DEFAULT_SRC_BS_SCHEMA_PATH)
 
 
@@ -108,12 +108,12 @@ def run_build(
     output_path: str | Path | None = None,
     time_zones_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Собрать ``stg_bs`` из полного ``src_bs`` с SCD-историей изменений."""
-    fields = STG_BS_FIELDS
+    """Собрать ``fct_bs`` из полного ``src_bs`` с SCD-историей изменений."""
+    fields = FCT_BS_FIELDS
     out = (
         resolve_project_path(output_path)
         if output_path is not None
-        else stg_bs_output_path()
+        else fct_bs_output_path()
     )
     src_path = resolve_project_path(src_bs_path or DEFAULT_BS_LAYOUT)
     oktmo_file = resolve_project_path(oktmo_path or DEFAULT_DIM_OKTMO_OUTPUT_PATH)
@@ -169,7 +169,7 @@ def run_build(
         final_df.to_parquet(out, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
 
     stats = {
-        "command": "build-stg-bs",
+        "command": "build-fct-bs",
         "table": STG_BS_TABLE,
         "output_path": str(out),
         "src_bs_path": str(src_path),
@@ -182,8 +182,8 @@ def run_build(
         "src_bs_prepare": src_prepare,
     }
     perf_metrics["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-bs", metrics={**stats, **perf_metrics})
-    logger.info("build-stg-bs completed: %s", stats)
+    append_command_metrics(command="build-fct-bs", metrics={**stats, **perf_metrics})
+    logger.info("build-fct-bs completed: %s", stats)
     return {**stats, **perf_metrics}
 
 
@@ -1003,7 +1003,7 @@ def _coerce_types(df: pd.DataFrame, fields: list[dict[str, Any]]) -> pd.DataFram
         elif kind == "boolean":
             out[name] = out[name].astype("boolean")
         else:
-            raise ValueError(f"Unsupported field type in stg_bs schema: {kind}")
+            raise ValueError(f"Unsupported field type in fct_bs schema: {kind}")
     return out
 
 

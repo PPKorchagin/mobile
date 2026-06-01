@@ -15,7 +15,7 @@
 | 3 | Выполнить глубокий профиль на одном выбранном дне | null/cardinality, доменные checks по фактическим колонкам |
 | 4 | Сформировать `summary` | Счётчики checks и итоговый статус |
 
-**Бизнес-назначение:** проверить качество синтетической витрины Person по дням и контракт трансформации в `stg_person`.
+**Бизнес-назначение:** проверить качество синтетической витрины Person по дням и контракт трансформации в `fct_person`.
 
 **В scope задач:** покрытие каталогов и `_SUCCESS`, period-агрегаты, профили полей, форматы MSISDN/IMSI/IMEI, temporal/FIO/stg_contract.
 
@@ -111,7 +111,7 @@ uv run mobile nb-src-person
 
 ### Шаг 3. Доменные и контрактные проверки
 
-1. **`stg_contract.*`:** критичные поля для трансформации в [`build-stg-person`](../../stg/build_stg_person.md); заполненность `isdn`/`imsi`/`imei`/FIO у физлиц.
+1. **`stg_contract.*`:** критичные поля для трансформации в [`build-fct-person`](../../fct/build_fct_person.md); заполненность `isdn`/`imsi`/`imei`/FIO у физлиц.
 2. **`identity_type.*`:** заполненность полей по типу identity; `identity_type.non_gsm_isdn_leak`.
 3. **Ключи и форматы:** `key_integrity.operator_isdn`, `identity_duplicate_keys`, `isdn_format`, `imsi_format`, `imei_format`, `iccid_format`, `passport_format`.
 4. **Temporal:** `temporal_consistency`, `actually_to_open_interval` (`ACTUALLY_TO_OPEN` = `2261-12-31 23:59:59`), `closed_contract_ratio`.
@@ -186,7 +186,7 @@ uv run mobile nb-src-person
 
 | Check | Статус при сбое | Смысл | Обоснование |
 |-------|-----------------|-------|-------------|
-| `stg_contract.columns` | **failed** | Нет критичных полей для STG | `build-stg-person` ожидает фиксированный набор из `src_person` |
+| `stg_contract.columns` | **failed** | Нет критичных полей для STG | `build-fct-person` ожидает фиксированный набор из `src_person` |
 | `stg_contract.physical_rows` | **failed** | Нет строк `client_type=0` | Физлица — основной объём person-пайплайна |
 | `stg_contract.physical.{isdn,imsi,imei}_present` | **failed/warning** | Полнота идентификаторов у ФЛ | GSM-поля обязательны для person identity graph |
 | `stg_contract.physical.interval_order` | **failed/warning** | `actually_to >= actually_from` | Интервалы переносятся as-is в STG |
@@ -232,4 +232,4 @@ CLI не завершается с ненулевым exit code при failed ch
 | DQ pipeline | [`pipelines/dq/src/person.py`](../../../src/mobile/pipelines/dq/src/person.py) |
 | ETL build `src_person` | [`pipelines/src/person.py`](../../../src/mobile/pipelines/src/person.py) |
 | CLI wiring | [`cli.py`](../../../src/mobile/cli.py) |
-| STG person | [`build_stg_person.md`](../../stg/build_stg_person.md) |
+| STG person | [`build_fct_person.md`](../../fct/build_fct_person.md) |

@@ -1,4 +1,4 @@
-"""DQ месячной витрины ``stg_msisdn_imei``."""
+"""DQ месячной витрины ``fct_msisdn_imei``."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.pipelines.stg.msisdn_imei import STG_MSISDN_IMEI_FIELDS
+from mobile.pipelines.stg.msisdn_imei import FCT_MSISDN_IMEI_FIELDS
 from mobile.pipelines.stg.subscriber_ids import (
     IMEI_MAX_LEN,
     IMEI_MIN_LEN,
@@ -22,16 +22,16 @@ from mobile.pipelines.stg.subscriber_ids import (
 from mobile.project_paths import report_month_start, resolve_project_path
 
 logger = logging.getLogger(__name__)
-LOG_TAG = "DQ_STG_MSISDN_IMEI"
+LOG_TAG = "DQ_FCT_MSISDN_IMEI"
 
-_EXPECTED_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in STG_MSISDN_IMEI_FIELDS)
+_EXPECTED_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in FCT_MSISDN_IMEI_FIELDS)
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(_EXPECTED_COLUMNS)
 
 
-def run_dq(*, report_date: date, stg_msisdn_imei_path: str | Path) -> dict[str, Any]:
-    """DQ ``stg_msisdn_imei``; ``report_date`` — любой день месяца, приводится к 1-му числу."""
+def run_dq(*, report_date: date, fct_msisdn_imei_path: str | Path) -> dict[str, Any]:
+    """DQ ``fct_msisdn_imei``; ``report_date`` — любой день месяца, приводится к 1-му числу."""
     report_month = report_month_start(report_date)
-    source_path = _resolve_source_path(report_date=report_month, stg_msisdn_imei_path=stg_msisdn_imei_path)
+    source_path = _resolve_source_path(report_date=report_month, fct_msisdn_imei_path=fct_msisdn_imei_path)
     checks = 0
     warnings = 0
     failed = 0
@@ -47,7 +47,7 @@ def run_dq(*, report_date: date, stg_msisdn_imei_path: str | Path) -> dict[str, 
 
     base: dict[str, Any] = {
         "report_date": report_month.isoformat(),
-        "stg_msisdn_imei_path": str(source_path),
+        "fct_msisdn_imei_path": str(source_path),
     }
     if report_date != report_month:
         base["report_date_input"] = report_date.isoformat()
@@ -183,8 +183,8 @@ def run_dq(*, report_date: date, stg_msisdn_imei_path: str | Path) -> dict[str, 
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_msisdn_imei_path: str | Path) -> Path:
-    resolved = resolve_project_path(stg_msisdn_imei_path)
+def _resolve_source_path(*, report_date: date, fct_msisdn_imei_path: str | Path) -> Path:
+    resolved = resolve_project_path(fct_msisdn_imei_path)
     if resolved.is_dir():
         month = report_month_start(report_date)
         return resolved / f"{month.isoformat()}.parquet"

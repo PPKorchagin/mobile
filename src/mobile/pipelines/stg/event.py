@@ -1,4 +1,4 @@
-"""Сборка ``stg_event`` из mobile-витрин за отчётную дату в локальном времени абонента."""
+"""Сборка ``dds_event`` из mobile-витрин за отчётную дату в локальном времени абонента."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ from mobile.project_paths import (
 
 logger = logging.getLogger(__name__)
 
-STG_EVENT_TABLE = "stg_event"
+STG_EVENT_TABLE = "dds_event"
 
-STG_EVENT_FIELDS: list[dict[str, str]] = [
+DDS_EVENT_FIELDS: list[dict[str, str]] = [
     {"name": "event_timestamp", "type": "string"},
     {"name": "imsi", "type": "string"},
     {"name": "imei", "type": "string"},
@@ -45,7 +45,7 @@ EVENT_CODES: Final[dict[str, int]] = {
     "location": 10004,
 }
 
-_EVENT_COLUMNS: Final[tuple[str, ...]] = tuple(f["name"] for f in STG_EVENT_FIELDS)
+_EVENT_COLUMNS: Final[tuple[str, ...]] = tuple(f["name"] for f in DDS_EVENT_FIELDS)
 
 _MART_READ_COLUMNS: Final[dict[str, list[str]]] = {
     "cdr": ["Started", "IMSI", "IMEI", "CallingNumber", "OwnerMCCMNC", "BSStartLac", "BSStartCell"],
@@ -81,7 +81,7 @@ def run_build(
     location_path: str | Path,
     output_path: str | Path,
 ) -> dict[str, Any]:
-    """Собрать ``stg_event`` в ``output_path`` за отчётную дату.
+    """Собрать ``dds_event`` в ``output_path`` за отчётную дату.
 
     Строки отбираются по ``Started`` (локальное время абонента), parquet в пути — окно ±1 день.
     После объединения витрин — сортировка по ``imsi`` / ``event_timestamp``,
@@ -144,7 +144,7 @@ def run_build(
 
     job_count = int(len(merged))
     logger.info(
-        "build-stg-event report_date=%s job_start=%s job_end=%s job_count=%s path=%s",
+        "build-dds-event report_date=%s job_start=%s job_end=%s job_count=%s path=%s",
         report_date.isoformat(),
         job_start.isoformat(),
         job_end.isoformat(),
@@ -164,8 +164,8 @@ def run_build(
         "job_end": job_end.isoformat(),
     }
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
-    append_command_metrics(command="build-stg-event", metrics={**stats, **perf})
-    logger.info("build-stg-event completed: %s", stats)
+    append_command_metrics(command="build-dds-event", metrics={**stats, **perf})
+    logger.info("build-dds-event completed: %s", stats)
     return stats
 
 
