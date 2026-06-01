@@ -26,6 +26,8 @@ from mobile.project_paths import (
     DEFAULT_NB_SRC_EXCL_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_MOBILE_EXECUTED_PATH,
     DEFAULT_NB_SRC_MOBILE_NOTEBOOK_PATH,
+    DEFAULT_NB_STG_BS_EXECUTED_PATH,
+    DEFAULT_NB_STG_BS_NOTEBOOK_PATH,
     DEFAULT_NB_STG_EVENT_EXECUTED_PATH,
     DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_PERSON_EXECUTED_PATH,
@@ -169,6 +171,15 @@ def run_nb_stg_event() -> None:
     run_notebook(
         source_notebook=DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH,
         executed_notebook=DEFAULT_NB_STG_EVENT_EXECUTED_PATH,
+    )
+
+
+def run_nb_stg_bs() -> None:
+    if DEFAULT_NB_STG_BS_EXECUTED_PATH.exists():
+        DEFAULT_NB_STG_BS_EXECUTED_PATH.unlink()
+    run_notebook(
+        source_notebook=DEFAULT_NB_STG_BS_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_STG_BS_EXECUTED_PATH,
     )
 
 

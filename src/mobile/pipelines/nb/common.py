@@ -10,13 +10,14 @@ import folium
 import matplotlib.pyplot as plt
 import pandas as pd
 from branca.colormap import StepColormap
-from IPython.display import display
+from IPython.display import HTML, display
 from shapely import wkt
 
 from folium.plugins import FastMarkerCluster
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
     DEFAULT_STG_OKSM_OUTPUT_PATH,
+    stg_bs_output_path,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
@@ -879,6 +880,14 @@ def display_src_bs_parquet_summary(root: Path) -> None:
         display(df["subject"].value_counts().head(10).to_frame("rows"))
 
 
+def display_folium_map(m: folium.Map) -> None:
+    """Показать folium в ячейке ноутбука (без сохранения HTML на диск)."""
+    try:
+        display(m)
+    except Exception:
+        display(HTML(m._repr_html_()))
+
+
 def render_src_bs_folium_map(root: Path) -> folium.Map:
     """Карта ``src_bs``: кластер точек, слои по generation и контуры ОКТМО level=1."""
     bs_parquet = _resolve_parquet(root, DEFAULT_BS_LAYOUT)
@@ -914,7 +923,13 @@ def render_src_bs_folium_map(root: Path) -> folium.Map:
 
     center_lat = float(pts["coord_y"].mean())
     center_lon = float(pts["coord_x"].mean())
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=5, tiles="CartoDB positron")
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=5,
+        tiles="CartoDB positron",
+        width="100%",
+        height="100%",
+    )
 
     all_points = pts[["coord_y", "coord_x"]].astype(float).values.tolist()
     fg_all = folium.FeatureGroup(name=f"Все БС (FastMarkerCluster): {len(all_points):,}", show=True)
@@ -1984,6 +1999,616 @@ def render_src_mobile_dq_marts(latest: pd.DataFrame) -> plt.Figure:
     fig.suptitle("Витрины и STG-контракт", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
+
+
+# --- stg_bs DQ charts ---
+
+_STG_BS_OPEN_END_PREFIX = "2262-04-11"
+_STG_BS_CARDINALITY_FOCUS = (
+    "mcc",
+    "mnc",
+    "lac",
+    "cell_id",
+    "telecomstandard",
+    "bs_type",
+    "timezone",
+    "oktmo_code_1",
+    "oktmo_code_2",
+)
+
+
+def stg_bs_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, record in latest.iterrows():
+        check = str(record["check"])
+        if not check.startswith("cardinality."):
+            continue
+        metrics = record.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        rows.append(
+            {
+                "field": check.removeprefix("cardinality."),
+                "nunique": int(metrics.get("nunique") or 0),
+            }
+        )
+    if not rows:
+        return pd.DataFrame(columns=["field", "nunique"])
+    out = pd.DataFrame(rows)
+    focus = [f for f in _STG_BS_CARDINALITY_FOCUS if f in set(out["field"])]
+    if focus:
+        out = pd.concat([out[out["field"].isin(focus)], out[~out["field"].isin(focus)]], ignore_index=True)
+    return out.head(20)
+
+
+def stg_bs_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    specs: tuple[tuple[str, str, str], ...] = (
+        ("key_presence", "null_key_rows", "null CGI rows"),
+        ("key_uniqueness_per_snapshot", "duplicate_rows", "duplicate key rows"),
+        ("coords_range", "invalid_lon_count", "invalid lon"),
+        ("coords_range", "invalid_lat_count", "invalid lat"),
+        ("bs_type_vocab", "invalid_bs_type_count", "invalid bs_type"),
+        ("telecomstandard_vocab", "invalid_telecomstandard_count", "invalid telecomstandard"),
+    )
+    rows: list[dict[str, Any]] = []
+    for check, key, label in specs:
+        metrics = _metrics_for_check(latest, check)
+        if key not in metrics:
+            continue
+        hit = latest[latest["check"] == check]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append({"metric": label, "count": int(metrics[key]), "status": status})
+    return pd.DataFrame(rows)
+
+
+def stg_bs_geometry_metrics_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for geom_check in ("geometry.sector_wkt", "geometry.mapinfo_wkt"):
+        metrics = _metrics_for_check(latest, geom_check)
+        if not metrics:
+            continue
+        short = geom_check.removeprefix("geometry.")
+        for key, label in (
+            ("valid_geometry_count", "valid"),
+            ("parse_error_count", "parse errors"),
+            ("invalid_topology_count", "invalid topology"),
+            ("empty_geometry_count", "empty"),
+            ("unsupported_geom_type_count", "unsupported type"),
+        ):
+            if key in metrics:
+                rows.append({"geometry": short, "metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def render_stg_bs_dq_gates(latest: pd.DataFrame) -> plt.Figure:
+    gates = stg_bs_gate_counts_frame(latest)
+    geom = stg_bs_geometry_quality_frame(latest)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
+    if gates.empty:
+        axes[0].set_title("Gate counts — нет данных")
+        axes[0].axis("off")
+    else:
+        colors = [
+            "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+            for s in gates["status"]
+        ]
+        work = gates.sort_values("count", ascending=True)
+        axes[0].barh(work["metric"], work["count"], color=colors, alpha=0.88)
+        axes[0].set_xlabel("count")
+        axes[0].set_title("Ключи, координаты, словари (DQ)")
+    plot_count_bars(geom, title="WKT geometry (DQ)", ax=axes[1], color="#17becf")
+    fig.suptitle("Gate-проверки stg_bs", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_bs_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
+    nulls = null_ratio_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    if nulls.empty:
+        ax.set_title("nulls.* — нет данных в логе")
+        ax.axis("off")
+        return fig
+    plot_null_ratios(nulls, ax=ax)
+    fig.suptitle("Доля null по полям контракта (DQ)", fontsize=12)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_bs_dq_geometry_detail(latest: pd.DataFrame) -> plt.Figure:
+    geom = stg_bs_geometry_metrics_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 4))
+    if geom.empty:
+        ax.set_title("geometry.* — нет данных")
+        ax.axis("off")
+        return fig
+    pivot = geom.pivot(index="metric", columns="geometry", values="count").fillna(0)
+    pivot = pivot.loc[pivot.sum(axis=1).sort_values(ascending=True).index]
+    pivot.plot(kind="barh", ax=ax, color=["#17becf", "#9467bd"], alpha=0.88)
+    ax.set_xlabel("count (DQ log)")
+    ax.set_title("WKT: sector_wkt vs mapinfo_wkt")
+    ax.legend(title="geometry", fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_bs_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
+    card = stg_bs_cardinality_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if card.empty:
+        ax.set_title("cardinality.* — нет данных")
+        ax.axis("off")
+        return fig
+    work = card.sort_values("nunique", ascending=True)
+    ax.barh(work["field"], work["nunique"], color="#9467bd", alpha=0.88)
+    ax.set_xlabel("nunique (DQ log)")
+    ax.set_title("Кардинальность полей (top-20)")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_bs_parquet_scd_mix(root: Path) -> plt.Figure:
+    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+    if not bs_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
+    df = pd.read_parquet(bs_parquet, columns=["date_off", "telecomstandard", "bs_type"])
+    date_off = pd.to_datetime(df["date_off"], errors="coerce")
+    open_mask = date_off.dt.strftime("%Y-%m-%d").eq(_STG_BS_OPEN_END_PREFIX)
+    scd = pd.DataFrame(
+        [
+            {"segment": "open (active)", "rows": int(open_mask.sum())},
+            {"segment": "closed (history)", "rows": int((~open_mask).sum())},
+        ]
+    )
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    axes[0].pie(
+        scd["rows"],
+        labels=scd["segment"],
+        autopct=lambda pct: f"{pct:.1f}%" if pct >= 2 else "",
+        colors=["#2ca02c", "#aec7e8"],
+        startangle=90,
+    )
+    axes[0].set_title("SCD: open vs closed")
+    if "telecomstandard" in df.columns:
+        tc = df["telecomstandard"].astype("string").fillna("<NA>").value_counts().head(8)
+        axes[1].pie(
+            tc.values,
+            labels=tc.index.astype(str),
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            startangle=90,
+        )
+        axes[1].set_title("telecomstandard")
+    else:
+        axes[1].axis("off")
+    if "bs_type" in df.columns:
+        bt = df["bs_type"].astype("string").fillna("<NA>").value_counts()
+        axes[2].bar(bt.index.astype(str), bt.values, color="#ff7f0e", alpha=0.88)
+        axes[2].set_title("bs_type")
+        plt.setp(axes[2].get_xticklabels(), rotation=25, ha="right")
+    else:
+        axes[2].axis("off")
+    fig.suptitle("Профиль parquet stg_bs", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+_STG_BS_MAP_STD_COLORS = {"2G": "#1f77b4", "3G": "#2ca02c", "4G": "#ff7f0e", "unknown": "#6b7280"}
+_STG_BS_WKT_SECTOR_STYLE = {
+    "color": "#2563eb",
+    "weight": 1,
+    "fillColor": "#2563eb",
+    "fillOpacity": 0.22,
+}
+_STG_BS_WKT_MAPINFO_STYLE = {
+    "color": "#b45309",
+    "weight": 1,
+    "fillColor": "#b45309",
+    "fillOpacity": 0.18,
+}
+_STG_BS_POINTS_DETAIL_MAX = 2500
+_STG_BS_WKT_FEATURES_MAX = 600
+_STG_BS_FILTER_ALL = "Все"
+
+
+def _stg_bs_filter_options(series: pd.Series) -> list[str]:
+    vals = series.dropna().astype("string").str.strip()
+    vals = vals[vals != ""].unique()
+    return [_STG_BS_FILTER_ALL] + sorted(vals.tolist(), key=str)
+
+
+def _apply_stg_bs_filters(
+    df: pd.DataFrame,
+    *,
+    mnc: str,
+    telecomstandard: str,
+    bs_type: str,
+) -> pd.DataFrame:
+    out = df
+    if mnc != _STG_BS_FILTER_ALL and "mnc" in out.columns:
+        out = out.loc[out["mnc"].astype("string") == mnc]
+    if telecomstandard != _STG_BS_FILTER_ALL and "telecomstandard" in out.columns:
+        out = out.loc[out["telecomstandard"].astype("string") == telecomstandard]
+    if bs_type != _STG_BS_FILTER_ALL and "bs_type" in out.columns:
+        out = out.loc[out["bs_type"].astype("string") == bs_type]
+    return out
+
+
+def _stg_bs_tooltip(row: Any, *, wkt_kind: str | None = None) -> str:
+    std = getattr(row, "telecomstandard", "—")
+    bt = getattr(row, "bs_type", "—")
+    tip = (
+        f"<b>{row.mcc}-{row.mnc}-{row.lac}-{row.cell_id}</b><br>"
+        f"mnc={row.mnc}<br>std={std}<br>bs_type={bt}"
+    )
+    if wkt_kind:
+        tip += f"<br>{wkt_kind}"
+    return tip
+
+
+def _load_stg_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.DataFrame, str]:
+    """Активные БС с валидными lon/lat и нормализованными полями фильтров."""
+    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+    if not bs_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
+
+    df = pd.read_parquet(bs_parquet)
+    if active_only and "date_off" in df.columns:
+        date_off = pd.to_datetime(df["date_off"], errors="coerce")
+        df = df.loc[date_off.dt.strftime("%Y-%m-%d").eq(_STG_BS_OPEN_END_PREFIX)].copy()
+        segment_label = "активные (open)"
+    else:
+        segment_label = "все строки"
+
+    required = ["lon", "lat", "mcc", "mnc", "lac", "cell_id"]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"В stg_bs нет ожидаемых колонок: {missing}")
+
+    pts = df.copy()
+    pts["lon"] = pd.to_numeric(pts["lon"], errors="coerce")
+    pts["lat"] = pd.to_numeric(pts["lat"], errors="coerce")
+    pts = pts.loc[pts["lon"].notna() & pts["lat"].notna()]
+    pts = pts[pts["lon"].between(-180, 180) & pts["lat"].between(-90, 90)].copy()
+    if "mnc" in pts.columns:
+        pts["mnc"] = pts["mnc"].astype("string").str.strip()
+    if "telecomstandard" in pts.columns:
+        pts["telecomstandard"] = pts["telecomstandard"].astype("string").fillna("unknown")
+    if "bs_type" in pts.columns:
+        pts["bs_type"] = pts["bs_type"].astype("string").fillna("unknown")
+
+    try:
+        rel = bs_parquet.relative_to(root)
+    except ValueError:
+        rel = bs_parquet
+    print(f"stg_bs ({segment_label}): {len(df):,} rows | файл: {rel}")
+    print(f"точек lon/lat: {len(pts):,}")
+    if pts.empty:
+        raise ValueError("Нет валидных lon/lat для карты stg_bs")
+    return pts, segment_label
+
+
+def _stg_bs_map_center(pts: pd.DataFrame) -> tuple[float, float]:
+    if pts.empty:
+        return 55.75, 37.62
+    return float(pts["lat"].mean()), float(pts["lon"].mean())
+
+
+def _add_stg_bs_oktmo_level1(m: folium.Map, pts: pd.DataFrame, root: Path) -> None:
+    if "oktmo_code_1" not in pts.columns:
+        return
+    oktmo_parquet = _resolve_parquet(root, DEFAULT_STG_OKTMO_OUTPUT_PATH)
+    if not oktmo_parquet.exists():
+        return
+    oktmo_df = pd.read_parquet(oktmo_parquet)
+    if not {"level", "code", "WKT"}.issubset(oktmo_df.columns):
+        return
+    codes = pts["oktmo_code_1"].dropna().astype("string").unique().tolist()
+    oktmo_l1 = oktmo_df.loc[
+        (oktmo_df["level"] == 1) & (oktmo_df["code"].astype("string").isin(codes))
+    ].copy()
+    if oktmo_l1.empty:
+        return
+    oktmo_style = {"color": "#b45309", "weight": 2, "fillColor": "#b45309", "fillOpacity": 0.0}
+    fg_oktmo = folium.FeatureGroup(
+        name=f"ОКТМО level=1 (коды в stg_bs): {len(oktmo_l1):,}",
+        show=True,
+    )
+    bad = 0
+    for row in oktmo_l1.itertuples(index=False):
+        try:
+            geom = wkt.loads(str(row.WKT))
+        except Exception:
+            bad += 1
+            continue
+        name = getattr(row, "name", row.code)
+        folium.GeoJson(
+            data=geom.__geo_interface__,
+            style_function=lambda _: oktmo_style,
+            tooltip=folium.Tooltip(f"<b>{name}</b><br>ОКТМО {row.code}", sticky=True),
+        ).add_to(fg_oktmo)
+    fg_oktmo.add_to(m)
+    if bad:
+        print(f"ОКТМО WKT пропущено: {bad}")
+
+
+def build_stg_bs_points_map(
+    pts: pd.DataFrame,
+    root: Path,
+    *,
+    segment_label: str,
+) -> folium.Map:
+    """Точки БС: кластер, детальные маркеры по ``telecomstandard``, ОКТМО level=1."""
+    center_lat, center_lon = _stg_bs_map_center(pts)
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=5,
+        tiles="CartoDB positron",
+        width="100%",
+        height="100%",
+    )
+    all_points = pts[["lat", "lon"]].astype(float).values.tolist()
+    fg_all = folium.FeatureGroup(
+        name=f"БС {segment_label} (FastMarkerCluster): {len(all_points):,}",
+        show=True,
+    )
+    FastMarkerCluster(data=all_points).add_to(fg_all)
+    fg_all.add_to(m)
+
+    if "telecomstandard" in pts.columns:
+        for std, group in pts.groupby("telecomstandard", dropna=False):
+            std_name = str(std)
+            color = _STG_BS_MAP_STD_COLORS.get(std_name, "#9467bd")
+            sample = (
+                group
+                if len(group) <= _STG_BS_POINTS_DETAIL_MAX
+                else group.sample(_STG_BS_POINTS_DETAIL_MAX, random_state=42)
+            )
+            fg_std = folium.FeatureGroup(
+                name=f"telecomstandard={std_name}: {len(sample):,}/{len(group):,}",
+                show=False,
+            )
+            for row in sample.itertuples(index=False):
+                folium.CircleMarker(
+                    location=[float(row.lat), float(row.lon)],
+                    radius=2,
+                    color=color,
+                    weight=1,
+                    fill=True,
+                    fill_opacity=0.7,
+                    tooltip=folium.Tooltip(_stg_bs_tooltip(row), sticky=False),
+                ).add_to(fg_std)
+            fg_std.add_to(m)
+
+    _add_stg_bs_oktmo_level1(m, pts, root)
+    folium.LayerControl(collapsed=False).add_to(m)
+    return m
+
+
+def build_stg_bs_wkt_map(
+    pts: pd.DataFrame,
+    root: Path,
+    wkt_col: str,
+    *,
+    layer_title: str,
+    style: dict[str, Any],
+    segment_label: str,
+) -> folium.Map | None:
+    """Полигоны из ``sector_wkt`` или ``mapinfo_wkt`` (сэмпл при большом объёме)."""
+    if wkt_col not in pts.columns:
+        return None
+    work = pts.loc[
+        pts[wkt_col].notna() & (pts[wkt_col].astype("string").str.strip() != "")
+    ].copy()
+    if work.empty:
+        return None
+
+    total = len(work)
+    sample = (
+        work
+        if total <= _STG_BS_WKT_FEATURES_MAX
+        else work.sample(_STG_BS_WKT_FEATURES_MAX, random_state=42)
+    )
+    center_lat, center_lon = _stg_bs_map_center(pts)
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=5,
+        tiles="CartoDB positron",
+        width="100%",
+        height="100%",
+    )
+    fg = folium.FeatureGroup(
+        name=f"{layer_title} ({segment_label}): {len(sample):,}/{total:,}",
+        show=True,
+    )
+    ok = bad = 0
+    for row in sample.itertuples(index=False):
+        raw = getattr(row, wkt_col)
+        try:
+            geom = wkt.loads(str(raw))
+        except Exception:
+            bad += 1
+            continue
+        folium.GeoJson(
+            data=geom.__geo_interface__,
+            style_function=lambda _, s=style: s,
+            tooltip=folium.Tooltip(
+                _stg_bs_tooltip(row, wkt_kind=layer_title),
+                sticky=True,
+            ),
+        ).add_to(fg)
+        ok += 1
+    if ok == 0:
+        return None
+    fg.add_to(m)
+    _add_stg_bs_oktmo_level1(m, pts, root)
+    folium.LayerControl(collapsed=False).add_to(m)
+    if bad:
+        print(f"{layer_title}: WKT не разобрано: {bad}")
+    if len(sample) < total:
+        print(f"{layer_title}: показано {len(sample):,} из {total:,} (random sample)")
+    return m
+
+
+def display_stg_bs_folium_maps(root: Path, *, active_only: bool = True) -> None:
+    """Три карты с фильтрами ``mnc``, ``telecomstandard``, ``bs_type`` (ipywidgets)."""
+    from ipywidgets import Dropdown, interact
+
+    pts, segment = _load_stg_bs_map_df(root, active_only=active_only)
+    if "telecomstandard" in pts.columns:
+        display(
+            pts.groupby("telecomstandard", as_index=False)
+            .agg(rows=("lac", "count"))
+            .sort_values("rows", ascending=False)
+        )
+
+    mnc_opts = _stg_bs_filter_options(pts["mnc"]) if "mnc" in pts.columns else [_STG_BS_FILTER_ALL]
+    std_opts = (
+        _stg_bs_filter_options(pts["telecomstandard"])
+        if "telecomstandard" in pts.columns
+        else [_STG_BS_FILTER_ALL]
+    )
+    bt_opts = (
+        _stg_bs_filter_options(pts["bs_type"]) if "bs_type" in pts.columns else [_STG_BS_FILTER_ALL]
+    )
+
+    @interact(
+        mnc=Dropdown(options=mnc_opts, value=mnc_opts[0], description="mnc:"),
+        telecomstandard=Dropdown(
+            options=std_opts,
+            value=std_opts[0],
+            description="std:",
+        ),
+        bs_type=Dropdown(options=bt_opts, value=bt_opts[0], description="bs_type:"),
+    )
+    def _show_stg_bs_maps(mnc: str, telecomstandard: str, bs_type: str) -> None:
+        sub = _apply_stg_bs_filters(
+            pts,
+            mnc=mnc,
+            telecomstandard=telecomstandard,
+            bs_type=bs_type,
+        )
+        print(
+            f"Фильтр: mnc={mnc}, telecomstandard={telecomstandard}, bs_type={bs_type} "
+            f"| строк: {len(sub):,}"
+        )
+        if sub.empty:
+            print("Нет строк для карт")
+            return
+
+        print("\n--- Точки БС (lon/lat) ---")
+        display_folium_map(build_stg_bs_points_map(sub, root, segment_label=segment))
+
+        print("\n--- sector_wkt ---")
+        m_sector = build_stg_bs_wkt_map(
+            sub,
+            root,
+            "sector_wkt",
+            layer_title="sector_wkt",
+            style=_STG_BS_WKT_SECTOR_STYLE,
+            segment_label=segment,
+        )
+        if m_sector is None:
+            print("Нет валидных sector_wkt для выбранного фильтра")
+        else:
+            display_folium_map(m_sector)
+
+        print("\n--- mapinfo_wkt ---")
+        m_mapinfo = build_stg_bs_wkt_map(
+            sub,
+            root,
+            "mapinfo_wkt",
+            layer_title="mapinfo_wkt",
+            style=_STG_BS_WKT_MAPINFO_STYLE,
+            segment_label=segment,
+        )
+        if m_mapinfo is None:
+            print("Нет валидных mapinfo_wkt для выбранного фильтра")
+        else:
+            display_folium_map(m_mapinfo)
+
+
+def render_stg_bs_folium_map(root: Path, *, active_only: bool = True) -> folium.Map:
+    """Только точки БС без виджетов (обратная совместимость)."""
+    pts, segment = _load_stg_bs_map_df(root, active_only=active_only)
+    return build_stg_bs_points_map(pts, root, segment_label=segment)
+
+
+def stg_bs_geometry_quality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for geom_check in ("geometry.sector_wkt", "geometry.mapinfo_wkt"):
+        metrics = _metrics_for_check(latest, geom_check)
+        if not metrics:
+            continue
+        short = geom_check.removeprefix("geometry.")
+        for key, label in (
+            ("valid_geometry_count", f"{short} valid"),
+            ("parse_error_count", f"{short} parse errors"),
+            ("invalid_topology_count", f"{short} invalid topology"),
+        ):
+            if key in metrics:
+                rows.append({"metric": label, "count": int(metrics[key])})
+    return pd.DataFrame(rows)
+
+
+def render_stg_bs_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    temporal = _metrics_for_check(latest, "temporal_consistency")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    nulls = null_ratio_frame(latest)
+    key_nulls = (
+        nulls[nulls["field"].isin(("mcc", "mnc", "lac", "cell_id", "lon", "lat"))]
+        if not nulls.empty
+        else nulls
+    )
+    plot_null_ratios(key_nulls if not key_nulls.empty else nulls, ax=axes[1, 0])
+    if temporal:
+        ax = axes[1, 1]
+        labels = ["open_rows", "invalid_date_order"]
+        values = [
+            int(temporal.get("open_rows") or 0),
+            int(temporal.get("invalid_date_order_count") or 0),
+        ]
+        ax.bar(labels, values, color=["#2ca02c", "#d62728"], alpha=0.88)
+        ax.set_ylabel("count")
+        ax.set_title("temporal_consistency (DQ)")
+        for i, value in enumerate(values):
+            ax.text(i, value, str(value), ha="center", va="bottom", fontsize=9)
+    else:
+        plot_count_bars(
+            stg_bs_geometry_quality_frame(latest),
+            title="WKT geometry (DQ)",
+            ax=axes[1, 1],
+            color="#17becf",
+        )
+    if basic:
+        fig.suptitle(
+            f"DQ STG BS — rows={int(basic.get('row_count') or 0):,}",
+            fontsize=13,
+            y=1.02,
+        )
+    else:
+        fig.suptitle("DQ STG BS — обзор метрик", fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def display_stg_bs_parquet_summary(root: Path) -> None:
+    bs_parquet = _resolve_parquet(root, stg_bs_output_path())
+    if not bs_parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
+    df = pd.read_parquet(bs_parquet)
+    try:
+        rel = bs_parquet.relative_to(root)
+    except ValueError:
+        rel = bs_parquet
+    print(f"stg_bs rows: {len(df):,} | файл: {rel}")
+    if "telecomstandard" in df.columns:
+        display(df["telecomstandard"].value_counts().head(12).to_frame("rows"))
+    if "bs_type" in df.columns:
+        print("\n--- bs_type ---")
+        display(df["bs_type"].value_counts().head(10).to_frame("rows"))
 
 
 # --- stg_event DQ charts ---

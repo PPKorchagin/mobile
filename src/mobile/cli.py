@@ -29,6 +29,7 @@ from mobile.notebook_runner import (
     run_nb_src_mobile,
     run_nb_stg_event,
     run_nb_src_person,
+    run_nb_stg_bs,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -79,9 +80,11 @@ from mobile.project_paths import (
     mobile_datacenter_root,
     mobile_mart_paths,
     resolve_oktmo_layout,
+    resolve_project_path,
     stg_bs_output_path,
     stg_event_dds_output_path,
     stg_event_output_path,
+    stg_geo_all_output_path,
 )
 
 _BUILD_STG_EVENT_DC_WORKERS = 2
@@ -100,18 +103,12 @@ _BUILD_COMMANDS: dict[str, tuple[Callable[[], None], str]] = {
     ),
 }
 
-_DQ_COMMANDS: dict[str, tuple[Callable[[], dict], str]] = {
-    "dq-stg-bs": (
-        lambda: dq_stg_bs.run_dq(stg_bs_output_path()),
-        str(stg_bs_output_path()),
-    ),
-}
-
 _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-oktmo": run_nb_stg_oktmo,
     "nb-stg-time-zones": run_nb_stg_time_zones,
     "nb-stg-tac": run_nb_stg_tac,
     "nb-stg-oksm": run_nb_stg_oksm,
+    "nb-stg-bs": run_nb_stg_bs,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
@@ -152,7 +149,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-msisdn-imsi",
     "build-stg-msisdn-imei",
     "build-stg-bs",
-    *tuple(_DQ_COMMANDS),
+    "dq-stg-bs",
     *tuple(_NB_COMMANDS),
 )
 
@@ -472,6 +469,15 @@ def run_dq_stg_oksm(*, oksm_path: str | None) -> None:
     )
 
 
+def run_dq_stg_bs(*, stg_bs_path: str | None) -> None:
+    """DQ ``stg_bs`` (read-only проверки)."""
+    path = resolve_project_path(stg_bs_path) if stg_bs_path else stg_bs_output_path()
+    run_timed_command(
+        "dq-stg-bs",
+        lambda: dq_stg_bs.run_dq(path),
+    )
+
+
 def run_build_stg_time_zones(
     *,
     csv_path: str | None,
@@ -507,19 +513,42 @@ def run_build_stg_bs(
     time_zones_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-bs: полный src_bs со SCD-историей; без параметра даты."""
-    bs = Path(src_bs_path) if src_bs_path else None
-    oktmo = Path(oktmo_path) if oktmo_path else None
-    tz = Path(time_zones_path) if time_zones_path else None
-    out = Path(output_path) if output_path else None
+    """build-stg-bs: явный прогон (4 параметра) или один прогон с путями по умолчанию."""
+    explicit = any((src_bs_path, oktmo_path, time_zones_path, output_path))
+
+    if explicit:
+        missing: list[str] = []
+        if src_bs_path is None:
+            missing.append("--src-bs-path")
+        if oktmo_path is None:
+            missing.append("--oktmo-path")
+        if time_zones_path is None:
+            missing.append("--time-zones-path")
+        if output_path is None:
+            missing.append("--output-path")
+        if missing:
+            raise SystemExit(
+                "build-stg-bs: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        run_timed_command(
+            "build-stg-bs",
+            lambda: stg_bs.run_build(
+                src_bs_path=Path(src_bs_path),
+                oktmo_path=Path(oktmo_path),
+                time_zones_path=Path(time_zones_path),
+                output_path=Path(output_path),
+            ),
+        )
+        return
 
     run_timed_command(
         "build-stg-bs",
         lambda: stg_bs.run_build(
-            src_bs_path=bs,
-            oktmo_path=oktmo,
-            time_zones_path=tz,
-            output_path=out,
+            src_bs_path=DEFAULT_BS_LAYOUT,
+            oktmo_path=DEFAULT_STG_OKTMO_OUTPUT_PATH,
+            time_zones_path=DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+            output_path=stg_bs_output_path(),
         ),
     )
 
@@ -531,16 +560,60 @@ def run_build_stg_geo_all(
     stg_bs_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-stg-geo-all: дневная geo-витрина из event_dds + stg_bs без binding-fill."""
-    if report_date is None:
-        raise SystemExit("build-stg-geo-all: --report-date is required")
-    dds = Path(event_dds_path) if event_dds_path else None
-    bs = Path(stg_bs_path) if stg_bs_path else None
-    out = Path(output_path) if output_path else None
-    run_timed_command(
-        "build-stg-geo-all",
-        lambda: stg_geo_all.run_build(report_date=report_date, event_dds_path=dds, stg_bs_path=bs, output_path=out),
+    """build-stg-geo-all: явный прогон (4 параметра) или цикл DEFAULT_SRC_* по дням."""
+    explicit = any((report_date, event_dds_path, stg_bs_path, output_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if event_dds_path is None:
+            missing.append("--event-dds-path")
+        if stg_bs_path is None:
+            missing.append("--stg-bs-path")
+        if output_path is None:
+            missing.append("--output-path")
+        if missing:
+            raise SystemExit(
+                "build-stg-geo-all: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        run_timed_command(
+            f"build-stg-geo-all-{report_date.isoformat()}",
+            lambda: stg_geo_all.run_build(
+                report_date=report_date,
+                event_dds_path=Path(event_dds_path),
+                stg_bs_path=Path(stg_bs_path),
+                output_path=Path(output_path),
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    dds = DEFAULT_STG_EVENT_DDS_ROOT
+    bs = stg_bs_output_path()
+    logger.info(
+        "Starting build-stg-geo-all: days=%s (%s .. %s) event_dds=%s stg_bs=%s",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+        dds,
+        bs,
     )
+    for day in days:
+        out = stg_geo_all_output_path(day)
+        run_timed_command(
+            f"build-stg-geo-all-{day.isoformat()}",
+            lambda d=day, o=out: stg_geo_all.run_build(
+                report_date=d,
+                event_dds_path=dds,
+                stg_bs_path=bs,
+                output_path=o,
+            ),
+        )
+    logger.info("build-stg-geo-all completed successfully")
 
 
 def run_build_stg_geo_intervals(
@@ -1087,12 +1160,6 @@ def _run_command(
     if command in _BUILD_COMMANDS:
         _run_build(command)
         return
-    if command in _DQ_COMMANDS:
-        fn, parquet_path = _DQ_COMMANDS[command]
-        logger.info("Starting %s (parquet=%s)", command, parquet_path)
-        fn()
-        logger.info("%s completed successfully", command)
-        return
     if command in _NB_COMMANDS:
         logger.info("Starting %s", command)
         _NB_COMMANDS[command]()
@@ -1226,7 +1293,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-bs-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-all / build-stg-geo-intervals: входной stg_bs parquet (по умолчанию {stg_bs_output_path()})",
+        help=(
+            f"dq-stg-bs / build-stg-geo-all / build-stg-geo-intervals: stg_bs parquet "
+            f"(по умолчанию {stg_bs_output_path()})"
+        ),
     )
     parser.add_argument(
         "--stg-geo-all-path",
@@ -1503,6 +1573,8 @@ def main() -> None:
                 time_zones_path=args.time_zones_path,
                 output_path=args.output_path,
             )
+        elif args.command == "dq-stg-bs":
+            run_dq_stg_bs(stg_bs_path=args.stg_bs_path)
         else:
             run_timed_command(
                 args.command,

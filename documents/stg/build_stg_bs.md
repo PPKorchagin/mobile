@@ -25,36 +25,36 @@
 
 ---
 
-## TODO
-
-1. DQ-витрина `dq-stg-bs`.
-
----
-
 ## Параметры запуска
 
-Переменные, передаваемые в job (аргументы `run_build()` из CLI).
+Вызов: `run_build(src_bs_path, oktmo_path, time_zones_path, output_path)` ([`cli.py`](../../src/mobile/cli.py) → `build-stg-bs`). **Все четыре обязательны** — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `src_bs_path` | string (path) | Нет | `data/src/bs.parquet` | Входной parquet `src_bs` |
-| `oktmo_path` | string (path) | Нет | `data/stg/oktmo.parquet` | Справочник ОКТМО |
-| `time_zones_path` | string (path) | Нет | `data/stg/time_zones.parquet` | UTC offset по координатам (point-in-polygon) |
-| `output_path` | string (path) | Нет | `data/stg/bs.parquet` | Выходной Parquet (перезапись) |
+| Переменная | Тип | Обязательность | Описание |
+|------------|-----|----------------|----------|
+| `src_bs_path` | path | **Да** | Входной parquet `src_bs` |
+| `oktmo_path` | path | **Да** | Справочник ОКТМО (`stg_oktmo`) |
+| `time_zones_path` | path | **Да** | Справочник часовых поясов (`stg_time_zones`) |
+| `output_path` | path | **Да** | Выходной Parquet `stg_bs` (SCD, перезапись) |
 
-Пути **относительные к корню репозитория** `mobile` (`resolve_project_path`).
+Пути **относительные к корню репозитория** `mobile` (`resolve_project_path`). Parquet пишется со сжатием **`snappy`** (`DEFAULT_PARQUET_COMPRESSION`).
 
-**Константы ETL:**
+**Константы ETL в коде** (на вход job **не передаются**): `STG_BS_FIELDS`, `_OPEN_END_TS`, H3/MAPINFO-параметры — см. [`bs.py`](../../src/mobile/pipelines/stg/bs.py).
 
-| Константа | Значение |
-|-----------|----------|
-| `STG_BS_TABLE` / `STG_BS_FIELDS` | из [`bs.json`](../../src/mobile/schema/stg/bs.json) |
-| `_OPEN_END_TS` | `2262-04-11 00:00:00` |
-| `DEFAULT_PARQUET_COMPRESSION` | `snappy` |
+### CLI
+
+| Режим | Поведение |
+|-------|-----------|
+| Без флагов | Один прогон с путями `data/src/bs.parquet`, `data/stg/oktmo.parquet`, `data/stg/time_zones.parquet`, `data/stg/bs.parquet` |
+| Все 4 явно | `--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path` |
 
 **Предусловия:** `build-src-bs`, `build-stg-oktmo`, `build-stg-time-zones`.
 
+Локальный запуск:
+
 ```bash
+uv run mobile build-src-bs
+uv run mobile build-stg-oktmo
+uv run mobile build-stg-time-zones
 uv run mobile build-stg-bs
 uv run mobile build-stg-bs \
   --src-bs-path data/src/bs.parquet \

@@ -31,4 +31,8 @@
 | 26            | build-move-event     | Перенос stg_event в DDS-layout (локальная заглушка)  | `--report-date`; без флагов — DEFAULT_SRC_*; на проде — ручной перенос поставщиком      | [Документ](documents/stg/build_move_event.md)   |
 | 27            | dq-stg-event         | Проверка качества DDS-среза stg_event                | `--report-date` + `--event-dds-path` (каталог); без флагов — DEFAULT_SRC_* по дням      | [Документ](documents/dq/stg/dq_stg_event.md)        |
 | 28            | nb-stg-event         | Визуализация метрик DQ DDS-среза stg_event           | —                                                                                       | —                                                 |
+| 29            | build-stg-bs         | Сборка исторической витрины stg_bs из src_bs         | 4 параметра (`--src-bs-path`, `--oktmo-path`, `--time-zones-path`, `--output-path`); без флагов — пути по умолчанию | [Документ](documents/stg/build_stg_bs.md)         |
+| 30            | dq-stg-bs            | Проверка качества витрины stg_bs                     | `--stg-bs-path` (по умолчанию `data/stg/bs.parquet`)                                   | [Документ](documents/dq/stg/dq_stg_bs.md)         |
+| 31            | nb-stg-bs            | Визуализация метрик DQ витрины stg_bs                | —                                                                                       | —                                                 |
+| 32            | build-stg-geo-all    | Сборка дневной витрины stg_geo_all из event_dds + stg_bs | 4 параметра (`--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path`); без флагов — DEFAULT_SRC_* по дням | [Документ](documents/stg/build_stg_geo_all.md)    |
 
