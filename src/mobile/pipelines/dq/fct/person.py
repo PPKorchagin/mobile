@@ -20,6 +20,8 @@ from mobile.project_paths import (
 )
 
 logger = logging.getLogger(__name__)
+
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 LOG_TAG = "DQ_FCT_PERSON"
 
 _PERSON_ID_RE = re.compile(r"^prs_[0-9a-f]{24}$")
@@ -279,25 +281,16 @@ def _resolve_source_path(*, report_date: date, fct_person_path: str | Path) -> P
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(total_checks: int, warnings: int, failed: int) -> None:
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": "ok",
-        "metrics": {
-            "total_checks": total_checks,
-            "warning_checks": warnings,
-            "failed_checks": failed,
-        },
-    }
-    logger.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=False,
+        clean_status="ok",
+    )
+

@@ -6,15 +6,16 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from shapely import wkt
-from shapely.errors import GEOSException
 
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
+from mobile.pipelines.common.dq_wkt import DEFAULT_ALLOWED_GEOM_TYPES, collect_wkt_metrics
 from mobile.pipelines.dim.time_zones import DIM_TIME_ZONES_FIELDS
-from mobile.project_paths import PROJECT_ROOT
+from mobile.project_paths import PROJECT_ROOT, resolve_project_path
 
 logger = logging.getLogger(__name__)
+
 LOG_TAG = "DQ_DIM_TIME_ZONES"
-ALLOWED_GEOM_TYPES = {"POLYGON", "MULTIPOLYGON"}
+ALLOWED_GEOM_TYPES = DEFAULT_ALLOWED_GEOM_TYPES
 
 
 def run_dq(time_zones_path: str | Path) -> dict[str, Any]:
@@ -108,7 +109,7 @@ def run_dq(time_zones_path: str | Path) -> dict[str, Any]:
         )
 
     if "geometry" in data.columns:
-        geometry_metrics = _collect_wkt_metrics(data["geometry"])
+        geometry_metrics = collect_wkt_metrics(data["geometry"], total_count_key="total_geometry_count")
         has_geom_warnings = (
             geometry_metrics["parse_error_count"] > 0
             or geometry_metrics["invalid_topology_count"] > 0
@@ -132,72 +133,22 @@ def _distribution_pct(series: pd.Series) -> dict[str, float]:
     return {str(key): float(val) for key, val in value_counts.items()}
 
 
-def _collect_wkt_metrics(values: pd.Series) -> dict[str, Any]:
-    parse_error_count = 0
-    invalid_topology_count = 0
-    unsupported_geom_type_count = 0
-    empty_geometry_count = 0
-    valid_geometry_count = 0
-    geom_type_counts: dict[str, int] = {}
-
-    for value in values:
-        if value is None or pd.isna(value) or not str(value).strip():
-            parse_error_count += 1
-            continue
-        try:
-            geom = wkt.loads(str(value))
-        except (GEOSException, ValueError):
-            parse_error_count += 1
-            continue
-
-        geom_type = geom.geom_type.upper()
-        geom_type_counts[geom_type] = geom_type_counts.get(geom_type, 0) + 1
-        if geom_type not in ALLOWED_GEOM_TYPES:
-            unsupported_geom_type_count += 1
-        if geom.is_empty:
-            empty_geometry_count += 1
-        if not geom.is_valid:
-            invalid_topology_count += 1
-        if geom_type in ALLOWED_GEOM_TYPES and geom.is_valid and not geom.is_empty:
-            valid_geometry_count += 1
-
-    total = int(len(values))
-    return {
-        "total_geometry_count": total,
-        "valid_geometry_count": valid_geometry_count,
-        "parse_error_count": parse_error_count,
-        "unsupported_geom_type_count": unsupported_geom_type_count,
-        "empty_geometry_count": empty_geometry_count,
-        "invalid_topology_count": invalid_topology_count,
-        "geom_type_counts": geom_type_counts,
-    }
-
-
 def _resolve_time_zones_path(path: str | Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(total_checks: int, warnings: int, failed: int) -> None:
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": "ok",
-        "metrics": {
-            "total_checks": total_checks,
-            "warning_checks": warnings,
-            "failed_checks": failed,
-        },
-    }
-    logger.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=False,
+        clean_status="ok",
+    )
+

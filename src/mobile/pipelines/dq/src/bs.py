@@ -9,9 +9,12 @@ from typing import Any
 
 import pandas as pd
 
+from mobile.pipelines.common.dq_gates import gate_status_from_rate, valid_rate
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 from mobile.project_paths import resolve_project_path
 
 logger = logging.getLogger(__name__)
+
 LOG_TAG = "DQ_SRC_BS"
 
 _NUMERIC_TYPES = frozenset({"int", "smallint", "long", "float"})
@@ -453,20 +456,6 @@ def _numeric_profile(series: pd.Series) -> dict[str, Any]:
     }
 
 
-def _status_from_rate(rate: float, *, failed_below: float, warn_below: float) -> str:
-    if rate < failed_below:
-        return "failed"
-    if rate < warn_below:
-        return "warning"
-    return "ok"
-
-
-def _valid_rate(mask: pd.Series) -> float:
-    if len(mask) == 0:
-        return 1.0
-    return float(mask.mean())
-
-
 def _check_lac_cell_series(lac: pd.Series | None, cell: pd.Series | None) -> tuple[float, dict[str, Any]]:
     if lac is None or cell is None or len(lac) == 0:
         return 1.0, {"rows": 0}
@@ -480,7 +469,7 @@ def _check_lac_cell_series(lac: pd.Series | None, cell: pd.Series | None) -> tup
         & (l < 10**5)
         & (c < 10**6)
     )
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {"valid_lac_cell_rate": round(rate, 6), "rows": int(len(lac))}
 
 
@@ -488,7 +477,7 @@ def _check_coords(lon: pd.Series, lat: pd.Series) -> tuple[float, dict[str, Any]
     lon_n = pd.to_numeric(lon, errors="coerce")
     lat_n = pd.to_numeric(lat, errors="coerce")
     ok = lon_n.between(-180, 180) & lat_n.between(-90, 90) & lon_n.notna() & lat_n.notna()
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {
         "valid_coord_rate": round(rate, 6),
         "invalid_lon": int((lon_n.notna() & ~lon_n.between(-180, 180)).sum()),
@@ -513,14 +502,14 @@ def _emit_bs_stg_contract_checks(
     rate, metrics = _check_lac_cell_series(data.get("lac"), data.get("cell"))
     emit(
         "stg_contract.lac_cell",
-        _status_from_rate(rate, failed_below=0.995, warn_below=0.999),
+        gate_status_from_rate(rate, failed_below=0.995, warn_below=0.999),
         metrics,
     )
 
     rate, metrics = _check_coords(data.get("coord_x"), data.get("coord_y"))
     emit(
         "stg_contract.coords",
-        _status_from_rate(rate, failed_below=0.995, warn_below=0.999),
+        gate_status_from_rate(rate, failed_below=0.995, warn_below=0.999),
         metrics,
     )
 
@@ -529,7 +518,7 @@ def _emit_bs_stg_contract_checks(
     order_ok = float(((date_off >= date_on) | date_off.isna() | date_on.isna()).mean())
     emit(
         "stg_contract.temporal_order",
-        _status_from_rate(order_ok, failed_below=0.99, warn_below=0.995),
+        gate_status_from_rate(order_ok, failed_below=0.99, warn_below=0.995),
         {"valid_order_rate": round(order_ok, 6)},
     )
 
@@ -537,7 +526,7 @@ def _emit_bs_stg_contract_checks(
     gen_ok = float((gen.notna() & gen.ne("")).mean())
     emit(
         "stg_contract.generation_present",
-        _status_from_rate(gen_ok, failed_below=0.99, warn_below=0.995),
+        gate_status_from_rate(gen_ok, failed_below=0.99, warn_below=0.995),
         {"present_rate": round(gen_ok, 6)},
     )
 
@@ -565,7 +554,7 @@ def _emit_identity_checks(
         rf_rate = float((mcc == RF_MCC).mean())
         emit(
             "contract.mcc_rf",
-            _status_from_rate(rf_rate, failed_below=0.99, warn_below=0.999),
+            gate_status_from_rate(rf_rate, failed_below=0.99, warn_below=0.999),
             {
                 "mcc_250_rate": round(rf_rate, 6),
                 "mcc_top": _value_counts_top(mcc, top_n=5),
@@ -593,7 +582,7 @@ def _emit_identity_checks(
         rate = float(ok.mean())
         emit(
             "contract.lac_cell_non_negative",
-            _status_from_rate(rate, failed_below=0.995, warn_below=0.999),
+            gate_status_from_rate(rate, failed_below=0.995, warn_below=0.999),
             {
                 "valid_rate": round(rate, 6),
                 "lac_null_count": int(lac.isna().sum()),
@@ -683,7 +672,7 @@ def _emit_spatial_contract_checks(
 
     emit(
         "contract.coords_present",
-        _status_from_rate(1.0 - null_coords / row_n, failed_below=0.995, warn_below=0.999),
+        gate_status_from_rate(1.0 - null_coords / row_n, failed_below=0.995, warn_below=0.999),
         {
             "null_coord_rows": null_coords,
             "zero_zero_rows": zero_coords,
@@ -715,7 +704,7 @@ def _emit_radio_contract_checks(
         unknown = gen[~known & gen.notna() & (gen != "")]
         emit(
             "contract.generation_vocab",
-            _status_from_rate(rate, failed_below=0.95, warn_below=0.99),
+            gate_status_from_rate(rate, failed_below=0.95, warn_below=0.99),
             {
                 "known_generation_rate": round(rate, 6),
                 "unknown_count": int(unknown.shape[0]),
@@ -735,7 +724,7 @@ def _emit_radio_contract_checks(
         indoor_with_dir = int((indoor_loc & ~omnidirectional & az.notna()).sum())
         emit(
             "contract.azimuth_semantics",
-            _status_from_rate(az_rate, failed_below=0.98, warn_below=0.995),
+            gate_status_from_rate(az_rate, failed_below=0.98, warn_below=0.995),
             {
                 "valid_azimuth_rate": round(az_rate, 6),
                 "omnidirectional_rows": int(omnidirectional.sum()),
@@ -754,7 +743,7 @@ def _emit_radio_contract_checks(
         rate = float(in_range.mean())
         emit(
             f"contract.range.{field}",
-            _status_from_rate(rate, failed_below=0.98, warn_below=0.995),
+            gate_status_from_rate(rate, failed_below=0.98, warn_below=0.995),
             {
                 "min_allowed": lo,
                 "max_allowed": hi,
@@ -774,7 +763,7 @@ def _emit_radio_contract_checks(
         rate = float(in_range.mean())
         emit(
             f"contract.range.{field}",
-            _status_from_rate(rate, failed_below=0.98, warn_below=0.995),
+            gate_status_from_rate(rate, failed_below=0.98, warn_below=0.995),
             {
                 "min_allowed": lo,
                 "max_allowed": hi,
@@ -970,30 +959,16 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
+def _emit_summary(total_checks: int, warnings: int = 0, failed: int = 0) -> None:
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=True,
+        clean_status="info",
+    )
 
-def _emit_summary(
-    *,
-    total_checks: int,
-    warnings: int,
-    failed: int,
-) -> None:
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": "failed" if failed else ("warning" if warnings else "ok"),
-        "metrics": {
-            "total_checks": total_checks,
-            "warning_checks": warnings,
-            "failed_checks": failed,
-        },
-    }
-    logger.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))

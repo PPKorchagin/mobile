@@ -10,6 +10,11 @@ from typing import Any
 
 import pandas as pd
 
+from mobile.pipelines.common.dq_intervals import (
+    count_mergeable_adjacent_interval_rows,
+    count_overlapping_interval_rows,
+)
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 from mobile.pipelines.fct.msisdn_imei import FCT_MSISDN_IMEI_FIELDS
 from mobile.pipelines.fct.subscriber_ids import (
     IMEI_MAX_LEN,
@@ -159,13 +164,13 @@ def run_dq(*, report_date: date, fct_msisdn_imei_path: str | Path) -> dict[str, 
     )
 
     if {"msisdn", "imei", "valid_from", "valid_to"}.issubset(work.columns):
-        overlap_count = _count_overlapping_intervals(work)
+        overlap_count = count_overlapping_interval_rows(work, ("msisdn", "imei"))
         emit(
             "interval_overlap_same_pair",
             "failed" if overlap_count > 0 else "ok",
             {**base, "overlapping_interval_rows": overlap_count},
         )
-        mergeable = _count_mergeable_adjacent_intervals(work)
+        mergeable = count_mergeable_adjacent_interval_rows(work, ("msisdn", "imei"))
         emit(
             "interval_mergeable_gap",
             "warning" if mergeable > 0 else "ok",
@@ -191,65 +196,17 @@ def _resolve_source_path(*, report_date: date, fct_msisdn_imei_path: str | Path)
     return resolved
 
 
-def _count_overlapping_intervals(frame: pd.DataFrame) -> int:
-    """Строки, участвующие в пересечении интервалов с тем же (msisdn, imei)."""
-    if frame.empty:
-        return 0
-    work = frame.dropna(subset=["msisdn", "imei", "valid_from", "valid_to"]).copy()
-    if work.empty:
-        return 0
-    overlap_rows = 0
-    for _, group in work.groupby(["msisdn", "imei"], sort=False):
-        ordered = group.sort_values("valid_from", kind="mergesort")
-        prev_end: pd.Timestamp | None = None
-        for row in ordered.itertuples(index=False):
-            start = pd.Timestamp(row.valid_from)
-            end = pd.Timestamp(row.valid_to)
-            if prev_end is not None and start <= prev_end:
-                overlap_rows += 2
-            prev_end = end if prev_end is None else max(prev_end, end)
-    return overlap_rows
-
-
-def _count_mergeable_adjacent_intervals(frame: pd.DataFrame) -> int:
-    """Смежные сегменты с gap ≤ 1 с, которые ETL должен был склеить."""
-    if frame.empty:
-        return 0
-    work = frame.dropna(subset=["msisdn", "imei", "valid_from", "valid_to"]).copy()
-    if work.empty:
-        return 0
-    mergeable = 0
-    for _, group in work.groupby(["msisdn", "imei"], sort=False):
-        ordered = group.sort_values("valid_from", kind="mergesort")
-        prev_end: pd.Timestamp | None = None
-        for row in ordered.itertuples(index=False):
-            start = pd.Timestamp(row.valid_from)
-            end = pd.Timestamp(row.valid_to)
-            if prev_end is not None and start <= prev_end + pd.Timedelta(seconds=1):
-                mergeable += 1
-            prev_end = end if prev_end is None else max(prev_end, end)
-    return mergeable
-
-
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(*, total_checks: int, warnings: int, failed: int) -> None:
-    status = "failed" if failed else ("warning" if warnings else "ok")
-    _emit_log(
-        "summary",
-        status,
-        {
-            "total_checks": int(total_checks),
-            "warning_checks": int(warnings),
-            "failed_checks": int(failed),
-        },
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=True,
+        clean_status="ok",
     )
+

@@ -14,6 +14,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
+from mobile.pipelines.common.schema_contract import apply_table_fields_to_module
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.pipelines.fct import msisdn_imei, msisdn_imsi
 from mobile.pipelines.dim.oksm import OksmLookup, load_lookup
@@ -330,15 +331,14 @@ def _read_src_person_latest_snapshot(
     return latest, [latest_day]
 
 
-def _load_schema_contract(schema_path: Path) -> None:
-    global STG_PERSON_TABLE, FCT_PERSON_FIELDS
-    with schema_path.open(encoding="utf-8") as file:
-        cfg = json.load(file)
-    STG_PERSON_TABLE = str(cfg.get("table", STG_PERSON_TABLE))
-    FCT_PERSON_FIELDS = [{"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", [])]
-
-
-_load_schema_contract(DEFAULT_FCT_PERSON_SCHEMA_PATH)
+apply_table_fields_to_module(
+    DEFAULT_FCT_PERSON_SCHEMA_PATH,
+    table_name="STG_PERSON_TABLE",
+    fields_name="FCT_PERSON_FIELDS",
+    module_globals=globals(),
+    default_table=STG_PERSON_TABLE,
+    default_fields=FCT_PERSON_FIELDS,
+)
 
 
 def _validate_report_month(report_date: date) -> date:

@@ -13,6 +13,8 @@ import pandas as pd
 from mobile.project_paths import resolve_stg_daily_parquet_path
 
 logger = logging.getLogger(__name__)
+
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 LOG_TAG = "DQ_FCT_GEO_INTERVALS"
 _BS_TYPES = frozenset({"m", "f", "i", "x", "o"})
 
@@ -191,20 +193,16 @@ def _safe_nunique(series: pd.Series) -> int:
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(*, total_checks: int, warnings: int, failed: int) -> None:
-    status = "failed" if failed else ("warning" if warnings else "ok")
-    _emit_log(
-        "summary",
-        status,
-        {"total_checks": int(total_checks), "warning_checks": int(warnings), "failed_checks": int(failed)},
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=True,
+        clean_status="ok",
     )
+

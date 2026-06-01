@@ -16,6 +16,7 @@ from shapely.ops import unary_union
 from shapely.prepared import prep
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
+from mobile.pipelines.common.schema_contract import apply_table_fields_to_module
 from mobile.command_timing import append_command_metrics, timed_stage
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
@@ -80,14 +81,6 @@ _M_PER_DEG_LAT = 110_540.0
 _M_PER_DEG_LON_AT_EQUATOR = 111_320.0
 
 
-def _load_schema_contract(schema_path: Path) -> None:
-    global STG_BS_TABLE, FCT_BS_FIELDS
-    with schema_path.open(encoding="utf-8") as file:
-        cfg = json.load(file)
-    STG_BS_TABLE = str(cfg.get("table", STG_BS_TABLE))
-    FCT_BS_FIELDS = list(cfg.get("fields", FCT_BS_FIELDS))
-
-
 def _load_src_bs_schema(schema_path: Path) -> None:
     global SRC_BS_FIELD_TYPES
     with schema_path.open(encoding="utf-8") as file:
@@ -97,7 +90,14 @@ def _load_src_bs_schema(schema_path: Path) -> None:
     }
 
 
-_load_schema_contract(DEFAULT_FCT_BS_SCHEMA_PATH)
+apply_table_fields_to_module(
+    DEFAULT_FCT_BS_SCHEMA_PATH,
+    table_name="STG_BS_TABLE",
+    fields_name="FCT_BS_FIELDS",
+    module_globals=globals(),
+    default_table=STG_BS_TABLE,
+    default_fields=FCT_BS_FIELDS,
+)
 _load_src_bs_schema(DEFAULT_SRC_BS_SCHEMA_PATH)
 
 

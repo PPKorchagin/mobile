@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from datetime import date, datetime
@@ -13,11 +12,19 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
+from mobile.pipelines.common.binding_intervals import (
+    build_temporal_intervals,
+    drop_intervals_overlapping_day,
+    merge_adjacent_intervals,
+    prepare_pair_events,
+    read_geo_all_day,
+    resolve_geo_all_source_path,
+)
+from mobile.pipelines.common.schema_contract import apply_table_fields_to_module
 from mobile.pipelines.fct.subscriber_ids import normalize_imsi, normalize_msisdn, to_digit_string_series
 from mobile.project_paths import (
     DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH,
     resolve_project_path,
-    stg_geo_all_output_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,35 +42,15 @@ FCT_MSISDN_IMSI_FIELDS: list[dict[str, str]] = [
 ]
 
 
-def _load_schema_contract(schema_path: Path) -> None:
-    global STG_MSISDN_IMSI_TABLE, FCT_MSISDN_IMSI_FIELDS
-    with schema_path.open(encoding="utf-8") as file:
-        cfg = json.load(file)
-    STG_MSISDN_IMSI_TABLE = str(cfg.get("table", STG_MSISDN_IMSI_TABLE))
-    FCT_MSISDN_IMSI_FIELDS = [
-        {"name": str(f["name"]), "type": str(f["type"])} for f in cfg.get("fields", FCT_MSISDN_IMSI_FIELDS)
-    ]
-
-
-_load_schema_contract(DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH)
+apply_table_fields_to_module(
+    DEFAULT_FCT_MSISDN_IMSI_SCHEMA_PATH,
+    table_name="STG_MSISDN_IMSI_TABLE",
+    fields_name="FCT_MSISDN_IMSI_FIELDS",
+    module_globals=globals(),
+    default_table=STG_MSISDN_IMSI_TABLE,
+    default_fields=FCT_MSISDN_IMSI_FIELDS,
+)
 _FIELD_NAMES = [f["name"] for f in FCT_MSISDN_IMSI_FIELDS]
-
-
-def _drop_intervals_overlapping_day(
-    frame: pd.DataFrame,
-    *,
-    day_start: datetime | pd.Timestamp,
-    day_end: datetime | pd.Timestamp,
-) -> pd.DataFrame:
-    if frame.empty:
-        return frame
-    work = frame.copy()
-    work["valid_from"] = pd.to_datetime(work["valid_from"], errors="coerce")
-    work["valid_to"] = pd.to_datetime(work["valid_to"], errors="coerce")
-    start = pd.Timestamp(day_start)
-    end = pd.Timestamp(day_end)
-    overlap = work["valid_from"].notna() & work["valid_to"].notna() & (work["valid_from"] <= end) & (work["valid_to"] >= start)
-    return work.loc[~overlap].reset_index(drop=True)
 
 
 def operator_id_from_imsi_series(imsi: pd.Series) -> pd.Series:
@@ -86,10 +73,10 @@ def build_imsi_day_intervals(
     day_start = datetime.combine(report_date, datetime.min.time())
     day_end = datetime.combine(report_date, datetime.max.time())
     binding_fields = ["msisdn", "imsi", "valid_from", "valid_to"]
-    source_path = _resolve_geo_all_source_path(report_date, stg_geo_all_path)
-    raw = _read_geo_all(report_date, source_path)
-    events = _prepare_pair_events(raw, value_col=_PAIR_VALUE_COL, normalize_value=normalize_imsi)
-    intervals = _build_temporal_intervals(
+    source_path = resolve_geo_all_source_path(report_date, stg_geo_all_path)
+    raw = read_geo_all_day(report_date, source_path, log_prefix="build-fct-msisdn-imsi")
+    events = prepare_pair_events(raw, value_col=_PAIR_VALUE_COL, normalize_value=normalize_imsi)
+    intervals = build_temporal_intervals(
         events,
         value_col=_PAIR_VALUE_COL,
         period_start=day_start,
@@ -208,46 +195,7 @@ def _coerce_imsi_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _merge_imsi_intervals(frame: pd.DataFrame) -> pd.DataFrame:
-    if frame.empty:
-        return pd.DataFrame(columns=_FIELD_NAMES)
-
-    work = frame.sort_values(["msisdn", "operator_id", "imsi", "valid_from"], kind="mergesort").reset_index(drop=True)
-    rows: list[dict[str, Any]] = []
-    for (msisdn, operator_id, imsi), group in work.groupby(
-        ["msisdn", "operator_id", "imsi"], sort=False, dropna=False
-    ):
-        seg_start: pd.Timestamp | None = None
-        seg_end: pd.Timestamp | None = None
-        for row in group.itertuples(index=False):
-            start = pd.Timestamp(getattr(row, "valid_from"))
-            end = pd.Timestamp(getattr(row, "valid_to"))
-            if seg_start is None:
-                seg_start, seg_end = start, end
-                continue
-            if start <= seg_end + pd.Timedelta(seconds=1):
-                seg_end = max(seg_end, end)
-            else:
-                rows.append(
-                    {
-                        "msisdn": msisdn,
-                        "operator_id": operator_id,
-                        "imsi": imsi,
-                        "valid_from": seg_start,
-                        "valid_to": seg_end,
-                    }
-                )
-                seg_start, seg_end = start, end
-        if seg_start is not None and seg_end is not None:
-            rows.append(
-                {
-                    "msisdn": msisdn,
-                    "operator_id": operator_id,
-                    "imsi": imsi,
-                    "valid_from": seg_start,
-                    "valid_to": seg_end,
-                }
-            )
-    return pd.DataFrame(rows)
+    return merge_adjacent_intervals(frame, group_cols=["msisdn", "operator_id", "imsi"])
 
 
 def upsert_imsi_daily_into_month_parquet(
@@ -273,99 +221,6 @@ def upsert_imsi_daily_into_month_parquet(
     month_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_parquet(month_path, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
     return result
-
-
-def _prepare_pair_events(
-    raw: pd.DataFrame,
-    *,
-    value_col: str,
-    normalize_value: Callable[[pd.Series | None], pd.Series],
-) -> pd.DataFrame:
-    if raw.empty:
-        return pd.DataFrame(columns=["msisdn", value_col, "event_ts"])
-
-    work = raw.copy()
-    work["event_ts"] = pd.to_datetime(work.get("start_time_utc"), errors="coerce")
-    work["msisdn"] = normalize_msisdn(work.get("msisdn"))
-    work[value_col] = normalize_value(work.get(value_col))
-    work = work[work["msisdn"].notna() & work[value_col].notna() & work["event_ts"].notna()]
-    return work[["msisdn", value_col, "event_ts"]].reset_index(drop=True)
-
-
-def _resolve_geo_all_source_path(report_date: date, source_path: str | Path | None) -> Path:
-    if source_path is None:
-        return stg_geo_all_output_path(report_date)
-    resolved = resolve_project_path(source_path)
-    if resolved.is_dir():
-        return resolved / f"{report_date.isoformat()}.parquet"
-    return resolved
-
-
-def _read_geo_all(report_date: date, source_path: Path) -> pd.DataFrame:
-    if not source_path.exists():
-        logger.warning("build-fct-msisdn-imsi-operator: stg_geo_all not found for %s at %s", report_date, source_path)
-        return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
-    try:
-        return pd.read_parquet(source_path, columns=["msisdn", "imsi", "start_time_utc"])
-    except Exception:
-        logger.exception("build-fct-msisdn-imsi-operator: failed to read stg_geo_all at %s", source_path)
-        return pd.DataFrame(columns=["msisdn", "imsi", "start_time_utc"])
-
-
-def _build_temporal_intervals(
-    events: pd.DataFrame,
-    *,
-    value_col: str,
-    period_start: datetime,
-    period_end: datetime,
-) -> pd.DataFrame:
-    if events.empty:
-        return pd.DataFrame(columns=["msisdn", value_col, "valid_from", "valid_to"])
-
-    rows: list[dict[str, Any]] = []
-    sorted_events = events.sort_values(["msisdn", "event_ts"], kind="mergesort")
-
-    for msisdn, group in sorted_events.groupby("msisdn", sort=False):
-        current_val: str | None = None
-        seg_start: pd.Timestamp | None = None
-        seg_end: pd.Timestamp | None = None
-
-        for row in group.itertuples(index=False):
-            val = str(getattr(row, value_col))
-            ts = getattr(row, "event_ts")
-            if current_val is None:
-                current_val, seg_start, seg_end = val, ts, ts
-                continue
-            if val != current_val:
-                rows.append(
-                    {
-                        "msisdn": msisdn,
-                        value_col: current_val,
-                        "valid_from": seg_start,
-                        "valid_to": seg_end,
-                    }
-                )
-                current_val, seg_start, seg_end = val, ts, ts
-            else:
-                seg_end = ts
-
-        if current_val is not None and seg_start is not None and seg_end is not None:
-            rows.append(
-                {
-                    "msisdn": msisdn,
-                    value_col: current_val,
-                    "valid_from": seg_start,
-                    "valid_to": seg_end,
-                }
-            )
-
-    if not rows:
-        return pd.DataFrame(columns=["msisdn", value_col, "valid_from", "valid_to"])
-
-    out = pd.DataFrame(rows)
-    out["valid_from"] = pd.to_datetime(out["valid_from"], errors="coerce").clip(lower=period_start)
-    out["valid_to"] = pd.to_datetime(out["valid_to"], errors="coerce").clip(upper=period_end)
-    return out.loc[out["valid_from"] <= out["valid_to"]].reset_index(drop=True)
 
 
 def _coerce_binding_output(

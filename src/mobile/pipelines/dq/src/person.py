@@ -12,6 +12,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from mobile.cli_defaults import DEFAULT_DQ_SRC_PERSON_START_DATE
+from mobile.pipelines.common.dq_gates import gate_status_from_rate
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 from mobile.pipelines.src.person import ACTUALLY_TO_OPEN
 from mobile.project_paths import (
     DEFAULT_SRC_PERSON_OUTPUT_ROOT,
@@ -21,6 +23,7 @@ from mobile.project_paths import (
 
 
 logger = logging.getLogger(__name__)
+
 LOG_TAG = "DQ_SRC_PERSON"
 
 _NUMERIC_TYPES = frozenset({"int", "smallint", "long", "float"})
@@ -509,7 +512,7 @@ def _emit_person_snapshot_checks(
                 rate = float(scoped[col].notna().mean()) if len(scoped) else 0.0
                 emit(
                     f"identity_type.{type_id}.{col}_fill",
-                    _status_from_rate(rate, failed_below=0.90, warn_below=0.98)
+                    gate_status_from_rate(rate, failed_below=0.90, warn_below=0.98)
                     if type_id in (2, 4, 5)
                     else "ok",
                     {
@@ -561,7 +564,7 @@ def _emit_person_snapshot_checks(
         rate = float(valid.mean()) if len(digits) else 0.0
         emit(
             "isdn_format",
-            _status_from_rate(rate, failed_below=0.95, warn_below=0.99),
+            gate_status_from_rate(rate, failed_below=0.95, warn_below=0.99),
             {
                 "valid_rate": round(rate, 6),
                 "invalid_len": int((present & ~len_ok).sum()),
@@ -579,7 +582,7 @@ def _emit_person_snapshot_checks(
         rate = float(ok.mean()) if len(lens) else 1.0
         emit(
             f"{col}_format",
-            _status_from_rate(rate, failed_below=0.95, warn_below=0.99),
+            gate_status_from_rate(rate, failed_below=0.95, warn_below=0.99),
             {"valid_len_rate": round(rate, 6), "expected_len": expected_len},
         )
 
@@ -591,7 +594,7 @@ def _emit_person_snapshot_checks(
         rate = float(ok.mean()) if len(lens) else 1.0
         emit(
             "iccid_format",
-            _status_from_rate(rate, failed_below=0.90, warn_below=0.98),
+            gate_status_from_rate(rate, failed_below=0.90, warn_below=0.98),
             {"valid_len_rate": round(rate, 6)},
         )
 
@@ -602,7 +605,7 @@ def _emit_person_snapshot_checks(
         rate = float(ok.mean()) if len(ok) else 1.0
         emit(
             "passport_format",
-            _status_from_rate(rate, failed_below=0.90, warn_below=0.98),
+            gate_status_from_rate(rate, failed_below=0.90, warn_below=0.98),
             {"valid_format_rate": round(rate, 6), "rows_with_passport": int(present.sum())},
         )
 
@@ -638,7 +641,7 @@ def _emit_person_snapshot_checks(
         when_not = float((lac_filled | cell_filled)[~at_bs].mean()) if (~at_bs).any() else 0.0
         emit(
             "lac_cell_by_last_location",
-            _status_from_rate(when_bs, failed_below=0.90, warn_below=0.98),
+            gate_status_from_rate(when_bs, failed_below=0.90, warn_below=0.98),
             {
                 "at_bs_lac_cell_filled_rate": round(when_bs, 6),
                 "not_at_bs_any_lac_cell_rate": round(when_not, 6),
@@ -723,7 +726,7 @@ def _emit_person_snapshot_checks(
             )
             emit(
                 "fio_quality_physical",
-                _status_from_rate(float(fio_ok.mean()), failed_below=0.95, warn_below=0.98),
+                gate_status_from_rate(float(fio_ok.mean()), failed_below=0.95, warn_below=0.98),
                 {
                     "fio_present_rate": round(float(fio_ok.mean()), 6),
                     "rows_physical": int(len(physical)),
@@ -945,14 +948,6 @@ def _numeric_profile(series: pd.Series) -> dict[str, Any]:
     }
 
 
-def _status_from_rate(rate: float, *, failed_below: float, warn_below: float) -> str:
-    if rate < failed_below:
-        return "failed"
-    if rate < warn_below:
-        return "warning"
-    return "ok"
-
-
 def _emit_person_stg_contract_checks(
     emit: Callable[[str, str, dict[str, Any]], None],
     data: pd.DataFrame,
@@ -983,7 +978,7 @@ def _emit_person_stg_contract_checks(
             non_null = float(target[col].notna().mean()) if len(target) else 0.0
             emit(
                 f"stg_contract.physical.{col}_present",
-                _status_from_rate(non_null, failed_below=0.99, warn_below=0.995),
+                gate_status_from_rate(non_null, failed_below=0.99, warn_below=0.995),
                 {
                     "non_null_rate": round(non_null, 6),
                     "rows_physical": int(len(target)),
@@ -995,7 +990,7 @@ def _emit_person_stg_contract_checks(
             non_null = float(physical[col].notna().mean())
             emit(
                 f"stg_contract.physical.{col}_present",
-                _status_from_rate(non_null, failed_below=0.99, warn_below=0.995),
+                gate_status_from_rate(non_null, failed_below=0.99, warn_below=0.995),
                 {"non_null_rate": round(non_null, 6), "rows_physical": int(len(physical))},
             )
 
@@ -1004,7 +999,7 @@ def _emit_person_stg_contract_checks(
     order_ok = float(((to >= frm) | to.isna() | frm.isna()).mean())
     emit(
         "stg_contract.physical.interval_order",
-        _status_from_rate(order_ok, failed_below=0.995, warn_below=0.999),
+        gate_status_from_rate(order_ok, failed_below=0.995, warn_below=0.999),
         {"valid_order_rate": round(order_ok, 6)},
     )
 
@@ -1016,7 +1011,7 @@ def _emit_person_stg_contract_checks(
     )
     emit(
         "stg_contract.physical.fio_present",
-        _status_from_rate(fio_ok, failed_below=0.95, warn_below=0.98),
+        gate_status_from_rate(fio_ok, failed_below=0.95, warn_below=0.98),
         {"fio_present_rate": round(fio_ok, 6)},
     )
 
@@ -1057,21 +1052,16 @@ def _extract_int(path: Path, prefix: str) -> int | None:
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(total_checks: int, warnings: int, failed: int) -> None:
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": "ok",
-        "metrics": {"total_checks": total_checks, "warning_checks": warnings, "failed_checks": failed},
-    }
-    logger.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=False,
+        clean_status="ok",
+    )
+

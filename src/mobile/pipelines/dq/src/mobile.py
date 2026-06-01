@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from mobile.pipelines.common.dq_gates import gate_status_from_rate, valid_rate
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 from mobile.project_paths import (
     MART_PARQUET_FILES,
     discover_mart_parquet_paths,
@@ -20,6 +22,7 @@ from mobile.project_paths import (
 
 
 logger = logging.getLogger(__name__)
+
 LOG_TAG = "DQ_SRC_MOBILE"
 
 _EXPECTED_EVENT_SEG = {"cdr": "10001", "sms": "10002", "gprs": "10003", "location": "10004"}
@@ -617,25 +620,11 @@ def _emit_null_rate_profile(
     )
 
 
-def _gate_status_from_rate(rate: float, *, failed_below: float, warn_below: float) -> str:
-    if rate < failed_below:
-        return "failed"
-    if rate < warn_below:
-        return "warning"
-    return "ok"
-
-
-def _valid_rate(mask: pd.Series) -> float:
-    if len(mask) == 0:
-        return 1.0
-    return float(mask.mean())
-
-
 def _check_started_series(series: pd.Series | None) -> tuple[float, dict[str, Any]]:
     if series is None or len(series) == 0:
         return 1.0, {"rows": 0}
     ok = started_parseable_mask(series)
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {"parseable_rate": round(rate, 6), "rows": int(len(series))}
 
 
@@ -644,7 +633,7 @@ def _check_owner_series(series: pd.Series | None) -> tuple[float, dict[str, Any]
         return 1.0, {"rows": 0}
     owner = pd.to_numeric(series, errors="coerce")
     ok = owner.isin(list(_OWNER_VALID))
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {"valid_owner_rate": round(rate, 6), "rows": int(len(series))}
 
 
@@ -661,7 +650,7 @@ def _check_lac_cell_series(lac: pd.Series | None, cell: pd.Series | None) -> tup
         & (l < 10**5)
         & (c < 10**6)
     )
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {"valid_lac_cell_rate": round(rate, 6), "rows": int(len(lac))}
 
 
@@ -670,7 +659,7 @@ def _check_imsi_digits(series: pd.Series | None, *, min_len: int = 10) -> tuple[
         return 1.0, {"rows": 0}
     digits = series.astype("string").str.replace(r"\D+", "", regex=True)
     ok = digits.str.len() >= min_len
-    rate = _valid_rate(ok & series.notna())
+    rate = valid_rate(ok & series.notna())
     return rate, {"valid_imsi_rate": round(rate, 6), "rows": int(len(series))}
 
 
@@ -679,7 +668,7 @@ def _check_msisdn_digits(series: pd.Series | None) -> tuple[float, dict[str, Any
         return 1.0, {"rows": 0}
     digits = series.astype("string").str.replace(r"\D+", "", regex=True)
     ok = digits.str.len().between(10, 15)
-    rate = _valid_rate(ok & series.notna())
+    rate = valid_rate(ok & series.notna())
     return rate, {"valid_msisdn_rate": round(rate, 6), "rows": int(len(series))}
 
 
@@ -687,7 +676,7 @@ def _check_coords(lon: pd.Series, lat: pd.Series) -> tuple[float, dict[str, Any]
     lon_n = pd.to_numeric(lon, errors="coerce")
     lat_n = pd.to_numeric(lat, errors="coerce")
     ok = lon_n.between(-180, 180) & lat_n.between(-90, 90) & lon_n.notna() & lat_n.notna()
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {
         "valid_coord_rate": round(rate, 6),
         "invalid_lon": int((lon_n.notna() & ~lon_n.between(-180, 180)).sum()),
@@ -716,64 +705,45 @@ def _emit_stg_field_checks(
         return
 
     rate, metrics = _check_started_series(df.get("Started"))
-    gate("started", _gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
+    gate("started", gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
 
     if "Owner" in df.columns:
         rate, metrics = _check_owner_series(df["Owner"])
-        gate("owner", _gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
+        gate("owner", gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
 
     lac_col = "Lac" if "Lac" in df.columns else "BSStartLac" if "BSStartLac" in df.columns else None
     cell_col = "Cell" if "Cell" in df.columns else "BSStartCell" if "BSStartCell" in df.columns else None
     if lac_col and cell_col:
         rate, metrics = _check_lac_cell_series(df[lac_col], df[cell_col])
-        gate("lac_cell", _gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
+        gate("lac_cell", gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
 
     if "IMSI" in df.columns:
         rate, metrics = _check_imsi_digits(df["IMSI"])
         failed_b = _MOBILE_IMSI_DQ_FAILED_BELOW_BY_MART.get(mart or "", 0.98)
         warn_b = _MOBILE_IMSI_DQ_WARN_BELOW_BY_MART.get(mart or "", 0.99)
-        gate("imsi", _gate_status_from_rate(rate, failed_below=failed_b, warn_below=warn_b), metrics)
+        gate("imsi", gate_status_from_rate(rate, failed_below=failed_b, warn_below=warn_b), metrics)
 
     msisdn_col = next((c for c in ("CallingNumber", "Calling", "Served") if c in df.columns), None)
     if msisdn_col:
         rate, metrics = _check_msisdn_digits(df[msisdn_col])
-        gate("msisdn", _gate_status_from_rate(rate, failed_below=0.98, warn_below=0.99), metrics)
+        gate("msisdn", gate_status_from_rate(rate, failed_below=0.98, warn_below=0.99), metrics)
 
     if {"Latitude", "Longitude"}.issubset(df.columns):
         rate, metrics = _check_coords(df["Longitude"], df["Latitude"])
-        gate("coords", _gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
+        gate("coords", gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995), metrics)
 
 
-def _emit_log(
-    check: str,
-    status: str,
-    metrics: dict[str, Any],
-    *,
-    mart: str | None = None,
-) -> None:
-    payload: dict[str, Any] = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    if mart is not None:
-        payload["mart"] = mart
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+def _emit_log(check: str, status: str, metrics: dict[str, Any], *, mart: str | None = None) -> None:
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger, mart=mart)
 
 def _emit_summary(total_checks: int, warnings: int = 0, failed: int = 0) -> None:
-    status = "failed" if failed else ("warning" if warnings else "info")
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": status,
-        "metrics": {
-            "total_checks": total_checks,
-            "warning_checks": warnings,
-            "failed_checks": failed,
-        },
-    }
-    log_fn = logger.error if failed else (logger.warning if warnings else logger.info)
-    log_fn(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=True,
+        clean_status="info",
+    )
+

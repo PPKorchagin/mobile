@@ -10,7 +10,7 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.project_paths import PROJECT_ROOT
+from mobile.pipelines.common.dim_csv import resolve_csv_input_path
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +68,8 @@ def run(
     output_path: str | Path,
 ) -> dict[str, Any]:
     compression = DEFAULT_PARQUET_COMPRESSION
-    csv_file = _resolve_path(csv_path)
-    parquet_file = _resolve_path(output_path)
+    csv_file = resolve_csv_input_path(csv_path)
+    parquet_file = resolve_csv_input_path(output_path)
 
     if not csv_file.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_file}")
@@ -113,11 +113,6 @@ def run(
     perf["elapsed_total_sec"] = round(time.perf_counter() - started, 4)
     append_command_metrics(command="build-dim-tac", metrics={**stats, **perf})
     return stats
-
-
-def _resolve_path(path: str | Path) -> Path:
-    candidate = Path(path)
-    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 
 
 def _prepare_dataset(

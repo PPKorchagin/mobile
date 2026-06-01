@@ -12,6 +12,8 @@ from mobile.pipelines.dim.tac import M2M_EQUIPMENT_TYPES, DIM_TAC_FIELDS
 from mobile.project_paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
+
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 LOG_TAG = "DQ_DIM_TAC"
 _TAC_RE = re.compile(r"^\d{8}$")
 _MIN_M2M_RATIO = 0.05
@@ -164,25 +166,16 @@ def _resolve_tac_path(path: str | Path) -> Path:
 
 
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
-
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
 def _emit_summary(total_checks: int, warnings: int, failed: int) -> None:
-    payload = {
-        "tag": LOG_TAG,
-        "check": "summary",
-        "status": "ok",
-        "metrics": {
-            "total_checks": total_checks,
-            "warning_checks": warnings,
-            "failed_checks": failed,
-        },
-    }
-    logger.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=False,
+        clean_status="ok",
+    )
+

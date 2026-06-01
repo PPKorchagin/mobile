@@ -11,6 +11,8 @@ from typing import Any, Callable
 import pandas as pd
 import pyarrow.parquet as pq
 
+from mobile.pipelines.common.dq_gates import gate_status_from_rate, valid_rate
+from mobile.pipelines.common.dq_logging import emit_dq_log, emit_dq_summary
 from mobile.pipelines.dds.event import EVENT_CODES, DDS_EVENT_FIELDS
 from mobile.project_paths import (
     resolve_project_path,
@@ -20,6 +22,7 @@ from mobile.project_paths import (
 )
 
 logger = logging.getLogger(__name__)
+
 LOG_TAG = "DQ_DDS_EVENT"
 
 STG_EVENT_CRITICAL_COLUMNS: tuple[str, ...] = tuple(f["name"] for f in DDS_EVENT_FIELDS)
@@ -278,7 +281,7 @@ def _emit_deep_metrics(
         rate = float(ok.mean()) if len(ok) else 1.0
         emit_gate(
             chk("event_timestamp_parseable"),
-            _gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995),
+            gate_status_from_rate(rate, failed_below=0.99, warn_below=0.995),
             {**base, "parseable_rate": round(rate, 6), "rows": int(len(df))},
         )
 
@@ -486,30 +489,30 @@ def _emit_dds_event_field_checks(
     if "event" in df.columns:
         event = pd.to_numeric(df["event"], errors="coerce")
         ok = event.isin(_EVENT_TYPES)
-        rate = _valid_rate(ok)
-        gate("event", _gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0), {"valid_event_rate": round(rate, 6)})
+        rate = valid_rate(ok)
+        gate("event", gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0), {"valid_event_rate": round(rate, 6)})
 
     if "event_name" in df.columns:
         names = df["event_name"].astype("string").str.strip().str.lower()
         ok = names.isin(_EVENT_NAMES_VALID)
-        rate = _valid_rate(ok)
-        gate("event_name", _gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0), {"valid_event_name_rate": round(rate, 6)})
+        rate = valid_rate(ok)
+        gate("event_name", gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0), {"valid_event_name_rate": round(rate, 6)})
 
     if {"event", "event_name"}.issubset(df.columns):
         event = pd.to_numeric(df["event"], errors="coerce")
         expected = event.map(_EVENT_CODE_TO_NAME).astype("string")
         actual = df["event_name"].astype("string").str.strip().str.lower()
         ok = expected == actual
-        rate = _valid_rate(ok & event.notna())
+        rate = valid_rate(ok & event.notna())
         gate(
             "event_code_name_alignment",
-            _gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0),
+            gate_status_from_rate(rate, failed_below=0.999, warn_below=1.0),
             {"aligned_rate": round(rate, 6)},
         )
 
     if "location" in df.columns:
         rate, metrics = _location_struct_metrics(df)
-        gate("location", _gate_status_from_rate(rate, failed_below=0.90, warn_below=0.98), metrics)
+        gate("location", gate_status_from_rate(rate, failed_below=0.90, warn_below=0.98), metrics)
 
     if "location" in df.columns:
         rate, metrics = _location_compressible_metrics(df)
@@ -525,9 +528,9 @@ def _location_struct_metrics(df: pd.DataFrame) -> tuple[float, dict[str, Any]]:
     mcc, mnc, lac, cell = _location_columns(loc)
     present = loc.notna()
     ok = present & mcc.astype("string").str.len().ge(1) & mnc.astype("string").str.len().ge(1)
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {
-        "location_present_rate": round(_valid_rate(present), 6),
+        "location_present_rate": round(valid_rate(present), 6),
         "location_mcc_mnc_rate": round(rate, 6),
         "rows": int(len(df)),
     }
@@ -543,7 +546,7 @@ def _location_compressible_metrics(df: pd.DataFrame) -> tuple[float, dict[str, A
         & lac.notna()
         & cell.notna()
     )
-    rate = _valid_rate(ok)
+    rate = valid_rate(ok)
     return rate, {
         "compressible_location_rate": round(rate, 6),
         "rows": int(len(df)),
@@ -568,39 +571,17 @@ def _location_columns(loc: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series, 
     return mcc, mnc, lac, cell
 
 
-def _valid_rate(mask: pd.Series) -> float:
-    if len(mask) == 0:
-        return 1.0
-    return float(mask.mean())
-
-
-def _gate_status_from_rate(rate: float, *, failed_below: float, warn_below: float) -> str:
-    if rate < failed_below:
-        return "failed"
-    if rate < warn_below:
-        return "warning"
-    return "ok"
-
-
 def _emit_log(check: str, status: str, metrics: dict[str, Any]) -> None:
-    payload: dict[str, Any] = {"tag": LOG_TAG, "check": check, "status": status, "metrics": metrics}
-    message = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if status == "failed":
-        logger.error(message)
-    elif status == "warning":
-        logger.warning(message)
-    else:
-        logger.info(message)
+    emit_dq_log(LOG_TAG, check, status, metrics, logger=logger)
 
-
-def _emit_summary(*, total_checks: int, warnings: int = 0, failed: int = 0) -> None:
-    status = "failed" if failed else ("warning" if warnings else "info")
-    _emit_log(
-        "summary",
-        status,
-        {
-            "total_checks": int(total_checks),
-            "warning_checks": int(warnings),
-            "failed_checks": int(failed),
-        },
+def _emit_summary(*, total_checks: int, warnings: int, failed: int) -> None:
+    emit_dq_summary(
+        LOG_TAG,
+        total_checks=total_checks,
+        warnings=warnings,
+        failed=failed,
+        logger=logger,
+        derive_status=True,
+        clean_status="info",
     )
+
