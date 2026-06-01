@@ -1,21 +1,28 @@
 # Mobile OSS — локальные пайплайны
 
-Репозиторий **mobile** — офлайн-конвейер для разработки и проверки мобильной аналитики: синтетические **src**-витрины (абоненты, БС, CDR/SMS/GPRS/location), справочники, события, гео-агрегаты, привязки MSISDN↔IMSI/IMEI, профили физлиц и контроль качества. Каждый шаг — CLI-команда `uv run mobile <команда>`; для витрин обычно три фазы: **build** → **dq** → **nb** (ноутбук с метриками DQ и профилем parquet). Артефакты пишутся в `data/` (parquet, логи `data/logs/mobile.log`, тайминги `data/qa/command_timing.jsonl`). Спецификации шагов — в `documents/` (build по слоям: `dim/`, `src/`, `dds/`, `fct/`, `stg/`; DQ — `documents/dq/{слой}/`), исходники — в `src/mobile/pipelines/`.
+Репозиторий **mobile** — офлайн-конвейер для разработки и проверки мобильной аналитики: синтетические **src**-витрины (абоненты, БС, CDR/SMS/GPRS/location), справочники, события, гео-агрегаты, привязки MSISDN↔IMSI/IMEI, профили физлиц и контроль качества. Каждый шаг — CLI-команда `uv run mobile <команда>`; для витрин обычно три фазы: **build** → **dq** → **nb** (ноутбук с метриками DQ и профилем parquet). Артефакты пишутся в `data/` (parquet, логи `data/logs/mobile.log`, тайминги `data/qa/command_timing.jsonl`). Спецификации шагов — в `documents/` (build по слоям: `dim/`, `src/`, `dds/`, `fct/`, `stg/`; DQ — `documents/dq/{слой}/`), исходники — в `src/mobile/pipelines/` (`{dim,dds,fct,stg,src}/`, `dq/{слой}/`, общие хелперы — `common/`).
 
 **Слои по префиксу команды:** `dim-*` — справочники (ОКТМО, TAC, …); `src-*` — синтетические исходники; `dds-*` — детальный слой событий (`dds_event`); `fct-*` — витрины-факты (БС, привязки, интервалы, person); `build-stg-geo-all` / `dq-stg-geo-all` / `nb-stg-geo-all` — промежуточная дневная гео-агрегация (`stg_geo_all`). Префикс в имени команды совпадает с каталогом артефактов под `data/` (`dim/`, `src/`, `dds/`, `fct/`, …).
 
 ## Общие пайплайны
 
-Сквозные команды, не привязанные к одной витрине. Порядок шагов задаётся в коде ([`cli.py`](src/mobile/cli.py): `RUN_SRC_COMMANDS`, `RUN_ALL_COMMANDS`).
+Сквозные команды, не привязанные к одной витрине. Порядок шагов задаётся в коде ([`cli.py`](src/mobile/cli.py): `RUN_SRC_COMMANDS`, `RUN_ALL_COMMANDS`, `BUILD_PROD_STAGE1_*`, `BUILD_PROD_STAGE2_*`, `BUILD_PROD_PERSON_*`). Прод-расписание — [`documents/pipelines/prod_run_order.md`](documents/pipelines/prod_run_order.md).
 
 | Команда | Описание | Параметры |
 | ------- | -------- | --------- |
 | `run-src` | Только **build** src-слоя: `build-dim-oktmo` → `build-src-bs` → `build-src-person` → `build-src-excl` → `build-src-mobile` (5 шагов). Без `dq-src-*` и `nb-src-*`. В `run-all` эти команды по-прежнему идут по отдельности (13–24). | опционально `--target-per-operator`, `--excl-pct-of-ab` |
 | `run-all` | Последовательно выполняет команды **1–47** из таблицы ниже — те же дефолты, что при одиночном вызове без флагов. `build-fct-person` запускается **по каждому календарному месяцу** в окне `DEFAULT_SRC_*` (сейчас 3 прогона). При ошибке на шаге прогон останавливается; в логе — `run-all [i/n] <команда>`. | опционально `--target-per-operator`, `--excl-pct-of-ab` (передаются в `build-src-person` / `build-src-excl`) |
+| `build-prod-stage1` | Прод **stage 1** (ежедневно): `dq-src-mobile` → `build-dds-event` (× ЦОД) → `build-dds-move-event`. На проде перенос (`build-dds-move-event`) — **вручную** поставщиком, см. prod_run_order. | **`--report-date`** (обязателен); опционально `--dc`, пути mobile-витрин |
+| `build-prod-stage2` | Прод **stage 2** (ежедневно): dim ОКТМО/time zones, `dq-src-bs` → `fct_bs`, `dq-dds-event`, `stg_geo_all`, binding IMEI/IMSI, `fct_geo_intervals` (16 шагов). После stage 1. | **`--report-date`** (обязателен); опционально пути справочников и витрин (как у одиночных команд) |
+| `build-prod-person` | Прод **person** (1-го числа месяца): TAC, ОКСМ, `dq-src-excl`, `dq-src-person`, `build-fct-person`, `dq-fct-person` за **прошлый** месяц (8 шагов). | `--report-date` = `YYYY-MM-01` (опционально; без флага — предыдущий месяц) |
 
 ```bash
 uv run mobile run-src
 uv run mobile run-all
+uv run mobile build-prod-stage1 --report-date 2025-01-15
+uv run mobile build-prod-stage2 --report-date 2025-01-15
+uv run mobile build-prod-person
+uv run mobile build-prod-person --report-date 2025-01-01
 ```
 
 ## Список команд и параметров
@@ -80,12 +87,13 @@ uv run mobile run-all
 
 | Метрика | Значение |
 | -------- | -------- |
-| Python-модули (`src/mobile`) | **42** файла |
-| Строки Python (всего) | **~26 000** (~23 000 непустых) |
-| Функции / классы (AST) | **~848** / **12** |
-| ETL `pipelines/{dim,dds,fct,stg}` | dim 4 · dds 2 · fct 6 · stg 1, ~5 500 строк |
-| Синтез `pipelines/src` | 4 модуля, ~7 500 строк (крупнейший — `mobile.py`, ~3 500 строк) |
-| DQ `pipelines/dq/{dim,dds,fct,stg,src}` | 15 модулей, ~6 000 строк |
+| Python-модули (`src/mobile`) | **57** файлов |
+| Строки Python (всего) | **~25 600** (~22 700 непустых) |
+| Функции / классы (AST) | **~866** / **15** |
+| ETL `pipelines/{dim,dds,fct,stg}` | dim 4 · dds 2 · fct 6 · stg 1, ~5 100 строк |
+| Общее `pipelines/common` | 7 модулей, ~470 строк (DQ-логи, gates, WKT, CSV, схемы, binding-интервалы) |
+| Синтез `pipelines/src` | 4 модуля, ~7 500 строк (крупнейший — `mobile.py`, ~5 000 строк) |
+| DQ `pipelines/dq/{dim,dds,fct,stg,src}` | 15 модулей, ~5 600 строк |
 | Ноутбуки `pipelines/nb/common.py` | ~3 900 строк (DQ-дашборды, folium) |
 | CLI, пути, timing | `cli.py`, `project_paths.py`, … — ~3 000 строк |
 | JSON-схемы витрин | **20** файлов в `schema/` |
@@ -95,7 +103,7 @@ uv run mobile run-all
 | Метрика | Значение |
 | -------- | -------- |
 | Markdown-спеки | **31** файл в `documents/` + **README** |
-| Строки документации | **~6 000** (~4 100 непустых) |
+| Строки документации | **~5 900** (~4 100 непустых) |
 | `documents/{dim,dds,fct,stg}` — build | 4 / 2 / 5 / 1 |
 | `documents/dq/{dim,dds,fct,stg}` — dq | 4 / 1 / 5 / 1 |
 | `documents/src` — build / dq | 4 / 4 |
@@ -105,7 +113,7 @@ uv run mobile run-all
 
 | Метрика | Значение |
 | -------- | -------- |
-| Зарегистрированных команд | **49** (`47` по таблице + `run-all` + `run-src`) |
+| Зарегистрированных команд | **52** (`47` по таблице + `run-all` + `run-src` + `build-prod-stage1` + `build-prod-stage2` + `build-prod-person`) |
 | Шагов в `run-all` | **47** (+ до 3× `build-fct-person` по месяцам → до **49** subprocess) |
 | Шагов в `run-src` | **5** (только build: ОКТМО + 4 src-витрины) |
 | Календарное окно синтеза | `DEFAULT_SRC_*`: **2024-12-25 … 2025-02-05** |

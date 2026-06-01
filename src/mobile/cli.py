@@ -80,6 +80,7 @@ from mobile.project_paths import (
     FCT_BS_LAYOUT_TEMPLATE,
     FCT_MSISDN_IMSI_LAYOUT_TEMPLATE,
     FCT_MSISDN_IMEI_LAYOUT_TEMPLATE,
+    FCT_PERSON_LAYOUT_TEMPLATE,
     DEFAULT_DIM_TAC_OUTPUT_PATH,
     DEFAULT_DIM_TIME_ZONES_CSV_PATH,
     DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH,
@@ -196,10 +197,77 @@ RUN_SRC_COMMANDS: tuple[str, ...] = (
     "build-src-mobile",
 )
 
+# Прод stage 1: DQ mobile → сборка dds_event → перенос в DDS-layout (см. documents/pipelines/prod_run_order.md).
+BUILD_PROD_STAGE1_MOBILE_COMMANDS: tuple[str, ...] = (
+    "dq-src-mobile",
+    "build-dds-event",
+)
+BUILD_PROD_STAGE1_COMMANDS: tuple[str, ...] = (
+    *BUILD_PROD_STAGE1_MOBILE_COMMANDS,
+    "build-dds-move-event",
+)
+
+# Прод stage 2: справочники, fct_bs, DDS DQ, geo_all, binding, geo_intervals (см. documents/pipelines/prod_run_order.md).
+BUILD_PROD_STAGE2_COMMANDS: tuple[str, ...] = (
+    "build-dim-oktmo",
+    "dq-dim-oktmo",
+    "build-dim-time-zones",
+    "dq-dim-time-zones",
+    "dq-src-bs",
+    "build-fct-bs",
+    "dq-fct-bs",
+    "dq-dds-event",
+    "build-stg-geo-all",
+    "dq-stg-geo-all",
+    "build-fct-msisdn-imei",
+    "dq-fct-msisdn-imei",
+    "build-fct-msisdn-imsi-operator",
+    "dq-fct-msisdn-imsi-operator",
+    "build-fct-geo-intervals",
+    "dq-fct-geo-intervals",
+)
+
+_BUILD_PROD_STAGE2_STATIC: frozenset[str] = frozenset(
+    {
+        "build-dim-oktmo",
+        "dq-dim-oktmo",
+        "build-dim-time-zones",
+        "dq-dim-time-zones",
+        "dq-src-bs",
+        "build-fct-bs",
+        "dq-fct-bs",
+    }
+)
+
+# Прод person: TAC/ОКСМ, DQ src_person, fct_person за отчётный месяц (см. documents/pipelines/prod_run_order.md).
+BUILD_PROD_PERSON_COMMANDS: tuple[str, ...] = (
+    "build-dim-tac",
+    "dq-dim-tac",
+    "build-dim-oksm",
+    "dq-dim-oksm",
+    "dq-src-excl",
+    "dq-src-person",
+    "build-fct-person",
+    "dq-fct-person",
+)
+
+_BUILD_PROD_PERSON_STATIC: frozenset[str] = frozenset(
+    {
+        "build-dim-tac",
+        "dq-dim-tac",
+        "build-dim-oksm",
+        "dq-dim-oksm",
+        "dq-src-excl",
+    }
+)
+
 CLI_COMMANDS: tuple[str, ...] = (
     *RUN_ALL_COMMANDS,
     "run-all",
     "run-src",
+    "build-prod-stage1",
+    "build-prod-stage2",
+    "build-prod-person",
 )
 
 
@@ -223,6 +291,28 @@ def _distinct_report_months_in_src_window() -> list[date]:
     return sorted(months)
 
 
+def _calendar_month_end(month_start: date) -> date:
+    if month_start.day != 1:
+        raise ValueError(f"Expected YYYY-MM-01, got {month_start.isoformat()}")
+    last_dom = monthrange(month_start.year, month_start.month)[1]
+    return date(month_start.year, month_start.month, last_dom)
+
+
+def _resolve_prod_person_report_month(report_date: date | None) -> date:
+    """YYYY-MM-01 обрабатываемого месяца; без флага — предыдущий календарный месяц."""
+    if report_date is not None:
+        month = report_month_start(report_date)
+        if report_date != month:
+            raise SystemExit(
+                "build-prod-person: --report-date must be YYYY-MM-01 "
+                f"(report month), got {report_date.isoformat()}"
+            )
+        return month
+    today = date.today()
+    last_day_prev_month = today.replace(day=1) - timedelta(days=1)
+    return report_month_start(last_day_prev_month)
+
+
 def _run_all_argv_steps() -> list[tuple[str, list[str]]]:
     """Шаги run-all: (метка лога, argv для argparse)."""
     steps: list[tuple[str, list[str]]] = []
@@ -240,6 +330,287 @@ def _run_all_argv_steps() -> list[tuple[str, list[str]]]:
 def _run_src_argv_steps() -> list[tuple[str, list[str]]]:
     """Шаги run-src: (метка лога, argv для argparse)."""
     return [(command, [command]) for command in RUN_SRC_COMMANDS]
+
+
+def _append_mobile_mart_argv(
+    argv: list[str],
+    *,
+    mobile_root: str | None,
+    cdr_path: str | None,
+    sms_path: str | None,
+    gprs_path: str | None,
+    location_path: str | None,
+    output_path: str | None,
+    include_output_path: bool,
+) -> None:
+    if mobile_root:
+        argv.extend(["--mobile-root", mobile_root])
+    if cdr_path:
+        argv.extend(["--cdr-path", cdr_path])
+    if sms_path:
+        argv.extend(["--sms-path", sms_path])
+    if gprs_path:
+        argv.extend(["--gprs-path", gprs_path])
+    if location_path:
+        argv.extend(["--location-path", location_path])
+    if include_output_path and output_path:
+        argv.extend(["--output-path", output_path])
+
+
+def _build_prod_stage1_argv_steps(
+    *,
+    report_date: date,
+    datacenter: str | None,
+    mobile_root: str | None,
+    cdr_path: str | None,
+    sms_path: str | None,
+    gprs_path: str | None,
+    location_path: str | None,
+    output_path: str | None,
+) -> list[tuple[str, list[str]]]:
+    """Шаги build-prod-stage1: DQ mobile и build-dds-event по ЦОД, затем build-dds-move-event."""
+    steps: list[tuple[str, list[str]]] = []
+    date_arg = report_date.isoformat()
+    dcs = [datacenter] if datacenter else list(mobile_datacenter_ids())
+
+    for command in BUILD_PROD_STAGE1_MOBILE_COMMANDS:
+        for dc in dcs:
+            argv = [command, "--report-date", date_arg, "--dc", dc]
+            _append_mobile_mart_argv(
+                argv,
+                mobile_root=mobile_root,
+                cdr_path=cdr_path,
+                sms_path=sms_path,
+                gprs_path=gprs_path,
+                location_path=location_path,
+                output_path=output_path,
+                include_output_path=command == "build-dds-event",
+            )
+            steps.append((f"{command}-{dc}-{date_arg}", argv))
+
+    steps.append(
+        (f"build-dds-move-event-{date_arg}", ["build-dds-move-event", "--report-date", date_arg])
+    )
+    return steps
+
+
+def _build_prod_stage2_argv_steps(
+    *,
+    report_date: date,
+    csv_path: str | None,
+    oktmo_path: str | None,
+    time_zones_path: str | None,
+    src_bs_path: str | None,
+    fct_bs_path: str | None,
+    event_dds_path: str | None,
+    stg_geo_all_path: str | None,
+    fct_msisdn_imei_path: str | None,
+    fct_msisdn_imsi_path: str | None,
+    fct_geo_intervals_path: str | None,
+    output_path: str | None,
+) -> list[tuple[str, list[str]]]:
+    """Шаги build-prod-stage2: dim/fct_bs, затем цепочка за ``report_date``."""
+    steps: list[tuple[str, list[str]]] = []
+    date_arg = report_date.isoformat()
+    geo_day = stg_geo_all_path or str(stg_geo_all_output_path(report_date))
+    event_dds = event_dds_path or str(DEFAULT_DDS_EVENT_DDS_ROOT)
+    fct_bs = fct_bs_path or str(fct_bs_output_path())
+    geo_out_day = str(stg_geo_all_output_path(report_date))
+    imei_layout = fct_msisdn_imei_path or FCT_MSISDN_IMEI_LAYOUT_TEMPLATE
+    imsi_layout = fct_msisdn_imsi_path or FCT_MSISDN_IMSI_LAYOUT_TEMPLATE
+    geo_intervals_root = fct_geo_intervals_path or str(DEFAULT_FCT_GEO_INTERVALS_OUTPUT_ROOT)
+
+    for command in BUILD_PROD_STAGE2_COMMANDS:
+        if command in _BUILD_PROD_STAGE2_STATIC:
+            argv = [command]
+            label = command
+            if command == "build-dim-oktmo":
+                if csv_path:
+                    argv.extend(["--csv-path", csv_path])
+                if output_path:
+                    argv.extend(["--output-path", output_path])
+            elif command == "dq-dim-oktmo":
+                if oktmo_path:
+                    argv.extend(["--oktmo-path", oktmo_path])
+            elif command == "build-dim-time-zones":
+                if csv_path:
+                    argv.extend(["--csv-path", csv_path])
+                if time_zones_path:
+                    argv.extend(["--output-path", time_zones_path])
+            elif command == "dq-dim-time-zones":
+                if time_zones_path:
+                    argv.extend(["--time-zones-path", time_zones_path])
+            elif command == "dq-src-bs":
+                if src_bs_path:
+                    argv.extend(["--src-bs-path", src_bs_path])
+            elif command == "build-fct-bs":
+                if src_bs_path:
+                    argv.extend(["--src-bs-path", src_bs_path])
+                if oktmo_path:
+                    argv.extend(["--oktmo-path", oktmo_path])
+                if time_zones_path:
+                    argv.extend(["--time-zones-path", time_zones_path])
+                if fct_bs_path:
+                    argv.extend(["--output-path", fct_bs_path])
+            elif command == "dq-fct-bs":
+                if fct_bs_path:
+                    argv.extend(["--fct-bs-path", fct_bs_path])
+            steps.append((label, argv))
+            continue
+
+        argv = [command, "--report-date", date_arg]
+        label = f"{command}-{date_arg}"
+
+        if command == "dq-dds-event":
+            argv.extend(["--event-dds-path", event_dds])
+        elif command == "build-stg-geo-all":
+            argv.extend(
+                [
+                    "--event-dds-path",
+                    event_dds,
+                    "--fct-bs-path",
+                    fct_bs,
+                    "--output-path",
+                    geo_out_day,
+                ]
+            )
+        elif command == "dq-stg-geo-all":
+            argv.extend(["--stg-geo-all-path", geo_day])
+        elif command in ("build-fct-msisdn-imei", "dq-fct-msisdn-imei"):
+            if command.startswith("build"):
+                argv.extend(["--stg-geo-all-path", geo_day, "--output-path", imei_layout])
+            else:
+                argv.extend(["--fct-msisdn-imei-path", imei_layout])
+        elif command in ("build-fct-msisdn-imsi-operator", "dq-fct-msisdn-imsi-operator"):
+            if command.startswith("build"):
+                argv.extend(["--stg-geo-all-path", geo_day, "--output-path", imsi_layout])
+            else:
+                argv.extend(["--fct-msisdn-imsi-path", imsi_layout])
+        elif command == "build-fct-geo-intervals":
+            argv.extend(
+                [
+                    "--stg-geo-all-path",
+                    stg_geo_all_path or str(DEFAULT_STG_GEO_ALL_OUTPUT_ROOT),
+                    "--fct-bs-path",
+                    fct_bs,
+                    "--time-zones-path",
+                    time_zones_path or str(DEFAULT_DIM_TIME_ZONES_OUTPUT_PATH),
+                    "--fct-msisdn-imsi-path",
+                    imsi_layout,
+                    "--fct-msisdn-imei-path",
+                    imei_layout,
+                    "--output-path",
+                    geo_intervals_root,
+                ]
+            )
+        elif command == "dq-fct-geo-intervals":
+            argv.extend(["--fct-geo-intervals-path", geo_intervals_root])
+
+        steps.append((label, argv))
+
+    return steps
+
+
+def _build_prod_person_argv_steps(
+    *,
+    report_month: date,
+    csv_path: str | None,
+    tac_path: str | None,
+    oksm_path: str | None,
+    src_person_path: str | None,
+    fct_msisdn_imsi_path: str | None,
+    fct_msisdn_imei_path: str | None,
+    src_imsi_path: str | None,
+    src_imei_path: str | None,
+    src_msisdn_path: str | None,
+    fct_person_path: str | None,
+    output_path: str | None,
+) -> list[tuple[str, list[str]]]:
+    """Шаги build-prod-person за календарный месяц ``report_month`` (YYYY-MM-01)."""
+    steps: list[tuple[str, list[str]]] = []
+    month_arg = report_month.isoformat()
+    month_end_arg = _calendar_month_end(report_month).isoformat()
+    person_root = src_person_path or str(DEFAULT_SRC_PERSON_OUTPUT_ROOT)
+    fct_person_layout = fct_person_path or FCT_PERSON_LAYOUT_TEMPLATE
+    tac_out = tac_path or output_path
+
+    for command in BUILD_PROD_PERSON_COMMANDS:
+        if command in _BUILD_PROD_PERSON_STATIC:
+            argv = [command]
+            label = command
+            if command == "build-dim-tac":
+                if csv_path:
+                    argv.extend(["--csv-path", csv_path])
+                if tac_out:
+                    argv.extend(["--output-path", tac_out])
+            elif command == "dq-dim-tac":
+                if tac_path:
+                    argv.extend(["--tac-path", tac_path])
+            elif command == "build-dim-oksm":
+                if csv_path:
+                    argv.extend(["--csv-path", csv_path])
+                if oksm_path:
+                    argv.extend(["--output-path", oksm_path])
+            elif command == "dq-dim-oksm":
+                if oksm_path:
+                    argv.extend(["--oksm-path", oksm_path])
+            elif command == "dq-src-excl":
+                if src_imsi_path:
+                    argv.extend(["--src-imsi-path", src_imsi_path])
+                if src_imei_path:
+                    argv.extend(["--src-imei-path", src_imei_path])
+                if src_msisdn_path:
+                    argv.extend(["--src-msisdn-path", src_msisdn_path])
+            steps.append((label, argv))
+            continue
+
+        label = f"{command}-{month_arg}"
+        if command == "dq-src-person":
+            argv = [
+                command,
+                "--start-date",
+                month_arg,
+                "--end-date",
+                month_end_arg,
+                "--src-person-path",
+                person_root,
+            ]
+        elif command == "build-fct-person":
+            argv = [command, "--report-date", month_arg]
+            if src_person_path:
+                argv.extend(["--src-person-path", src_person_path])
+            if fct_msisdn_imsi_path:
+                argv.extend(["--fct-msisdn-imsi-path", fct_msisdn_imsi_path])
+            if fct_msisdn_imei_path:
+                argv.extend(["--fct-msisdn-imei-path", fct_msisdn_imei_path])
+            if src_imsi_path:
+                argv.extend(["--src-imsi-path", src_imsi_path])
+            if src_imei_path:
+                argv.extend(["--src-imei-path", src_imei_path])
+            if src_msisdn_path:
+                argv.extend(["--src-msisdn-path", src_msisdn_path])
+            if tac_path:
+                argv.extend(["--dim-tac-path", tac_path])
+            if oksm_path:
+                argv.extend(["--dim-oksm-path", oksm_path])
+            if output_path:
+                argv.extend(["--output-path", output_path])
+        elif command == "dq-fct-person":
+            argv = [
+                command,
+                "--report-date",
+                month_arg,
+                "--fct-person-path",
+                fct_person_layout,
+            ]
+            if oksm_path:
+                argv.extend(["--oksm-path", oksm_path])
+        else:
+            raise ValueError(f"Unhandled build-prod-person step: {command}")
+
+        steps.append((label, argv))
+
+    return steps
 
 
 def _run_pipeline(
@@ -1657,7 +2028,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="YYYY-MM-DD",
         help=(
-            "dq-src-mobile / build-dds-event: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); "
+            "build-prod-stage1 / build-prod-stage2: отчётный день (обязателен); "
+            "build-prod-person: YYYY-MM-01 отчётного месяца (без флага — предыдущий календарный месяц, для cron 1-го числа); "
+            "dq-src-mobile / build-dds-event: отчётный день (mobile с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); "
             "dq-dds-event / build-dds-move-event / build-fct-msisdn-imei / build-fct-msisdn-imsi-operator / build-stg-geo-all / "
             "build-fct-geo-intervals / dq-stg-geo-all / dq-fct-geo-intervals — календарный день; "
             "dq-fct-msisdn-imei / dq-fct-msisdn-imsi-operator — любой день месяца (→ YYYY-MM-01); "
@@ -2057,6 +2430,120 @@ def run_src(
     )
 
 
+def run_build_prod_stage1(
+    *,
+    report_date: date,
+    datacenter: str | None = None,
+    mobile_root: str | None = None,
+    cdr_path: str | None = None,
+    sms_path: str | None = None,
+    gprs_path: str | None = None,
+    location_path: str | None = None,
+    output_path: str | None = None,
+) -> None:
+    """Прод stage 1: dq-src-mobile → build-dds-event (× ЦОД) → build-dds-move-event."""
+    steps = _build_prod_stage1_argv_steps(
+        report_date=report_date,
+        datacenter=datacenter,
+        mobile_root=mobile_root,
+        cdr_path=cdr_path,
+        sms_path=sms_path,
+        gprs_path=gprs_path,
+        location_path=location_path,
+        output_path=output_path,
+    )
+    _run_pipeline(
+        "build-prod-stage1",
+        steps,
+        start_message=(
+            f"Starting build-prod-stage1: report_date={report_date.isoformat()}, "
+            f"steps={len(steps)} ({', '.join(BUILD_PROD_STAGE1_COMMANDS)})"
+        ),
+    )
+
+
+def run_build_prod_stage2(
+    *,
+    report_date: date,
+    csv_path: str | None = None,
+    oktmo_path: str | None = None,
+    time_zones_path: str | None = None,
+    src_bs_path: str | None = None,
+    fct_bs_path: str | None = None,
+    event_dds_path: str | None = None,
+    stg_geo_all_path: str | None = None,
+    fct_msisdn_imei_path: str | None = None,
+    fct_msisdn_imsi_path: str | None = None,
+    fct_geo_intervals_path: str | None = None,
+    output_path: str | None = None,
+) -> None:
+    """Прод stage 2: dim/fct_bs → DDS DQ → stg_geo_all → binding → geo_intervals за ``report_date``."""
+    steps = _build_prod_stage2_argv_steps(
+        report_date=report_date,
+        csv_path=csv_path,
+        oktmo_path=oktmo_path,
+        time_zones_path=time_zones_path,
+        src_bs_path=src_bs_path,
+        fct_bs_path=fct_bs_path,
+        event_dds_path=event_dds_path,
+        stg_geo_all_path=stg_geo_all_path,
+        fct_msisdn_imei_path=fct_msisdn_imei_path,
+        fct_msisdn_imsi_path=fct_msisdn_imsi_path,
+        fct_geo_intervals_path=fct_geo_intervals_path,
+        output_path=output_path,
+    )
+    _run_pipeline(
+        "build-prod-stage2",
+        steps,
+        start_message=(
+            f"Starting build-prod-stage2: report_date={report_date.isoformat()}, "
+            f"steps={len(steps)} ({', '.join(BUILD_PROD_STAGE2_COMMANDS)})"
+        ),
+    )
+
+
+def run_build_prod_person(
+    *,
+    report_month: date,
+    csv_path: str | None = None,
+    tac_path: str | None = None,
+    oksm_path: str | None = None,
+    src_person_path: str | None = None,
+    fct_msisdn_imsi_path: str | None = None,
+    fct_msisdn_imei_path: str | None = None,
+    src_imsi_path: str | None = None,
+    src_imei_path: str | None = None,
+    src_msisdn_path: str | None = None,
+    fct_person_path: str | None = None,
+    output_path: str | None = None,
+) -> None:
+    """Прод person: dim TAC/ОКСМ → DQ src_person за месяц → build/dq fct_person."""
+    steps = _build_prod_person_argv_steps(
+        report_month=report_month,
+        csv_path=csv_path,
+        tac_path=tac_path,
+        oksm_path=oksm_path,
+        src_person_path=src_person_path,
+        fct_msisdn_imsi_path=fct_msisdn_imsi_path,
+        fct_msisdn_imei_path=fct_msisdn_imei_path,
+        src_imsi_path=src_imsi_path,
+        src_imei_path=src_imei_path,
+        src_msisdn_path=src_msisdn_path,
+        fct_person_path=fct_person_path,
+        output_path=output_path,
+    )
+    month_end = _calendar_month_end(report_month)
+    _run_pipeline(
+        "build-prod-person",
+        steps,
+        start_message=(
+            f"Starting build-prod-person: report_month={report_month.isoformat()} "
+            f"({report_month.isoformat()} .. {month_end.isoformat()}), "
+            f"steps={len(steps)} ({', '.join(BUILD_PROD_PERSON_COMMANDS)})"
+        ),
+    )
+
+
 def main() -> None:
     setup_logging()
     parser = _build_parser()
@@ -2073,6 +2560,52 @@ def main() -> None:
             run_src(
                 target_per_operator=args.target_per_operator,
                 excl_pct_of_ab=args.excl_pct_of_ab,
+            )
+        elif args.command == "build-prod-stage1":
+            if args.report_date is None:
+                raise SystemExit("build-prod-stage1: --report-date is required")
+            run_build_prod_stage1(
+                report_date=args.report_date,
+                datacenter=args.dc,
+                mobile_root=args.mobile_root,
+                cdr_path=args.cdr_path,
+                sms_path=args.sms_path,
+                gprs_path=args.gprs_path,
+                location_path=args.location_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-prod-stage2":
+            if args.report_date is None:
+                raise SystemExit("build-prod-stage2: --report-date is required")
+            run_build_prod_stage2(
+                report_date=args.report_date,
+                csv_path=args.csv_path,
+                oktmo_path=args.oktmo_path,
+                time_zones_path=args.time_zones_path,
+                src_bs_path=args.src_bs_path,
+                fct_bs_path=args.fct_bs_path,
+                event_dds_path=args.event_dds_path,
+                stg_geo_all_path=args.stg_geo_all_path,
+                fct_msisdn_imei_path=args.fct_msisdn_imei_path,
+                fct_msisdn_imsi_path=args.fct_msisdn_imsi_path,
+                fct_geo_intervals_path=args.fct_geo_intervals_path,
+                output_path=args.output_path,
+            )
+        elif args.command == "build-prod-person":
+            report_month = _resolve_prod_person_report_month(args.report_date)
+            run_build_prod_person(
+                report_month=report_month,
+                csv_path=args.csv_path,
+                tac_path=args.tac_path,
+                oksm_path=args.oksm_path,
+                src_person_path=args.src_person_path,
+                fct_msisdn_imsi_path=args.fct_msisdn_imsi_path,
+                fct_msisdn_imei_path=args.fct_msisdn_imei_path,
+                src_imsi_path=args.src_imsi_path,
+                src_imei_path=args.src_imei_path,
+                src_msisdn_path=args.src_msisdn_path,
+                fct_person_path=args.fct_person_path,
+                output_path=args.output_path,
             )
         else:
             _execute_parsed_args(args)
