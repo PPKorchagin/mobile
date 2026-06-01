@@ -135,39 +135,70 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-perf-metrics": run_nb_perf_metrics,
 }
 
-CLI_COMMANDS: tuple[str, ...] = (
+# Порядок как в README.md (команды 1–47).
+RUN_ALL_COMMANDS: tuple[str, ...] = (
     "build-stg-oktmo",
     "dq-stg-oktmo",
+    "nb-stg-oktmo",
     "build-stg-time-zones",
     "dq-stg-time-zones",
+    "nb-stg-time-zones",
     "build-stg-tac",
     "dq-stg-tac",
+    "nb-stg-tac",
     "build-stg-oksm",
     "dq-stg-oksm",
-    *tuple(_BUILD_COMMANDS),
+    "nb-stg-oksm",
+    "build-src-bs",
+    "dq-src-bs",
+    "nb-src-bs",
+    "build-src-person",
+    "dq-src-person",
+    "nb-src-person",
+    "build-src-excl",
+    "dq-src-excl",
+    "nb-src-excl",
+    "build-src-mobile",
+    "dq-src-mobile",
+    "nb-src-mobile",
+    "build-stg-event",
+    "build-move-event",
+    "dq-stg-event",
+    "nb-stg-event",
+    "build-stg-bs",
+    "dq-stg-bs",
+    "nb-stg-bs",
+    "build-stg-geo-all",
+    "dq-stg-geo-all",
+    "nb-stg-geo-all",
+    "build-stg-msisdn-imei",
+    "dq-stg-msisdn-imei",
+    "nb-stg-msisdn-imei",
+    "build-stg-msisdn-imsi-operator",
+    "dq-stg-msisdn-imsi-operator",
+    "nb-stg-msisdn-imsi-operator",
+    "build-stg-geo-intervals",
+    "dq-stg-geo-intervals",
+    "nb-stg-geo-intervals",
+    "build-stg-person",
+    "dq-stg-person",
+    "nb-stg-person",
+    "nb-perf-metrics",
+)
+
+# Генерация src-витрин (только build; порядок README 1 + 13, 16, 19, 22).
+RUN_SRC_COMMANDS: tuple[str, ...] = (
+    "build-stg-oktmo",
+    "build-src-bs",
     "build-src-person",
     "build-src-excl",
     "build-src-mobile",
-    "dq-src-mobile",
-    "dq-src-bs",
-    "dq-src-person",
-    "dq-src-excl",
-    "build-stg-event",
-    "build-stg-geo-all",
-    "build-stg-geo-intervals",
-    "build-stg-person",
-    "build-stg-msisdn-imei",
-    "dq-stg-msisdn-imei",
-    "build-stg-msisdn-imsi-operator",
-    "dq-stg-msisdn-imsi-operator",
-    "build-move-event",
-    "dq-stg-event",
-    "dq-stg-geo-all",
-    "dq-stg-geo-intervals",
-    "dq-stg-person",
-    "build-stg-bs",
-    "dq-stg-bs",
-    *tuple(_NB_COMMANDS),
+)
+
+CLI_COMMANDS: tuple[str, ...] = (
+    *RUN_ALL_COMMANDS,
+    "run-all",
+    "run-src",
 )
 
 
@@ -182,6 +213,58 @@ def _calendar_days_inclusive(start: date, end: date) -> list[date]:
         out.append(cur)
         cur += timedelta(days=1)
     return out
+
+
+def _distinct_report_months_in_src_window() -> list[date]:
+    months: set[date] = set()
+    for day in _calendar_days_inclusive(DEFAULT_SRC_START_DATE, DEFAULT_SRC_END_DATE):
+        months.add(report_month_start(day))
+    return sorted(months)
+
+
+def _run_all_argv_steps() -> list[tuple[str, list[str]]]:
+    """Шаги run-all: (метка лога, argv для argparse)."""
+    steps: list[tuple[str, list[str]]] = []
+    for command in RUN_ALL_COMMANDS:
+        if command == "build-stg-person":
+            for month in _distinct_report_months_in_src_window():
+                label = f"{command} ({month.isoformat()})"
+                argv = [command, "--report-date", month.isoformat()]
+                steps.append((label, argv))
+        else:
+            steps.append((command, [command]))
+    return steps
+
+
+def _run_src_argv_steps() -> list[tuple[str, list[str]]]:
+    """Шаги run-src: (метка лога, argv для argparse)."""
+    return [(command, [command]) for command in RUN_SRC_COMMANDS]
+
+
+def _run_pipeline(
+    pipeline_name: str,
+    steps: list[tuple[str, list[str]]],
+    *,
+    target_per_operator: int | None = None,
+    excl_pct_of_ab: float | None = None,
+    start_message: str,
+) -> None:
+    parser = _build_parser()
+
+    def _body() -> None:
+        total = len(steps)
+        logger.info(start_message)
+        for index, (label, argv) in enumerate(steps, start=1):
+            logger.info("%s [%s/%s] %s", pipeline_name, index, total, label)
+            step_args = parser.parse_args(argv)
+            if target_per_operator is not None:
+                step_args.target_per_operator = target_per_operator
+            if excl_pct_of_ab is not None:
+                step_args.excl_pct_of_ab = excl_pct_of_ab
+            _execute_parsed_args(step_args)
+        logger.info("%s completed successfully", pipeline_name)
+
+    run_timed_command(pipeline_name, _body)
 
 
 def dq_src_mobile_run(
@@ -1773,6 +1856,206 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _execute_parsed_args(args: argparse.Namespace) -> None:
+    if args.command == "dq-src-mobile":
+        run_dq_src_mobile(
+            datacenter=args.dc,
+            report_date=args.report_date,
+            mobile_root=args.mobile_root,
+            cdr_path=args.cdr_path,
+            sms_path=args.sms_path,
+            gprs_path=args.gprs_path,
+            location_path=args.location_path,
+        )
+    elif args.command == "dq-src-bs":
+        run_dq_src_bs(
+            src_bs_path=args.src_bs_path,
+        )
+    elif args.command == "dq-src-person":
+        run_dq_src_person(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            src_person_path=args.src_person_path,
+        )
+    elif args.command == "dq-src-excl":
+        run_dq_src_excl(
+            src_imsi_path=args.src_imsi_path,
+            src_imei_path=args.src_imei_path,
+            src_msisdn_path=args.src_msisdn_path,
+        )
+    elif args.command == "build-move-event":
+        run_build_move_event(report_date=args.report_date)
+    elif args.command == "build-stg-event":
+        run_build_stg_event(
+            datacenter=args.dc,
+            report_date=args.report_date,
+            mobile_root=args.mobile_root,
+            cdr_path=args.cdr_path,
+            sms_path=args.sms_path,
+            gprs_path=args.gprs_path,
+            location_path=args.location_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "build-stg-oktmo":
+        run_build_stg_oktmo(
+            csv_path=args.csv_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-oktmo":
+        run_dq_stg_oktmo(oktmo_path=args.oktmo_path)
+    elif args.command == "build-stg-time-zones":
+        run_build_stg_time_zones(
+            csv_path=args.csv_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-time-zones":
+        run_dq_stg_time_zones(time_zones_path=args.time_zones_path)
+    elif args.command == "build-stg-tac":
+        run_build_stg_tac(
+            csv_path=args.csv_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-tac":
+        run_dq_stg_tac(tac_path=args.tac_path)
+    elif args.command == "build-stg-oksm":
+        run_build_stg_oksm(
+            csv_path=args.csv_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-oksm":
+        run_dq_stg_oksm(oksm_path=args.oksm_path)
+    elif args.command == "build-stg-geo-all":
+        run_build_stg_geo_all(
+            report_date=args.report_date,
+            event_dds_path=args.event_dds_path,
+            stg_bs_path=args.stg_bs_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "build-stg-geo-intervals":
+        run_build_stg_geo_intervals(
+            report_date=args.report_date,
+            stg_geo_all_path=args.stg_geo_all_path,
+            stg_bs_path=args.stg_bs_path,
+            time_zones_path=args.time_zones_path,
+            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "build-stg-msisdn-imei":
+        run_build_stg_msisdn_imei(
+            report_date=args.report_date,
+            stg_geo_all_path=args.stg_geo_all_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-msisdn-imei":
+        run_dq_stg_msisdn_imei(
+            report_date=args.report_date,
+            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+        )
+    elif args.command == "build-stg-msisdn-imsi-operator":
+        run_build_stg_msisdn_imsi_operator(
+            report_date=args.report_date,
+            stg_geo_all_path=args.stg_geo_all_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-msisdn-imsi-operator":
+        run_dq_stg_msisdn_imsi_operator(
+            report_date=args.report_date,
+            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+        )
+    elif args.command == "build-stg-person":
+        run_build_stg_person(
+            report_date=args.report_date,
+            src_person_path=args.src_person_path,
+            stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
+            stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            src_excl_imsi_path=args.src_imsi_path,
+            src_excl_imei_path=args.src_imei_path,
+            src_excl_msisdn_path=args.src_msisdn_path,
+            stg_tac_path=args.stg_tac_path,
+            stg_oksm_path=args.stg_oksm_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-event":
+        run_dq_stg_event(
+            report_date=args.report_date,
+            event_dds_path=args.event_dds_path,
+        )
+    elif args.command == "dq-stg-geo-all":
+        run_dq_stg_geo_all(
+            report_date=args.report_date,
+            stg_geo_all_path=args.stg_geo_all_path,
+        )
+    elif args.command == "dq-stg-geo-intervals":
+        run_dq_stg_geo_intervals(
+            report_date=args.report_date,
+            stg_geo_intervals_path=args.stg_geo_intervals_path,
+        )
+    elif args.command == "dq-stg-person":
+        run_dq_stg_person(
+            report_date=args.report_date,
+            stg_person_path=args.stg_person_path,
+            stg_oksm_path=args.stg_oksm_path,
+        )
+    elif args.command == "build-stg-bs":
+        run_build_stg_bs(
+            src_bs_path=args.src_bs_path,
+            oktmo_path=args.oktmo_path,
+            time_zones_path=args.time_zones_path,
+            output_path=args.output_path,
+        )
+    elif args.command == "dq-stg-bs":
+        run_dq_stg_bs(stg_bs_path=args.stg_bs_path)
+    else:
+        run_timed_command(
+            args.command,
+            lambda: _run_command(
+                args.command,
+                target_per_operator=args.target_per_operator,
+                excl_pct_of_ab=args.excl_pct_of_ab,
+            ),
+        )
+
+
+def run_all(
+    *,
+    target_per_operator: int | None = None,
+    excl_pct_of_ab: float | None = None,
+) -> None:
+    """Последовательно выполнить все шаги из RUN_ALL_COMMANDS (порядок README)."""
+    steps = _run_all_argv_steps()
+    _run_pipeline(
+        "run-all",
+        steps,
+        target_per_operator=target_per_operator,
+        excl_pct_of_ab=excl_pct_of_ab,
+        start_message=(
+            f"Starting run-all: {len(steps)} steps "
+            f"({DEFAULT_SRC_START_DATE.isoformat()} .. {DEFAULT_SRC_END_DATE.isoformat()}, "
+            f"build-stg-person × {len(_distinct_report_months_in_src_window())} months)"
+        ),
+    )
+
+
+def run_src(
+    *,
+    target_per_operator: int | None = None,
+    excl_pct_of_ab: float | None = None,
+) -> None:
+    """Последовательно выполнить RUN_SRC_COMMANDS (build ОКТМО + src-витрины, без dq/nb)."""
+    steps = _run_src_argv_steps()
+    _run_pipeline(
+        "run-src",
+        steps,
+        target_per_operator=target_per_operator,
+        excl_pct_of_ab=excl_pct_of_ab,
+        start_message=(
+            f"Starting run-src: {len(steps)} steps "
+            f"({', '.join(RUN_SRC_COMMANDS)})"
+        ),
+    )
+
+
 def main() -> None:
     setup_logging()
     parser = _build_parser()
@@ -1780,164 +2063,18 @@ def main() -> None:
 
     with command_run_scope() as run_id:
         logger.info("run_id=%s (metrics -> data/qa/command_timing.jsonl)", run_id)
-        if args.command == "dq-src-mobile":
-            run_dq_src_mobile(
-                datacenter=args.dc,
-                report_date=args.report_date,
-                mobile_root=args.mobile_root,
-                cdr_path=args.cdr_path,
-                sms_path=args.sms_path,
-                gprs_path=args.gprs_path,
-                location_path=args.location_path,
+        if args.command == "run-all":
+            run_all(
+                target_per_operator=args.target_per_operator,
+                excl_pct_of_ab=args.excl_pct_of_ab,
             )
-        elif args.command == "dq-src-bs":
-            run_dq_src_bs(
-                src_bs_path=args.src_bs_path,
+        elif args.command == "run-src":
+            run_src(
+                target_per_operator=args.target_per_operator,
+                excl_pct_of_ab=args.excl_pct_of_ab,
             )
-        elif args.command == "dq-src-person":
-            run_dq_src_person(
-                start_date=args.start_date,
-                end_date=args.end_date,
-                src_person_path=args.src_person_path,
-            )
-        elif args.command == "dq-src-excl":
-            run_dq_src_excl(
-                src_imsi_path=args.src_imsi_path,
-                src_imei_path=args.src_imei_path,
-                src_msisdn_path=args.src_msisdn_path,
-            )
-        elif args.command == "build-move-event":
-            run_build_move_event(report_date=args.report_date)
-        elif args.command == "build-stg-event":
-            run_build_stg_event(
-                datacenter=args.dc,
-                report_date=args.report_date,
-                mobile_root=args.mobile_root,
-                cdr_path=args.cdr_path,
-                sms_path=args.sms_path,
-                gprs_path=args.gprs_path,
-                location_path=args.location_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "build-stg-oktmo":
-            run_build_stg_oktmo(
-                csv_path=args.csv_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-oktmo":
-            run_dq_stg_oktmo(oktmo_path=args.oktmo_path)
-        elif args.command == "build-stg-time-zones":
-            run_build_stg_time_zones(
-                csv_path=args.csv_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-time-zones":
-            run_dq_stg_time_zones(time_zones_path=args.time_zones_path)
-        elif args.command == "build-stg-tac":
-            run_build_stg_tac(
-                csv_path=args.csv_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-tac":
-            run_dq_stg_tac(tac_path=args.tac_path)
-        elif args.command == "build-stg-oksm":
-            run_build_stg_oksm(
-                csv_path=args.csv_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-oksm":
-            run_dq_stg_oksm(oksm_path=args.oksm_path)
-        elif args.command == "build-stg-geo-all":
-            run_build_stg_geo_all(
-                report_date=args.report_date,
-                event_dds_path=args.event_dds_path,
-                stg_bs_path=args.stg_bs_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "build-stg-geo-intervals":
-            run_build_stg_geo_intervals(
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-                stg_bs_path=args.stg_bs_path,
-                time_zones_path=args.time_zones_path,
-                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
-                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "build-stg-msisdn-imei":
-            run_build_stg_msisdn_imei(
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-msisdn-imei":
-            run_dq_stg_msisdn_imei(
-                report_date=args.report_date,
-                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
-            )
-        elif args.command == "build-stg-msisdn-imsi-operator":
-            run_build_stg_msisdn_imsi_operator(
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-msisdn-imsi-operator":
-            run_dq_stg_msisdn_imsi_operator(
-                report_date=args.report_date,
-                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
-            )
-        elif args.command == "build-stg-person":
-            run_build_stg_person(
-                report_date=args.report_date,
-                src_person_path=args.src_person_path,
-                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
-                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
-                src_excl_imsi_path=args.src_imsi_path,
-                src_excl_imei_path=args.src_imei_path,
-                src_excl_msisdn_path=args.src_msisdn_path,
-                stg_tac_path=args.stg_tac_path,
-                stg_oksm_path=args.stg_oksm_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-event":
-            run_dq_stg_event(
-                report_date=args.report_date,
-                event_dds_path=args.event_dds_path,
-            )
-        elif args.command == "dq-stg-geo-all":
-            run_dq_stg_geo_all(
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-            )
-        elif args.command == "dq-stg-geo-intervals":
-            run_dq_stg_geo_intervals(
-                report_date=args.report_date,
-                stg_geo_intervals_path=args.stg_geo_intervals_path,
-            )
-        elif args.command == "dq-stg-person":
-            run_dq_stg_person(
-                report_date=args.report_date,
-                stg_person_path=args.stg_person_path,
-                stg_oksm_path=args.stg_oksm_path,
-            )
-        elif args.command == "build-stg-bs":
-            run_build_stg_bs(
-                src_bs_path=args.src_bs_path,
-                oktmo_path=args.oktmo_path,
-                time_zones_path=args.time_zones_path,
-                output_path=args.output_path,
-            )
-        elif args.command == "dq-stg-bs":
-            run_dq_stg_bs(stg_bs_path=args.stg_bs_path)
         else:
-            run_timed_command(
-                args.command,
-                lambda: _run_command(
-                    args.command,
-                    target_per_operator=args.target_per_operator,
-                    excl_pct_of_ab=args.excl_pct_of_ab,
-                ),
-            )
+            _execute_parsed_args(args)
 
 
 if __name__ == "__main__":
