@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +16,16 @@ from IPython.display import HTML, display
 from shapely import wkt
 
 from folium.plugins import FastMarkerCluster
+from mobile.cli_defaults import DEFAULT_SRC_END_DATE
 from mobile.project_paths import (
     DEFAULT_BS_LAYOUT,
+    DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     DEFAULT_STG_OKSM_OUTPUT_PATH,
     stg_bs_output_path,
     DEFAULT_STG_OKTMO_OUTPUT_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
+    stg_geo_all_output_path,
 )
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
@@ -2208,6 +2213,30 @@ _STG_BS_WKT_MAPINFO_STYLE = {
 _STG_BS_POINTS_DETAIL_MAX = 2500
 _STG_BS_WKT_FEATURES_MAX = 600
 _STG_BS_FILTER_ALL = "Все"
+_STG_BS_MAP_READ_COLUMNS = (
+    "lon",
+    "lat",
+    "mcc",
+    "mnc",
+    "lac",
+    "cell_id",
+    "telecomstandard",
+    "bs_type",
+    "date_off",
+    "oktmo_code_1",
+)
+
+
+def _notebook_batch_mode() -> bool:
+    """``nb-*`` через ``notebook_runner`` (без интерактива, облегчённые карты)."""
+    return os.environ.get("MOBILE_NOTEBOOK_BATCH") == "1"
+
+
+def _parquet_columns_subset(parquet: Path, wanted: tuple[str, ...]) -> list[str]:
+    import pyarrow.parquet as pq
+
+    available = set(pq.read_schema(parquet).names)
+    return [col for col in wanted if col in available]
 
 
 def _stg_bs_filter_options(series: pd.Series) -> list[str]:
@@ -2251,7 +2280,8 @@ def _load_stg_bs_map_df(root: Path, *, active_only: bool = True) -> tuple[pd.Dat
     if not bs_parquet.exists():
         raise FileNotFoundError(f"Нет parquet: {bs_parquet}")
 
-    df = pd.read_parquet(bs_parquet)
+    read_cols = _parquet_columns_subset(bs_parquet, _STG_BS_MAP_READ_COLUMNS)
+    df = pd.read_parquet(bs_parquet, columns=read_cols or None)
     if active_only and "date_off" in df.columns:
         date_off = pd.to_datetime(df["date_off"], errors="coerce")
         df = df.loc[date_off.dt.strftime("%Y-%m-%d").eq(_STG_BS_OPEN_END_PREFIX)].copy()
@@ -2336,8 +2366,9 @@ def build_stg_bs_points_map(
     root: Path,
     *,
     segment_label: str,
+    lite: bool = False,
 ) -> folium.Map:
-    """Точки БС: кластер, детальные маркеры по ``telecomstandard``, ОКТМО level=1."""
+    """Точки БС: кластер; в полном режиме — маркеры по ``telecomstandard`` и ОКТМО."""
     center_lat, center_lon = _stg_bs_map_center(pts)
     m = folium.Map(
         location=[center_lat, center_lon],
@@ -2353,6 +2384,10 @@ def build_stg_bs_points_map(
     )
     FastMarkerCluster(data=all_points).add_to(fg_all)
     fg_all.add_to(m)
+
+    if lite:
+        folium.LayerControl(collapsed=False).add_to(m)
+        return m
 
     if "telecomstandard" in pts.columns:
         for std, group in pts.groupby("telecomstandard", dropna=False):
@@ -2392,6 +2427,8 @@ def build_stg_bs_wkt_map(
     layer_title: str,
     style: dict[str, Any],
     segment_label: str,
+    max_features: int | None = None,
+    add_oktmo: bool = True,
 ) -> folium.Map | None:
     """Полигоны из ``sector_wkt`` или ``mapinfo_wkt`` (сэмпл при большом объёме)."""
     if wkt_col not in pts.columns:
@@ -2402,12 +2439,9 @@ def build_stg_bs_wkt_map(
     if work.empty:
         return None
 
+    cap = max_features if max_features is not None else _STG_BS_WKT_FEATURES_MAX
     total = len(work)
-    sample = (
-        work
-        if total <= _STG_BS_WKT_FEATURES_MAX
-        else work.sample(_STG_BS_WKT_FEATURES_MAX, random_state=42)
-    )
+    sample = work if total <= cap else work.sample(cap, random_state=42)
     center_lat, center_lon = _stg_bs_map_center(pts)
     m = folium.Map(
         location=[center_lat, center_lon],
@@ -2440,7 +2474,8 @@ def build_stg_bs_wkt_map(
     if ok == 0:
         return None
     fg.add_to(m)
-    _add_stg_bs_oktmo_level1(m, pts, root)
+    if add_oktmo:
+        _add_stg_bs_oktmo_level1(m, pts, root)
     folium.LayerControl(collapsed=False).add_to(m)
     if bad:
         print(f"{layer_title}: WKT не разобрано: {bad}")
@@ -2449,11 +2484,32 @@ def build_stg_bs_wkt_map(
     return m
 
 
-def display_stg_bs_folium_maps(root: Path, *, active_only: bool = True) -> None:
-    """Три карты с фильтрами ``mnc``, ``telecomstandard``, ``bs_type`` (ipywidgets)."""
-    from ipywidgets import Dropdown, interact
+def _display_stg_bs_folium_maps_batch(
+    pts: pd.DataFrame,
+    root: Path,
+    *,
+    segment_label: str,
+) -> None:
+    """Быстрый режим для ``uv run mobile nb-stg-bs`` (кластер точек, без ipywidgets)."""
+    display_folium_map(
+        build_stg_bs_points_map(pts, root, segment_label=segment_label, lite=True),
+    )
 
+
+def display_stg_bs_folium_maps(
+    root: Path,
+    *,
+    active_only: bool = True,
+    interactive: bool | None = None,
+) -> None:
+    """Карта точек lon/lat; в Jupyter — фильтры ipywidgets, в CLI — только кластер."""
     pts, segment = _load_stg_bs_map_df(root, active_only=active_only)
+    use_interactive = interactive if interactive is not None else not _notebook_batch_mode()
+    if not use_interactive:
+        _display_stg_bs_folium_maps_batch(pts, root, segment_label=segment)
+        return
+
+    from ipywidgets import Dropdown, interact
     if "telecomstandard" in pts.columns:
         display(
             pts.groupby("telecomstandard", as_index=False)
@@ -2492,39 +2548,10 @@ def display_stg_bs_folium_maps(root: Path, *, active_only: bool = True) -> None:
             f"| строк: {len(sub):,}"
         )
         if sub.empty:
-            print("Нет строк для карт")
+            print("Нет строк для карты")
             return
 
-        print("\n--- Точки БС (lon/lat) ---")
         display_folium_map(build_stg_bs_points_map(sub, root, segment_label=segment))
-
-        print("\n--- sector_wkt ---")
-        m_sector = build_stg_bs_wkt_map(
-            sub,
-            root,
-            "sector_wkt",
-            layer_title="sector_wkt",
-            style=_STG_BS_WKT_SECTOR_STYLE,
-            segment_label=segment,
-        )
-        if m_sector is None:
-            print("Нет валидных sector_wkt для выбранного фильтра")
-        else:
-            display_folium_map(m_sector)
-
-        print("\n--- mapinfo_wkt ---")
-        m_mapinfo = build_stg_bs_wkt_map(
-            sub,
-            root,
-            "mapinfo_wkt",
-            layer_title="mapinfo_wkt",
-            style=_STG_BS_WKT_MAPINFO_STYLE,
-            segment_label=segment,
-        )
-        if m_mapinfo is None:
-            print("Нет валидных mapinfo_wkt для выбранного фильтра")
-        else:
-            display_folium_map(m_mapinfo)
 
 
 def render_stg_bs_folium_map(root: Path, *, active_only: bool = True) -> folium.Map:
@@ -2609,6 +2636,334 @@ def display_stg_bs_parquet_summary(root: Path) -> None:
     if "bs_type" in df.columns:
         print("\n--- bs_type ---")
         display(df["bs_type"].value_counts().head(10).to_frame("rows"))
+
+
+# --- stg_geo_all DQ charts ---
+
+_STG_GEO_ALL_CARDINALITY_FOCUS = (
+    "msisdn",
+    "imsi",
+    "imei",
+    "cgi",
+    "source_event_type",
+    "bs_type",
+    "utc_offset",
+    "oktmo_code_1",
+    "oktmo_code_2",
+)
+_STG_GEO_ALL_EVENT_COLORS = {
+    "cdr": "#1f77b4",
+    "sms": "#ff7f0e",
+    "gprs": "#2ca02c",
+    "location": "#d62728",
+}
+_STG_GEO_ALL_MAP_DETAIL_MAX = 2500
+_STG_GEO_ALL_MAP_CLUSTER_BATCH_MAX = 8000
+
+
+def _stg_geo_all_report_date(latest: pd.DataFrame | None) -> date:
+    if latest is not None:
+        for check in ("dataset_basic", "dataset_presence"):
+            metrics = _metrics_for_check(latest, check)
+            raw = metrics.get("report_date")
+            if raw:
+                return date.fromisoformat(str(raw))
+    root = DEFAULT_STG_GEO_ALL_OUTPUT_ROOT
+    if root.is_dir():
+        files = sorted(root.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if files:
+            try:
+                return date.fromisoformat(files[0].stem)
+            except ValueError:
+                pass
+    return DEFAULT_SRC_END_DATE
+
+
+def stg_geo_all_cardinality_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, record in latest.iterrows():
+        check = str(record["check"])
+        if not check.startswith("cardinality."):
+            continue
+        metrics = record.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        rows.append(
+            {
+                "field": check.removeprefix("cardinality."),
+                "nunique": int(metrics.get("nunique") or 0),
+            }
+        )
+    if not rows:
+        return pd.DataFrame(columns=["field", "nunique"])
+    out = pd.DataFrame(rows)
+    focus = [f for f in _STG_GEO_ALL_CARDINALITY_FOCUS if f in set(out["field"])]
+    if focus:
+        out = pd.concat([out[out["field"].isin(focus)], out[~out["field"].isin(focus)]], ignore_index=True)
+    return out.head(20)
+
+
+def stg_geo_all_gate_counts_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    specs: tuple[tuple[str, str, str], ...] = (
+        ("required_fields_presence", "invalid_rows", "invalid required rows"),
+        ("coords_range", "invalid_lat_count", "invalid lat"),
+        ("coords_range", "invalid_lon_count", "invalid lon"),
+        ("temporal_order", "invalid_order_count", "invalid time order"),
+        ("event_count_valid", "invalid_event_count_rows", "invalid event_count"),
+        ("source_event_type_vocab", "invalid_source_event_type_rows", "invalid event type"),
+        ("utc_offset_range", "invalid_utc_offset_rows", "invalid utc_offset"),
+        ("bs_type_vocab", "invalid_bs_type_rows", "invalid bs_type"),
+        ("duplicate_event_key", "duplicate_rows", "duplicate event key"),
+    )
+    rows: list[dict[str, Any]] = []
+    for check, key, label in specs:
+        metrics = _metrics_for_check(latest, check)
+        if key not in metrics:
+            continue
+        hit = latest[latest["check"] == check]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append({"metric": label, "count": int(metrics[key]), "status": status})
+    return pd.DataFrame(rows)
+
+
+def render_stg_geo_all_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    required = _metrics_for_check(latest, "required_fields_presence")
+    event_mix = stg_event_counts_frame(latest, "distribution.source_event_type")
+    report_date = basic.get("report_date") if basic else None
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    if event_mix.empty:
+        axes[1, 0].set_title("source_event_type — нет данных")
+        axes[1, 0].axis("off")
+    else:
+        work = event_mix.head(8)
+        axes[1, 0].pie(
+            work["count"],
+            labels=work["label"],
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            colors=[_STG_GEO_ALL_EVENT_COLORS.get(lbl, "#9467bd") for lbl in work["label"]],
+            startangle=90,
+        )
+        axes[1, 0].set_title("distribution.source_event_type (DQ)")
+    ax = axes[1, 1]
+    if required:
+        rate = float(required.get("required_rate") or 0)
+        invalid = int(required.get("invalid_rows") or 0)
+        ax.bar(["required_rate", "invalid_rows"], [rate, invalid], color=["#2ca02c", "#d62728"], alpha=0.88)
+        ax.set_ylim(0, max(1.05, rate * 1.1))
+        ax.set_title("required_fields_presence (DQ)")
+        ax.text(0, rate, f"{rate:.4f}", ha="center", va="bottom", fontsize=9)
+        ax.text(1, invalid, str(invalid), ha="center", va="bottom", fontsize=9)
+    else:
+        plot_count_bars(stg_geo_all_gate_counts_frame(latest).head(6), title="Gate counts (DQ)", ax=ax)
+    title = (
+        f"DQ STG GEO ALL — report_date={report_date}, rows={int(basic.get('row_count') or 0):,}"
+        if basic and report_date
+        else "DQ STG GEO ALL — обзор метрик"
+    )
+    fig.suptitle(title, fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_all_dq_gates(latest: pd.DataFrame) -> plt.Figure:
+    gates = stg_geo_all_gate_counts_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if gates.empty:
+        ax.set_title("Gate counts — нет данных")
+        ax.axis("off")
+        return fig
+    colors = [
+        "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+        for s in gates["status"]
+    ]
+    work = gates.sort_values("count", ascending=True)
+    ax.barh(work["metric"], work["count"], color=colors, alpha=0.88)
+    ax.set_xlabel("count")
+    ax.set_title("Gate-проверки stg_geo_all (DQ)")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_all_dq_nulls(latest: pd.DataFrame) -> plt.Figure:
+    nulls = null_ratio_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    if nulls.empty:
+        ax.set_title("nulls.* — нет данных в логе")
+        ax.axis("off")
+        return fig
+    plot_null_ratios(nulls, ax=ax)
+    fig.suptitle("Доля null по полям контракта (DQ)", fontsize=12)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_all_dq_cardinality(latest: pd.DataFrame) -> plt.Figure:
+    card = stg_geo_all_cardinality_frame(latest)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if card.empty:
+        ax.set_title("cardinality.* — нет данных")
+        ax.axis("off")
+        return fig
+    work = card.sort_values("nunique", ascending=True)
+    ax.barh(work["field"], work["nunique"], color="#9467bd", alpha=0.88)
+    ax.set_xlabel("nunique (DQ log)")
+    ax.set_title("Кардинальность полей (top-20)")
+    fig.tight_layout()
+    return fig
+
+
+def display_stg_geo_all_parquet_summary(root: Path, report_date: date) -> None:
+    parquet = _resolve_parquet(root, stg_geo_all_output_path(report_date))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet)
+    try:
+        rel = parquet.relative_to(root)
+    except ValueError:
+        rel = parquet
+    print(f"stg_geo_all ({report_date.isoformat()}): {len(df):,} rows | файл: {rel}")
+    if "source_event_type" in df.columns:
+        display(
+            df["source_event_type"]
+            .astype("string")
+            .str.lower()
+            .value_counts()
+            .head(8)
+            .to_frame("rows")
+        )
+    if "utc_offset" in df.columns:
+        print("\n--- utc_offset ---")
+        display(df["utc_offset"].value_counts().head(12).to_frame("rows"))
+
+
+def render_stg_geo_all_parquet_profile(root: Path, report_date: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, stg_geo_all_output_path(report_date))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    import pyarrow.parquet as pq
+
+    available = set(pq.read_schema(parquet).names)
+    profile_cols = [c for c in ("source_event_type", "utc_offset", "event_count", "bs_type") if c in available]
+    df = pd.read_parquet(parquet, columns=profile_cols) if profile_cols else pd.read_parquet(parquet)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    if "source_event_type" in df.columns:
+        mix = df["source_event_type"].astype("string").str.lower().value_counts().head(8)
+        axes[0].pie(
+            mix.values,
+            labels=mix.index.astype(str),
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+            colors=[_STG_GEO_ALL_EVENT_COLORS.get(lbl, "#9467bd") for lbl in mix.index.astype(str)],
+            startangle=90,
+        )
+        axes[0].set_title("source_event_type")
+    else:
+        axes[0].axis("off")
+    if "utc_offset" in df.columns:
+        tz = df["utc_offset"].dropna().astype(int).value_counts().sort_index()
+        axes[1].bar(tz.index.astype(str), tz.values, color="#2563eb", alpha=0.88)
+        axes[1].set_xlabel("utc_offset")
+        axes[1].set_title("UTC offset")
+        plt.setp(axes[1].get_xticklabels(), rotation=25, ha="right")
+    else:
+        axes[1].axis("off")
+    if "event_count" in df.columns:
+        cnt = pd.to_numeric(df["event_count"], errors="coerce").dropna()
+        if len(cnt):
+            axes[2].hist(cnt.clip(upper=cnt.quantile(0.99)), bins=30, color="#ff7f0e", alpha=0.88)
+            axes[2].set_xlabel("event_count (≤ p99)")
+            axes[2].set_title("event_count")
+        else:
+            axes[2].axis("off")
+    else:
+        axes[2].axis("off")
+    fig.suptitle(f"Профиль parquet stg_geo_all ({report_date.isoformat()})", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_geo_all_folium_map(
+    root: Path,
+    report_date: date,
+    *,
+    lite: bool | None = None,
+) -> folium.Map:
+    """Точки событий lon/lat, кластер и слои по ``source_event_type``."""
+    if lite is None:
+        lite = _notebook_batch_mode()
+    parquet = _resolve_parquet(root, stg_geo_all_output_path(report_date))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+
+    df = pd.read_parquet(parquet, columns=["lat", "lon", "source_event_type", "msisdn", "cgi"])
+    pts = df.copy()
+    pts["lon"] = pd.to_numeric(pts["lon"], errors="coerce")
+    pts["lat"] = pd.to_numeric(pts["lat"], errors="coerce")
+    pts = pts.loc[pts["lon"].notna() & pts["lat"].notna()]
+    pts = pts[pts["lon"].between(-180, 180) & pts["lat"].between(-90, 90)]
+    if pts.empty:
+        raise ValueError("Нет валидных lon/lat для карты stg_geo_all")
+    if "source_event_type" in pts.columns:
+        pts["source_event_type"] = pts["source_event_type"].astype("string").str.lower().fillna("unknown")
+    if lite and len(pts) > _STG_GEO_ALL_MAP_CLUSTER_BATCH_MAX:
+        pts = pts.sample(_STG_GEO_ALL_MAP_CLUSTER_BATCH_MAX, random_state=42)
+        print(f"nb-batch: сэмпл точек для кластера: {len(pts):,}")
+
+    center_lat = float(pts["lat"].mean())
+    center_lon = float(pts["lon"].mean())
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=5,
+        tiles="CartoDB positron",
+        width="100%",
+        height="100%",
+    )
+    all_points = pts[["lat", "lon"]].astype(float).values.tolist()
+    fg_all = folium.FeatureGroup(
+        name=f"stg_geo_all {report_date.isoformat()} (cluster): {len(all_points):,}",
+        show=True,
+    )
+    FastMarkerCluster(data=all_points).add_to(fg_all)
+    fg_all.add_to(m)
+
+    if lite:
+        folium.LayerControl(collapsed=False).add_to(m)
+        return m
+
+    detail_cap = _STG_GEO_ALL_MAP_DETAIL_MAX
+    if "source_event_type" in pts.columns:
+        for evt, group in pts.groupby("source_event_type", dropna=False):
+            evt_name = str(evt)
+            color = _STG_GEO_ALL_EVENT_COLORS.get(evt_name, "#9467bd")
+            sample = (
+                group
+                if len(group) <= detail_cap
+                else group.sample(detail_cap, random_state=42)
+            )
+            fg = folium.FeatureGroup(
+                name=f"{evt_name}: {len(sample):,}/{len(group):,}",
+                show=False,
+            )
+            for row in sample.itertuples(index=False):
+                tip = (
+                    f"<b>{row.msisdn}</b><br>cgi={row.cgi}<br>"
+                    f"type={evt_name}"
+                )
+                folium.CircleMarker(
+                    location=[float(row.lat), float(row.lon)],
+                    radius=2,
+                    color=color,
+                    weight=1,
+                    fill=True,
+                    fill_opacity=0.65,
+                    tooltip=folium.Tooltip(tip, sticky=False),
+                ).add_to(fg)
+            fg.add_to(m)
+
+    folium.LayerControl(collapsed=False).add_to(m)
+    return m
 
 
 # --- stg_event DQ charts ---

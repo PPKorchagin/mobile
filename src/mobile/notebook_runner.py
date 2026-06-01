@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,8 @@ from mobile.project_paths import (
     DEFAULT_NB_SRC_MOBILE_NOTEBOOK_PATH,
     DEFAULT_NB_STG_BS_EXECUTED_PATH,
     DEFAULT_NB_STG_BS_NOTEBOOK_PATH,
+    DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH,
+    DEFAULT_NB_STG_GEO_ALL_NOTEBOOK_PATH,
     DEFAULT_NB_STG_EVENT_EXECUTED_PATH,
     DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH,
     DEFAULT_NB_SRC_PERSON_EXECUTED_PATH,
@@ -73,7 +76,15 @@ def run_notebook(
     )
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    client.execute()
+    prev_batch = os.environ.get("MOBILE_NOTEBOOK_BATCH")
+    os.environ["MOBILE_NOTEBOOK_BATCH"] = "1"
+    try:
+        client.execute()
+    finally:
+        if prev_batch is None:
+            os.environ.pop("MOBILE_NOTEBOOK_BATCH", None)
+        else:
+            os.environ["MOBILE_NOTEBOOK_BATCH"] = prev_batch
 
     executed_notebook.parent.mkdir(parents=True, exist_ok=True)
     with executed_notebook.open("w", encoding="utf-8") as file:
@@ -180,6 +191,15 @@ def run_nb_stg_bs() -> None:
     run_notebook(
         source_notebook=DEFAULT_NB_STG_BS_NOTEBOOK_PATH,
         executed_notebook=DEFAULT_NB_STG_BS_EXECUTED_PATH,
+    )
+
+
+def run_nb_stg_geo_all() -> None:
+    if DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH.exists():
+        DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH.unlink()
+    run_notebook(
+        source_notebook=DEFAULT_NB_STG_GEO_ALL_NOTEBOOK_PATH,
+        executed_notebook=DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH,
     )
 
 
