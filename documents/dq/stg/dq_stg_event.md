@@ -21,12 +21,6 @@
 
 ---
 
-## TODO
-
-1. Notebook DQ (по аналогии с geo).
-
----
-
 ## Параметры запуска
 
 Вызов pipeline: `run_dq(report_date, event_dds_root)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-event`). **Оба параметра обязательны.**
@@ -209,6 +203,7 @@ CLI не завершается с ненулевым exit code при failed ch
 | Артефакт | Путь |
 |----------|------|
 | DQ pipeline | [`pipelines/dq/stg/event.py`](../../../src/mobile/pipelines/dq/stg/event.py) |
+| DQ notebook | [`pipelines/nb/9_stg_event.ipynb`](../../../src/mobile/pipelines/nb/9_stg_event.ipynb) |
 | Обход каталога | [`pipelines/stg/event_dds_reader.py`](../../../src/mobile/pipelines/stg/event_dds_reader.py) |
 | Перенос DDS | [`build_move_event.md`](../../stg/build_move_event.md) |
 | Сборка событий | [`build_stg_event.md`](../../stg/build_stg_event.md) |
@@ -217,4 +212,4 @@ CLI не завершается с ненулевым exit code при failed ch
 | Схема | [`event.json`](../../../src/mobile/schema/stg/event.json) |
 | DQ mobile (вход) | [`dq_src_mobile.md`](../src/dq_src_mobile.md) |
 
-Сквозная цепочка: `build-src-mobile` → `build-stg-event` → `build-move-event` → `dq-stg-event` → geo/downstream.
+Сквозная цепочка: `build-src-mobile` → `build-stg-event` → `build-move-event` → `dq-stg-event` → `nb-stg-event` → geo/downstream.
