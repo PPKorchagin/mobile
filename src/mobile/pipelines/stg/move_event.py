@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -14,51 +16,73 @@ from mobile.project_paths import mobile_datacenter_ids, stg_event_dds_output_pat
 
 logger = logging.getLogger(__name__)
 
+_COPY_WORKERS = len(mobile_datacenter_ids())
+
+
+def _fast_copy(src: Path, dst: Path) -> tuple[str, int]:
+    """Скопировать parquet: hardlink на том же томе, иначе ``copyfile`` без метаданных."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        dst.unlink()
+    try:
+        if src.stat().st_dev == dst.parent.stat().st_dev:
+            os.link(src, dst)
+            return "hardlink", int(dst.stat().st_size)
+    except OSError:
+        pass
+    shutil.copyfile(src, dst)
+    return "copyfile", int(dst.stat().st_size)
+
+
+def _move_one_datacenter(report_date: date, dc: str) -> dict[str, Any]:
+    src = stg_event_output_path(dc, report_date)
+    dst = stg_event_dds_output_path(dc, report_date)
+    entry: dict[str, Any] = {
+        "source_id": dc,
+        "source_path": str(src),
+        "output_path": str(dst),
+    }
+    if not src.exists():
+        entry["status"] = "missing_source"
+        logger.warning(
+            "build-move-event skip: missing source source_id=%s report_date=%s path=%s",
+            dc,
+            report_date.isoformat(),
+            src,
+        )
+        return entry
+    method, nbytes = _fast_copy(src, dst)
+    entry["status"] = "ok"
+    entry["copy_method"] = method
+    entry["bytes"] = nbytes
+    logger.info(
+        "build-move-event source_id=%s report_date=%s method=%s src=%s dst=%s bytes=%s",
+        dc,
+        report_date.isoformat(),
+        method,
+        src,
+        dst,
+        nbytes,
+    )
+    return entry
+
 
 def run_move(report_date: date) -> dict[str, Any]:
     """Скопировать ``events.parquet`` каждого ЦОД за ``report_date`` в ``event_dds``."""
     perf: dict[str, Any] = {}
     started = time.perf_counter()
-    moves: list[dict[str, Any]] = []
-    files_written = 0
+    dcs = mobile_datacenter_ids()
 
     with timed_stage("move_sec", perf):
-        for dc in mobile_datacenter_ids():
-            src = stg_event_output_path(dc, report_date)
-            dst = stg_event_dds_output_path(dc, report_date)
-            entry: dict[str, Any] = {
-                "source_id": dc,
-                "source_path": str(src),
-                "output_path": str(dst),
-            }
-            if not src.exists():
-                entry["status"] = "missing_source"
-                logger.warning(
-                    "build-move-event skip: missing source source_id=%s report_date=%s path=%s",
-                    dc,
-                    report_date.isoformat(),
-                    src,
-                )
-                moves.append(entry)
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            entry["status"] = "ok"
-            entry["bytes"] = int(dst.stat().st_size)
-            files_written += 1
-            logger.info(
-                "build-move-event source_id=%s report_date=%s src=%s dst=%s bytes=%s",
-                dc,
-                report_date.isoformat(),
-                src,
-                dst,
-                entry["bytes"],
-            )
-            moves.append(entry)
+        with ThreadPoolExecutor(max_workers=_COPY_WORKERS) as pool:
+            futures = [pool.submit(_move_one_datacenter, report_date, dc) for dc in dcs]
+            moves = [fut.result() for fut in as_completed(futures)]
+        moves.sort(key=lambda m: str(m["source_id"]))
 
+    files_written = sum(1 for m in moves if m.get("status") == "ok")
     stats: dict[str, Any] = {
         "report_date": report_date.isoformat(),
-        "datacenters": list(mobile_datacenter_ids()),
+        "datacenters": list(dcs),
         "files_written": int(files_written),
         "moves": moves,
     }

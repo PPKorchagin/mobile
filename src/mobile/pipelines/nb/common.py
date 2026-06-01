@@ -1984,3 +1984,244 @@ def render_src_mobile_dq_marts(latest: pd.DataFrame) -> plt.Figure:
     fig.suptitle("Витрины и STG-контракт", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig
+
+
+# --- stg_event DQ charts ---
+
+_STG_EVENT_SOURCES = ("central", "far-east")
+_STG_EVENT_SOURCE_LABELS = {"central": "Central", "far-east": "Far East"}
+_STG_EVENT_STG_GATE_SUFFIXES = (
+    "event",
+    "event_name",
+    "event_code_name_alignment",
+    "location",
+    "location_compressible",
+)
+_STG_EVENT_RATE_KEYS: tuple[tuple[str, str], ...] = (
+    ("event_timestamp_parseable", "parseable_rate"),
+    ("event.stg_contract.event", "valid_event_rate"),
+    ("event.stg_contract.event_name", "valid_event_name_rate"),
+    ("event.stg_contract.event_code_name_alignment", "aligned_rate"),
+    ("event.stg_contract.location", "location_mcc_mnc_rate"),
+    ("event.stg_contract.location_compressible", "compressible_location_rate"),
+)
+
+
+def stg_event_source_coverage_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for _, record in latest.iterrows():
+        if record["check"] != "source.coverage":
+            continue
+        metrics = record.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        source_id = str(metrics.get("source_id") or "_unknown")
+        rows.append(
+            {
+                "source_id": source_id,
+                "label": _STG_EVENT_SOURCE_LABELS.get(source_id, source_id),
+                "row_count_total": int(metrics.get("row_count_total") or 0),
+                "parquet_files": int(metrics.get("parquet_files") or 0),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def stg_event_counts_frame(latest: pd.DataFrame, check: str) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, check)
+    counts = metrics.get("counts")
+    if not isinstance(counts, dict):
+        distribution = metrics.get("distribution_counts")
+        if isinstance(distribution, dict):
+            counts = distribution
+        else:
+            return pd.DataFrame(columns=["label", "count"])
+    rows = [{"label": str(key), "count": int(value)} for key, value in counts.items()]
+    return pd.DataFrame(rows).sort_values("count", ascending=False)
+
+
+def stg_event_null_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    metrics = _metrics_for_check(latest, "null_rates")
+    rates = metrics.get("null_rate_by_column")
+    if not isinstance(rates, dict):
+        return pd.DataFrame(columns=["field", "null_ratio"])
+    return pd.DataFrame(
+        [{"field": str(key), "null_ratio": float(value)} for key, value in rates.items()]
+    ).sort_values("null_ratio", ascending=True)
+
+
+def stg_event_gate_rates_frame(latest: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for check, metric_key in _STG_EVENT_RATE_KEYS:
+        value = _metric_scalar(latest, check, metric_key)
+        if value is None:
+            continue
+        hit = latest[latest["check"] == check]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append(
+            {
+                "check": check.split(".")[-1],
+                "metric": metric_key,
+                "value": float(value),
+                "status": status,
+            }
+        )
+    ec_metrics = _metrics_for_check(latest, "event_count_valid")
+    if ec_metrics and "aggregated_share" in ec_metrics:
+        hit = latest[latest["check"] == "event_count_valid"]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append(
+            {
+                "check": "aggregated_share",
+                "metric": "aggregated_share",
+                "value": float(ec_metrics["aggregated_share"]),
+                "status": status,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def stg_event_stg_contract_gate_frame(latest: pd.DataFrame, *, source_id: str | None = None) -> pd.DataFrame:
+    prefix = (
+        f"source.{source_id}.event.stg_contract."
+        if source_id
+        else "event.stg_contract."
+    )
+    rows: list[dict[str, Any]] = []
+    for gate in _STG_EVENT_STG_GATE_SUFFIXES:
+        full = f"{prefix}{gate}"
+        hit = latest[latest["check"] == full]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append({"gate": gate, "status": status})
+    return pd.DataFrame(rows)
+
+
+def _plot_stg_event_source_coverage(coverage: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+    else:
+        fig = ax.figure
+    if coverage.empty:
+        ax.set_title("source.coverage — нет данных")
+        ax.axis("off")
+        return fig
+    ax.bar(coverage["label"], coverage["row_count_total"], color="#1f77b4", alpha=0.88)
+    ax.set_ylabel("row_count_total")
+    ax.set_title("Строки по ЦОД (source.coverage)")
+    for i, row in enumerate(coverage.itertuples()):
+        ax.text(i, row.row_count_total, f"{row.row_count_total:,}", ha="center", va="bottom", fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_stg_event_counts_pie(counts: pd.DataFrame, *, title: str, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+    if counts.empty:
+        ax.set_title(f"{title}\n(нет данных)")
+        ax.axis("off")
+        return fig
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b"]
+    ax.pie(
+        counts["count"],
+        labels=counts["label"],
+        autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+        colors=colors[: len(counts)],
+        startangle=90,
+    )
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_stg_event_gate_rates(rates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 4))
+    else:
+        fig = ax.figure
+    if rates.empty:
+        ax.set_title("Gate rates — нет данных")
+        ax.axis("off")
+        return fig
+    work = rates.sort_values("value", ascending=True)
+    colors = [
+        "#d62728" if status == "failed" else "#ff7f0e" if status == "warning" else "#2ca02c"
+        for status in work["status"]
+    ]
+    ax.barh(work["check"], work["value"] * 100, color=colors, alpha=0.88)
+    ax.set_xlabel("rate, %")
+    ax.set_title("Ключевые gate (агрегат за день)")
+    ax.axvline(99, color="gray", ls="--", lw=0.8)
+    fig.tight_layout()
+    return fig
+
+
+def _plot_stg_event_stg_gate_grid(gates: pd.DataFrame, *, ax: plt.Axes | None = None) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 2.5))
+    else:
+        fig = ax.figure
+    if gates.empty:
+        ax.set_title("event.stg_contract — нет данных")
+        ax.axis("off")
+        return fig
+    matrix = gates.set_index("gate")["status"].to_frame().T
+    codes = {"failed": 0, "warning": 1, "ok": 2, "missing": 3}
+    values = matrix.map(lambda status: codes.get(str(status), 3)).to_numpy(dtype=float)
+    im = ax.imshow(values, aspect="auto", cmap=plt.cm.RdYlGn, vmin=0, vmax=2)
+    ax.set_xticks(range(len(matrix.columns)))
+    ax.set_xticklabels(matrix.columns, rotation=25, ha="right")
+    ax.set_yticks([0])
+    ax.set_yticklabels(["aggregate"])
+    for j, gate in enumerate(matrix.columns):
+        ax.text(j, 0, matrix.iloc[0, j], ha="center", va="center", fontsize=8, color="black")
+    ax.set_title("event.stg_contract.* (агрегат)")
+    fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02, ticks=[0, 1, 2], label="failed → ok")
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_event_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    coverage = stg_event_source_coverage_frame(latest)
+    agg = _metrics_for_check(latest, "coverage")
+    event_mix = stg_event_counts_frame(latest, "event_distribution")
+    report_date = agg.get("report_date") if agg else None
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    _plot_stg_event_source_coverage(coverage, ax=axes[0, 1])
+    _plot_stg_event_counts_pie(event_mix, title="event_distribution (код OCC)", ax=axes[1, 0])
+    plot_summary_metrics(latest, ax=axes[1, 1])
+    title = f"DQ STG EVENT — report_date={report_date}" if report_date else "DQ STG EVENT — обзор"
+    fig.suptitle(title, fontsize=13, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_event_dq_quality(latest: pd.DataFrame) -> plt.Figure:
+    rates = stg_event_gate_rates_frame(latest)
+    gates = stg_event_stg_contract_gate_frame(latest)
+    nulls = stg_event_null_rates_frame(latest)
+    buckets = stg_event_counts_frame(latest, "distribution.event_count_bucket")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    _plot_stg_event_gate_rates(rates, ax=axes[0, 0])
+    _plot_stg_event_stg_gate_grid(gates, ax=axes[0, 1])
+    plot_null_ratios(nulls, ax=axes[1, 0])
+    _plot_stg_event_counts_pie(buckets, title="event_count_bucket", ax=axes[1, 1])
+    fig.suptitle("Контракт, gate и null_rates (агрегат)", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_event_dq_by_source(latest: pd.DataFrame) -> plt.Figure:
+    fig, axes = plt.subplots(1, len(_STG_EVENT_SOURCES), figsize=(14, 4))
+    if len(_STG_EVENT_SOURCES) == 1:
+        axes = [axes]
+    for ax, source_id in zip(axes, _STG_EVENT_SOURCES, strict=True):
+        mix = stg_event_counts_frame(latest, f"source.{source_id}.event_distribution")
+        label = _STG_EVENT_SOURCE_LABELS.get(source_id, source_id)
+        _plot_stg_event_counts_pie(mix, title=f"{label}: event mix", ax=ax)
+    fig.suptitle("Микс событий по ЦОД (DQ-лог)", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig

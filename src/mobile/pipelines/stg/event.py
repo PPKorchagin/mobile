@@ -21,7 +21,6 @@ from mobile.project_paths import (
     filter_paths_near_report_date,
     read_all_parquets_concat,
     resolve_project_path,
-    stg_event_output_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,14 +74,14 @@ _COMPRESS_GAP_SECONDS = 300
 
 
 def run_build(
-    dc: str,
     report_date: date,
     cdr_path: str | Path,
     sms_path: str | Path,
     gprs_path: str | Path,
     location_path: str | Path,
+    output_path: str | Path,
 ) -> dict[str, Any]:
-    """Собрать ``events.parquet`` (``stg_event``) для одного ЦОД и отчётной даты.
+    """Собрать ``stg_event`` в ``output_path`` за отчётную дату.
 
     Строки отбираются по ``Started`` (локальное время абонента), parquet в пути — окно ±1 день.
     После объединения витрин — сортировка по ``imsi`` / ``event_timestamp``,
@@ -135,7 +134,7 @@ def run_build(
         if not merged.empty:
             merged, compress_stats = _compress_consecutive_events(merged)
 
-    out_path = stg_event_output_path(dc, report_date)
+    out_path = resolve_project_path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with timed_stage("write_sec", perf):
@@ -145,8 +144,7 @@ def run_build(
 
     job_count = int(len(merged))
     logger.info(
-        "build-stg-event source_id=%s report_date=%s job_start=%s job_end=%s job_count=%s path=%s",
-        dc,
+        "build-stg-event report_date=%s job_start=%s job_end=%s job_count=%s path=%s",
         report_date.isoformat(),
         job_start.isoformat(),
         job_end.isoformat(),
@@ -155,7 +153,6 @@ def run_build(
     )
 
     stats: dict[str, Any] = {
-        "datacenter": dc,
         "report_date": report_date.isoformat(),
         "output_path": str(out_path),
         "rows_merged": rows_merged,

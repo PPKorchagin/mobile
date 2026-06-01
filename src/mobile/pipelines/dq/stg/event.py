@@ -12,10 +12,10 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from mobile.pipelines.stg.event import EVENT_CODES, STG_EVENT_FIELDS
+from mobile.pipelines.stg.event_dds_reader import discover_event_dds_parquet_paths
 from mobile.project_paths import (
     resolve_project_path,
     started_parseable_mask,
-    stg_event_dds_day_key_from_path,
     stg_event_dds_source_id_from_path,
 )
 
@@ -37,15 +37,17 @@ _DISTRIBUTION_SCALAR_COLUMNS: tuple[str, ...] = (
 )
 
 
-def run_dq(report_date: date, event_dds_path: str | Path) -> dict[str, Any]:
-    """DQ ``event_dds`` за отчётную дату и путь к parquet или корню layout.
+def run_dq(report_date: date, event_dds_root: str | Path) -> dict[str, Any]:
+    """DQ ``event_dds`` за отчётную дату и корень каталога layout.
 
-    ``event_dds_path`` — файл ``{source_id}.parquet``, каталог ``YYYY-MM-DD`` или корень
-    ``data/stg/event_dds/``. Файлы отбираются по ``YYYY-MM-DD`` в пути (= ``report_date``);
-    строки дополнительно фильтруются по ``event_timestamp[:8]`` (локальные сутки).
+    ``event_dds_root`` — каталог ``data/stg/event_dds/`` (или аналог). Обход всех
+    ``*.parquet`` за ``report_date`` (сегмент ``YYYY-MM-DD`` в пути); строки фильтруются
+    по ``event_timestamp[:8]`` (локальные сутки).
     """
-    resolved = resolve_project_path(event_dds_path)
-    paths = _discover_event_dds_parquet_paths(resolved, report_date)
+    root = resolve_project_path(event_dds_root)
+    if not root.is_dir():
+        raise ValueError(f"event_dds_root must be a directory: {root}")
+    paths = discover_event_dds_parquet_paths(root, report_date)
     report_day = report_date.isoformat()
 
     checks = 0
@@ -73,7 +75,7 @@ def run_dq(report_date: date, event_dds_path: str | Path) -> dict[str, Any]:
             {
                 "reason": "no_parquet_for_report_date",
                 "report_date": report_day,
-                "event_dds_path": str(resolved),
+                "event_dds_root": str(root),
             },
         )
         _emit_summary(total_checks=checks, warnings=warnings, failed=failed)
@@ -83,7 +85,7 @@ def run_dq(report_date: date, event_dds_path: str | Path) -> dict[str, Any]:
             "warning_checks": warnings,
             "failed_checks": failed,
             "report_date": report_day,
-            "event_dds_path": str(resolved),
+            "event_dds_root": str(root),
             "parquet_files": 0,
         }
 
@@ -92,7 +94,7 @@ def run_dq(report_date: date, event_dds_path: str | Path) -> dict[str, Any]:
         "coverage",
         {
             "report_date": report_day,
-            "event_dds_path": str(resolved),
+            "event_dds_root": str(root),
             "parquet_files": len(paths),
             "row_count_total": row_count_total,
             "paths": [str(p) for p in paths],
@@ -153,33 +155,11 @@ def run_dq(report_date: date, event_dds_path: str | Path) -> dict[str, Any]:
         "warning_checks": warnings,
         "failed_checks": failed,
         "report_date": report_day,
-        "event_dds_path": str(resolved),
+        "event_dds_root": str(root),
         "parquet_files": len(paths),
         "row_count_total": int(len(sample)),
         "source_ids": sorted(source_frames.keys()),
     }
-
-
-def _discover_event_dds_parquet_paths(path: Path, report_date: date) -> list[Path]:
-    day_key = report_date.isoformat()
-    if path.is_file():
-        if path.suffix.lower() != ".parquet":
-            return []
-        key = stg_event_dds_day_key_from_path(path)
-        if key is not None and key != day_key:
-            return []
-        return [path]
-    if path.is_dir():
-        day_dir = path / day_key
-        if day_dir.is_dir():
-            return sorted(day_dir.glob("*.parquet"))
-        out: list[Path] = []
-        for p in sorted(path.rglob("*.parquet")):
-            key = stg_event_dds_day_key_from_path(p)
-            if key is None or key == day_key:
-                out.append(p)
-        return out
-    return []
 
 
 def _source_id_from_path(path: Path) -> str | None:

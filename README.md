@@ -27,4 +27,8 @@
 | 22            | build-src-mobile     | Генерация синтетических mobile-витрин (CDR, SMS, GPRS, location) | —                                                                                       | [Документ](documents/src/build_src_mobile.md)     |
 | 23            | dq-src-mobile        | Проверка качества mobile-витрин (день × ЦОД)         | `--report-date` + 4 пути витрин; без флагов — DEFAULT_SRC_* × central/far-east         | [Документ](documents/dq/src/dq_src_mobile.md)     |
 | 24            | nb-src-mobile        | Визуализация метрик DQ mobile-витрин                 | —                                                                                       | —                                                 |
+| 25            | build-stg-event      | Сборка дневной витрины stg_event из mobile-витрин    | 5 параметров (`--report-date`, 4 витрины, `--output-path`); без флагов — DEFAULT_SRC_* × ЦОД (2 subprocess/ЦОД) | [Документ](documents/stg/build_stg_event.md)      |
+| 26            | build-move-event     | Перенос stg_event в DDS-layout (локальная заглушка)  | `--report-date`; без флагов — DEFAULT_SRC_*; на проде — ручной перенос поставщиком      | [Документ](documents/stg/build_move_event.md)   |
+| 27            | dq-stg-event         | Проверка качества DDS-среза stg_event                | `--report-date` + `--event-dds-path` (каталог); без флагов — DEFAULT_SRC_* по дням      | [Документ](documents/dq/stg/dq_stg_event.md)        |
+| 28            | nb-stg-event         | Визуализация метрик DQ DDS-среза stg_event           | —                                                                                       | —                                                 |
 
