@@ -2,7 +2,7 @@
 
 **Витрина:** `stg_geo_all` · **Команда:** `dq-stg-geo-all` · **Режим:** read-only DQ (не изменяет данные, не падает при failed checks).
 
-Референс: [`pipelines/dq/stg/geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py). Сборка витрины: [`build_stg_geo_all.md`](../../stg/build_stg_geo_all.md). Схема: [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json).
+Референс: [`pipelines/dq/stg/geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py). Сборка: [`build_stg_geo_all.md`](../../stg/build_stg_geo_all.md). Схема: [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json).
 
 ---
 
@@ -13,11 +13,11 @@
 | 1 | Найти parquet `stg_geo_all` за `report_date` | Путь к дневному срезу |
 | 2 | Проверить контракт колонок и профили null/cardinality | Логи `DQ_STG_GEO_ALL` |
 | 3 | Проверить доменные и временные правила | Gate-статусы `ok/warning/failed` |
-| 4 | Выдать `summary` | Счетчики checks |
+| 4 | Выдать `summary` | Счётчики checks |
 
-**Бизнес-назначение:** контроль качества дневной гео-витрины перед downstream-использованием и построением связок MSISDN↔IMSI/IMEI.
+**Бизнес-назначение:** контроль качества дневной гео-витрины после [`build-stg-geo-all`](../../stg/build_stg_geo_all.md) перед `build-stg-geo-intervals` и связками MSISDN↔IMSI/IMEI.
 
-**В scope:** проверка наличия набора, контракта, координат, времени, словарей и ключевых дубликатов.
+**В scope:** наличие файла, контракт `_OUTPUT_COLUMNS`, координаты, время, словари, дубликаты ключа события.
 
 ---
 
@@ -30,22 +30,43 @@
 
 ## Параметры запуска
 
-Вызов: `run_dq(report_date, stg_geo_all_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-geo-all`).
+Вызов: `run_dq(report_date, stg_geo_all_path)` ([`cli.py`](../../../src/mobile/cli.py) → `dq-stg-geo-all`). **Оба параметра обязательны** — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да | — | Отчётный день |
-| `stg_geo_all_path` | path | Нет | `data/stg/geo_all/{report_date}.parquet` | Входной parquet или каталог `data/stg/geo_all` |
+| Переменная | Тип | Обязательность | Описание |
+|------------|-----|----------------|----------|
+| `report_date` | date | **Да** | Отчётный день |
+| `stg_geo_all_path` | path | **Да** | Входной parquet или каталог `data/stg/geo_all` (для каталога — файл `{report_date}.parquet`) |
 
-CLI:
+### CLI
+
+| Режим | Поведение |
+|-------|-----------|
+| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); на каждый день — `dq-stg-geo-all-{YYYY-MM-DD}` с `stg_geo_all_output_path(day)` |
+| Оба явно | `--report-date` и `--stg-geo-all-path` (один прогон) |
+
+**Константы DQ в коде** ([`geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py)):
+
+| Константа | Значение |
+|-----------|----------|
+| `LOG_TAG` | `DQ_STG_GEO_ALL` |
+| `_EVENT_TYPES` | `cdr`, `sms`, `gprs`, `location` |
+| `_BS_TYPES` | `m`, `f`, `i`, `x`, `o` |
+| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`stg/geo_all.py`](../../../src/mobile/pipelines/stg/geo_all.py) |
+
+**Предусловие:** `uv run mobile build-stg-geo-all` за ту же `report_date`.
+
+Локальный запуск:
 
 ```bash
-uv run mobile dq-stg-geo-all --report-date 2025-01-01
+uv run mobile build-stg-geo-all
+uv run mobile dq-stg-geo-all
+uv run mobile dq-stg-geo-all --report-date 2025-01-01 \
+  --stg-geo-all-path data/stg/geo_all/2025-01-01.parquet
 uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/stg/geo_all
-uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/stg/geo_all/2025-01-01.parquet
+uv run mobile nb-stg-geo-all
 ```
 
-Логи: `data/logs/mobile.log` (тег `DQ_STG_GEO_ALL`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-geo-all`.
+Логи: `data/logs/mobile.log` (тег `DQ_STG_GEO_ALL`). Метрики времени: `data/qa/command_timing.jsonl`, `command=dq-stg-geo-all` или `dq-stg-geo-all-{date}`. Визуализация: `nb-stg-geo-all` → `data/notebooks/11_stg_geo_all.executed.ipynb`.
 
 ---
 
@@ -53,10 +74,10 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 | Свойство | Значение |
 |----------|----------|
+| Имя таблицы | `stg_geo_all` — [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
 | Путь по умолчанию | `data/stg/geo_all/{YYYY-MM-DD}.parquet` |
 | Формат | Parquet |
-| Контракт полей | [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
-| Проверяемый слой | Дневной STG geo-срез |
+| Контракт полей | `_OUTPUT_COLUMNS` из [`pipelines/stg/geo_all.py`](../../../src/mobile/pipelines/stg/geo_all.py) |
 
 ---
 
@@ -64,7 +85,7 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 | # | Источник | Путь | Назначение |
 |---|----------|------|------------|
-| 1 | `stg_geo_all` parquet | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Вход для DQ-профиля и gate-checks |
+| 1 | `stg_geo_all` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | Дневной срез после `build-stg-geo-all` |
 
 ---
 
@@ -72,75 +93,56 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 ### Шаг 0. Инициализация
 
-1. Определить путь к parquet (`stg_geo_all_output_path(report_date)` или `--stg-geo-all-path`).
-2. Если передан каталог, взять файл `{report_date}.parquet`.
-3. Инициализировать счетчики `total/warning/failed` и правила gate-статусов.
+1. `_resolve_source_path(report_date, stg_geo_all_path)` — оба аргумента обязательны; каталог → `{report_date}.parquet`, иначе файл как есть.
+2. Счётчики `total_checks`, `warning_checks`, `failed_checks`.
 
 ### Шаг 1. Наличие набора
 
-1. Проверить существование файла.
-2. Если файл отсутствует:
-   - записать `dataset_presence=failed`,
-   - сформировать `summary`,
-   - вернуть статус без дальнейших шагов.
+Нет файла → `dataset_presence` (**failed**), `summary`, return.  
+Иначе `pd.read_parquet` → `dataset_basic` (**ok**).
 
-### Шаг 2. Базовый профиль
+### Шаг 2. Схема и профиль
 
-1. `dataset_basic`: число строк/колонок, путь.
-2. `schema_columns`: обязательные поля витрины.
-3. Для каждого поля контракта: `nulls.<field>` и `cardinality.<field>`.
-4. На этом шаге формируется базовый профиль распределения заполненности набора.
+1. `schema_columns` — все поля `_EXPECTED_COLUMNS` (**failed** при пропусках).
+2. Для каждой колонки контракта: `nulls.{field}`, `cardinality.{field}` (**ok**).
 
 ### Шаг 3. Gate-проверки
 
-Для каждого check — расчёт метрик и статус **ok** / **warning** / **failed** (пороги в [`geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py)):
-
-1. **`required_fields_presence`:** доля null по `msisdn`, `cgi`, `start_time_utc`; любой null_ratio > 0 для обязательных → **failed**.
-2. **`coords_range`:** `lat ∈ [-90,90]`, `lon ∈ [-180,180]`; `out_of_range_rows` → **warning** при доле > порога.
-3. **`temporal_order`:** строки с `end_time_utc < start_time_utc` → **failed** если count > 0.
-4. **`event_count_valid`:** `event_count < 1` → **failed** (после 5m-схлопывания минимум 1).
-5. **`source_event_type_vocab`:** значения только `cdr`, `sms`, `gprs`, `location`; иначе **failed**.
-6. **`distribution.source_event_type`:** info — доли типов; сильный перекос → **warning** (опционально).
-7. **`utc_offset_range`:** `utc_offset_hours` (или эквивалент) в [-12, 14].
-8. **`duplicate_event_key`:** ключ `hash(msisdn, start_time_utc, source_event_type, cgi)`; `duplicate_count` → **warning**/**failed** по порогу доли дублей.
+1. `required_fields_presence` — `msisdn`, `cgi`, `start_time_utc` без null (**failed**).
+2. `coords_range` — диапазоны lat/lon (**warning**).
+3. `temporal_order` — `end_time_utc >= start_time_utc` (**failed**).
+4. `event_count_valid` — `event_count >= 1` (**failed**).
+5. `source_event_type_vocab` — только `_EVENT_TYPES` (**failed**).
+6. `distribution.source_event_type` — counts (**ok**).
+7. `utc_offset_range` — UTC offset в [-12, 14] (**warning**).
+8. `bs_type_vocab` — `bs_type ∈ _BS_TYPES` (**warning**).
+9. `duplicate_event_key` — дубли `(msisdn, start_time_utc, source_event_type, cgi)` (**warning**).
 
 ### Шаг 4. Итог
 
-1. Сформировать `summary` с `total_checks`, `warning_checks`, `failed_checks`.
-2. Вернуть общий статус:
-   - `failed` при наличии failed-checks,
-   - `warning` при отсутствии failed и наличии warning,
-   - `ok` при полном прохождении checks.
-
-### Типовые ошибки
-
-| Ошибка/ситуация | Поведение |
-|-----------------|-----------|
-| Нет parquet за `report_date` | `dataset_presence=failed` |
-| Неполный контракт колонок | `schema_columns=failed` |
-| Неожиданные типы `source_event_type` | `source_event_type_vocab=failed` |
-| Координаты вне диапазонов | `coords_range=warning` |
+`summary` и return dict со статусом прогона. CLI не падает при failed checks.
 
 ---
 
 ## Проверки
 
-| Check | Уровень | Смысл |
-|-------|---------|-------|
-| `dataset_presence` | failed | parquet не найден |
-| `dataset_basic` | info | базовые размеры |
-| `schema_columns` | gate | полнота контракта колонок |
-| `nulls.*` | info | доли null по полям |
-| `cardinality.*` | info | кардинальность полей |
-| `required_fields_presence` | gate | `msisdn/cgi/start_time_utc` обязательны |
-| `coords_range` | gate | диапазоны координат |
-| `temporal_order` | gate | корректность интервала времени |
-| `event_count_valid` | gate | `event_count >= 1` |
-| `source_event_type_vocab` | gate | значения типа события из справочника |
-| `distribution.source_event_type` | info | распределение `source_event_type` |
-| `utc_offset_range` | gate | контроль смещения часового пояса |
-| `duplicate_event_key` | gate | дубликаты ключа события |
-| `summary` | info | итоговый статус и счетчики |
+Формат лога: `{"tag":"DQ_STG_GEO_ALL","check":"...","status":"...","metrics":{...}}`.
+
+| Check | Статус при сбое | Смысл | Обоснование |
+|-------|-----------------|-------|-------------|
+| `dataset_presence` | **failed** | Parquet за день не найден | Нет среза после [`build-stg-geo-all`](../../stg/build_stg_geo_all.md) |
+| `dataset_basic` | **ok** | `row_count`, `column_count`, путь | Базовый объём для сравнения прогонов |
+| `schema_columns` | **failed** | `missing_columns` | Контракт совпадает с ETL и [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
+| `nulls.*` / `cardinality.*` | **ok** | профиль полей | Полнота и кардинальность без выгрузки PII |
+| `required_fields_presence` | **failed** | null в ключевых полях события | Без MSISDN/CGI/времени нельзя строить интервалы |
+| `coords_range` | **warning** | координаты вне диапазона | Гео-аналитика и карты |
+| `temporal_order` | **failed** | `end < start` | Интервал события некорректен |
+| `event_count_valid` | **failed** | `event_count < 1` | После 5m-агрегации в группе минимум одно событие |
+| `source_event_type_vocab` | **failed** | неизвестный тип | Согласованность с `event_dds` |
+| `utc_offset_range` | **warning** | offset вне [-12, 14] | Согласованность с `stg_bs.timezone` / `stg_time_zones` |
+| `bs_type_vocab` | **warning** | неизвестный `bs_type` | Тип БС из enrich `stg_bs` |
+| `duplicate_event_key` | **warning** | дубли ключа события | Риск двойного учёта в downstream |
+| `summary` | **ok** | счётчики checks | Сводка прогона |
 
 ---
 
@@ -148,7 +150,10 @@ uv run mobile dq-stg-geo-all --report-date 2025-01-01 --stg-geo-all-path data/st
 
 | Артефакт | Путь |
 |----------|------|
-| DQ ETL | [`src/mobile/pipelines/dq/stg/geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py) |
-| CLI | [`src/mobile/cli.py`](../../../src/mobile/cli.py) |
-| Сборка `stg_geo_all` | [`documents/stg/build_stg_geo_all.md`](../../stg/build_stg_geo_all.md) |
-| Схема | [`src/mobile/schema/stg/geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
+| DQ pipeline | [`pipelines/dq/stg/geo_all.py`](../../../src/mobile/pipelines/dq/stg/geo_all.py) |
+| DQ notebook | [`pipelines/nb/11_stg_geo_all.ipynb`](../../../src/mobile/pipelines/nb/11_stg_geo_all.ipynb) |
+| ETL build | [`pipelines/stg/geo_all.py`](../../../src/mobile/pipelines/stg/geo_all.py) |
+| CLI | [`cli.py`](../../../src/mobile/cli.py) |
+| Схема | [`geo_all.json`](../../../src/mobile/schema/stg/geo_all.json) |
+
+Сквозная цепочка: `build-stg-event` → `build-move-event` → `build-stg-bs` → `build-stg-geo-all` → **`dq-stg-geo-all`** → **`nb-stg-geo-all`** → `build-stg-geo-intervals` → downstream.

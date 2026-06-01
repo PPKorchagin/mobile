@@ -12,10 +12,10 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from mobile.pipelines.stg.event import EVENT_CODES, STG_EVENT_FIELDS
-from mobile.pipelines.stg.event_dds_reader import discover_event_dds_parquet_paths
 from mobile.project_paths import (
     resolve_project_path,
     started_parseable_mask,
+    stg_event_dds_day_key_from_path,
     stg_event_dds_source_id_from_path,
 )
 
@@ -47,7 +47,7 @@ def run_dq(report_date: date, event_dds_root: str | Path) -> dict[str, Any]:
     root = resolve_project_path(event_dds_root)
     if not root.is_dir():
         raise ValueError(f"event_dds_root must be a directory: {root}")
-    paths = discover_event_dds_parquet_paths(root, report_date)
+    paths = _discover_event_dds_parquet_paths(root, report_date)
     report_day = report_date.isoformat()
 
     checks = 0
@@ -160,6 +160,28 @@ def run_dq(report_date: date, event_dds_root: str | Path) -> dict[str, Any]:
         "row_count_total": int(len(sample)),
         "source_ids": sorted(source_frames.keys()),
     }
+
+
+def _discover_event_dds_parquet_paths(path: Path, report_date: date) -> list[Path]:
+    day_key = report_date.isoformat()
+    if path.is_file():
+        if path.suffix.lower() != ".parquet":
+            return []
+        key = stg_event_dds_day_key_from_path(path)
+        if key is not None and key != day_key:
+            return []
+        return [path]
+    if path.is_dir():
+        day_dir = path / day_key
+        if day_dir.is_dir():
+            return sorted(day_dir.glob("*.parquet"))
+        out: list[Path] = []
+        for p in sorted(path.rglob("*.parquet")):
+            key = stg_event_dds_day_key_from_path(p)
+            if key is None or key == day_key:
+                out.append(p)
+        return out
+    return []
 
 
 def _source_id_from_path(path: Path) -> str | None:

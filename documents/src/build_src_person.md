@@ -189,7 +189,7 @@ uv run mobile build-src-person --target-per-operator 5000
 2. Выбор строк; копия с тем же `contract_number` и `isdn`;
 3. Новые `imsi` + `iccid`; `actually_from` = день; `actually_to` = open.
 
-**Downstream:** при нескольких `load_day` в месяце [`build-stg-msisdn-operator`](../stg/build_stg_msisdn_operator.md) видит две записи с одним MSISDN и разными `operator_Id`; [`build-stg-person`](../stg/build_stg_person.md) связывает их через `msisdn↔imsi` в union-find.
+**Downstream:** при нескольких `load_day` в месяце [`build-stg-person`](../stg/build_stg_person.md) (MNP из `src_person`) видит две записи с одним MSISDN и разными `operator_Id`; гео-наблюдения — [`build-stg-msisdn-imsi-operator`](../stg/build_stg_msisdn_imsi_operator.md).
 
 ### Шаг 3. Завершение оркестратора
 

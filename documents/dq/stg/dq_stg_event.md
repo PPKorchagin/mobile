@@ -30,7 +30,7 @@
 | `report_date` | date | **Да** | `DEFAULT_SRC_*` (оркестратор CLI) | Отчётный день (`--report-date`) |
 | `event_dds_root` | path (dir) | **Да** | `data/stg/event_dds` | Корень каталога DDS (`--event-dds-path`) |
 
-Pipeline принимает **только каталог**. Обход: `event_dds_root/{YYYY-MM-DD}/*.parquet` или `rglob` с фильтром по дате в пути ([`discover_event_dds_parquet_paths`](../../../src/mobile/pipelines/stg/event_dds_reader.py)).
+Pipeline принимает **только каталог**. Обход: `event_dds_root/{YYYY-MM-DD}/*.parquet` или `rglob` с фильтром по дате в пути ([`_discover_event_dds_parquet_paths`](../../../src/mobile/pipelines/dq/stg/event.py)).
 
 **CLI:** оркестратор перебирает календарные дни `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../../src/mobile/cli_defaults.py)); на каждый день — один timed-run с тем же `event_dds_root` (все ЦОД за день в одном прогоне).
 
@@ -85,7 +85,7 @@ uv run mobile nb-stg-event
 | 1 | DDS Parquet | `…/event_dds/{YYYY-MM-DD}/central.parquet` |
 | 2 | DDS Parquet | `…/event_dds/{YYYY-MM-DD}/far-east.parquet` |
 
-Файлы отбираются из `event_dds_root` функцией `discover_event_dds_parquet_paths`; `source_id` — из имени файла ([`project_paths.py`](../../../src/mobile/project_paths.py)).
+Файлы отбираются из `event_dds_root` функцией `_discover_event_dds_parquet_paths`; `source_id` — из имени файла ([`project_paths.py`](../../../src/mobile/project_paths.py)).
 
 ---
 
@@ -94,7 +94,7 @@ uv run mobile nb-stg-event
 ### Шаг 0. Инициализация
 
 1. Проверить, что `event_dds_root` — каталог; иначе `ValueError`.
-2. `discover_event_dds_parquet_paths(root, report_date)` — все `*.parquet` дня.
+2. `_discover_event_dds_parquet_paths(root, report_date)` — все `*.parquet` дня.
 3. Группировка по `source_id` (`central` / `far-east`).
 
 ### Шаг 1. Наличие и покрытие
@@ -204,7 +204,6 @@ CLI не завершается с ненулевым exit code при failed ch
 |----------|------|
 | DQ pipeline | [`pipelines/dq/stg/event.py`](../../../src/mobile/pipelines/dq/stg/event.py) |
 | DQ notebook | [`pipelines/nb/9_stg_event.ipynb`](../../../src/mobile/pipelines/nb/9_stg_event.ipynb) |
-| Обход каталога | [`pipelines/stg/event_dds_reader.py`](../../../src/mobile/pipelines/stg/event_dds_reader.py) |
 | Перенос DDS | [`build_move_event.md`](../../stg/build_move_event.md) |
 | Сборка событий | [`build_stg_event.md`](../../stg/build_stg_event.md) |
 | Пути layout | [`project_paths.py`](../../../src/mobile/project_paths.py) |

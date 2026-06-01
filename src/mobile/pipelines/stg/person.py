@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,7 @@ import pandas as pd
 
 from mobile.cli_defaults import DEFAULT_PARQUET_COMPRESSION
 from mobile.command_timing import append_command_metrics, timed_stage
-from mobile.pipelines.stg import binding_intervals, msisdn_operator
+from mobile.pipelines.stg import msisdn_imei, msisdn_imsi
 from mobile.pipelines.stg.person_identity import (
     UnionFind,
     assign_person_ids_with_ledger,
@@ -33,9 +33,9 @@ from mobile.project_paths import (
     DEFAULT_STG_PERSON_SCHEMA_PATH,
     DEFAULT_STG_TAC_OUTPUT_PATH,
     resolve_project_path,
+    stg_geo_all_output_path,
     stg_msisdn_imei_output_path,
     stg_msisdn_imsi_output_path,
-    stg_msisdn_operator_output_path,
     stg_person_id_ledger_output_path,
     stg_person_output_path,
     stg_person_sim_output_path,
@@ -98,7 +98,6 @@ def run_build(
     src_person_path: str | Path | None = None,
     stg_msisdn_imsi_path: str | Path | None = None,
     stg_msisdn_imei_path: str | Path | None = None,
-    stg_msisdn_operator_path: str | Path | None = None,
     stg_tac_path: str | Path | None = None,
     stg_oksm_path: str | Path | None = None,
     output_path: str | Path | None = None,
@@ -140,31 +139,6 @@ def run_build(
         m2m_tacs = _read_m2m_tac_set(tac_path)
         raw, excluded_m2m_tac_rows = _exclude_m2m_by_tac(raw, m2m_tacs=m2m_tacs)
 
-    operator_out = (
-        resolve_project_path(stg_msisdn_operator_path)
-        if stg_msisdn_operator_path is not None
-        else stg_msisdn_operator_output_path(report_month)
-    )
-    with timed_stage("build_msisdn_operator_sec", perf):
-        if build_operator_vitrine:
-            raw_operator, _ = read_src_person_month(
-                report_month=report_month,
-                period_start=period_start,
-                period_end=period_end,
-                src_person_path=src_person_path,
-                mode="all_snapshots",
-            )
-            raw_operator, _ = _exclude_m2m_by_tac(raw_operator, m2m_tacs=m2m_tacs)
-            operator_binding = msisdn_operator.build_operator_intervals_from_src(
-                raw_operator, report_month=report_month
-            )
-            operator_out.parent.mkdir(parents=True, exist_ok=True)
-            operator_binding.to_parquet(operator_out, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
-        elif operator_out.exists():
-            operator_binding = pd.read_parquet(operator_out)
-        else:
-            operator_binding = msisdn_operator.build_operator_intervals_from_src(raw, report_month=report_month)
-
     imsi_month_path = _resolve_monthly_binding_path(
         report_month=report_month,
         kind="imsi",
@@ -177,9 +151,26 @@ def run_build(
     )
     with timed_stage("load_bindings_sec", perf):
         if build_bindings_month and (not imsi_month_path.exists() or not imei_month_path.exists()):
-            binding_intervals.refresh_month_bindings_from_geo(report_month)
+            _refresh_month_bindings_from_geo(report_month)
+
+    with timed_stage("build_msisdn_imsi_mnp_sec", perf):
+        if build_operator_vitrine:
+            raw_operator, _ = read_src_person_month(
+                report_month=report_month,
+                period_start=period_start,
+                period_end=period_end,
+                src_person_path=src_person_path,
+                mode="all_snapshots",
+            )
+            raw_operator, _ = _exclude_m2m_by_tac(raw_operator, m2m_tacs=m2m_tacs)
+            imsi_mnp = msisdn_imsi.build_imsi_intervals_from_src(raw_operator, report_month=report_month)
+            imsi_month_path.parent.mkdir(parents=True, exist_ok=True)
+            imsi_mnp.to_parquet(imsi_month_path, compression=DEFAULT_PARQUET_COMPRESSION, index=False)
+
+    with timed_stage("read_bindings_sec", perf):
         imsi_binding = _read_binding_parquet(imsi_month_path, kind="imsi")
         imei_binding = _read_binding_parquet(imei_month_path, kind="imei")
+    operator_binding = imsi_binding
 
     prev_ledger = _load_previous_ledger(_previous_report_month(report_month))
 
@@ -223,7 +214,6 @@ def run_build(
         "output_path": str(person_out),
         "person_sim_path": str(sim_out),
         "person_ledger_path": str(ledger_out),
-        "stg_msisdn_operator_path": str(operator_out),
         "stg_msisdn_imsi_path": str(imsi_month_path),
         "stg_msisdn_imei_path": str(imei_month_path),
         "stg_rows_written": int(len(person_df)),
@@ -238,6 +228,39 @@ def run_build(
     append_command_metrics(command=command, metrics={**stats, **perf})
     logger.info("%s completed: %s", command, stats)
     return {**stats, **perf}
+
+
+def _month_days(report_month: date) -> list[date]:
+    start = report_month.replace(day=1)
+    end = (pd.Timestamp(start) + pd.offsets.MonthEnd(0)).date()
+    days: list[date] = []
+    cursor = start
+    while cursor <= end:
+        days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def _refresh_month_bindings_from_geo(report_month: date) -> dict[str, int]:
+    """Пересобрать месячные binding из ``stg_geo_all`` по дням месяца (по одному дню)."""
+    days_run = 0
+    for day in _month_days(report_month):
+        geo = stg_geo_all_output_path(day)
+        if not geo.exists():
+            continue
+        msisdn_imsi.run_build(
+            report_date=day,
+            stg_geo_all_path=geo,
+            output_path=stg_msisdn_imsi_output_path(day),
+        )
+        msisdn_imei.run_build(
+            report_date=day,
+            stg_geo_all_path=geo,
+            output_path=stg_msisdn_imei_output_path(day),
+        )
+        days_run += 1
+    logger.info("build-stg-person: refreshed bindings for %s days in %s", days_run, report_month.isoformat())
+    return {"binding_days_refreshed": days_run}
 
 
 def _resolve_monthly_binding_path(

@@ -222,9 +222,13 @@ def _normalize_msisdn_series(series: pd.Series | None) -> pd.Series:
         return pd.Series(dtype="Int64")
     normalized = series.astype("string").str.replace(r"\D+", "", regex=True)
     normalized = normalized.mask(normalized == "", pd.NA)
-    normalized = normalized.where(normalized.isna() | normalized.str.len().isin([10, 11]))
-    normalized = normalized.mask(normalized.str.len() == 10, "7" + normalized)
-    normalized = normalized.mask(normalized.str.len() == 11, normalized.str.replace(r"^8", "7", n=1, regex=True))
+    ru_10 = normalized.str.len() == 10
+    normalized = normalized.mask(ru_10, "7" + normalized)
+    ru_11_8 = normalized.str.len() == 11
+    starts_8 = normalized.str.startswith("8", na=False)
+    normalized = normalized.mask(ru_11_8 & starts_8, "7" + normalized.str.slice(1))
+    ok = normalized.notna() & normalized.str.len().ge(7) & normalized.str.len().le(15)
+    normalized = normalized.where(ok)
     return pd.to_numeric(normalized, errors="coerce").astype("Int64")
 
 

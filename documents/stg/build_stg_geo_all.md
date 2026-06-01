@@ -26,34 +26,47 @@
 
 ## TODO
 
-1. Добавить DQ-команду `dq-stg-geo-all`.
-2. При необходимости вынести `AGG_GAP_SECONDS=300` в конфиг CLI.
+1. При необходимости вынести `AGG_GAP_SECONDS=300` в конфиг CLI.
 
 ---
 
 ## Параметры запуска
 
-Вызов: `run_build(report_date, event_dds_path, stg_bs_path, output_path)` ([`cli.py`](../../src/mobile/cli.py) → `build-stg-geo-all`).
+Вызов: `run_build(report_date, event_dds_path, stg_bs_path, output_path)` ([`cli.py`](../../src/mobile/cli.py) → `build-stg-geo-all`). **Все четыре обязательны** — pipeline не подставляет пути по умолчанию; их резолвит CLI-оркестратор или явный вызов.
 
-| Переменная | Тип | Обязательность | Значение по умолчанию | Описание |
-|------------|-----|----------------|----------------------|----------|
-| `report_date` | date | Да | — | Отчётный день |
-| `event_dds_path` | path | Нет | `data/stg/event_dds` | Корень DDS, каталог дня или parquet-файл `{dc}.parquet` |
-| `stg_bs_path` | path | Нет | `data/stg/bs.parquet` | Входной parquet витрины БС для enrich |
-| `output_path` | path | Нет | `data/stg/geo_all/{report_date}.parquet` | Выходной parquet |
+| Переменная | Тип | Обязательность | Описание |
+|------------|-----|----------------|----------|
+| `report_date` | date | **Да** | Отчётный день (UTC-срез в витрине) |
+| `event_dds_path` | path | **Да** | Корень DDS, каталог дня или parquet `{dc}.parquet` |
+| `stg_bs_path` | path | **Да** | Входной parquet `stg_bs` для enrich |
+| `output_path` | path | **Да** | Выходной parquet `stg_geo_all` |
 
 Parquet всегда пишется со сжатием **`snappy`** (`DEFAULT_PARQUET_COMPRESSION`).
+
+**Константы ETL в коде** (на вход job **не передаются**): `_AGG_GAP_SECONDS=300`, `_READ_COLUMNS`, `_OUTPUT_COLUMNS` — см. [`geo_all.py`](../../src/mobile/pipelines/stg/geo_all.py).
+
+### CLI
+
+| Режим | Поведение |
+|-------|-----------|
+| Без флагов | Цикл `DEFAULT_SRC_START_DATE` … `DEFAULT_SRC_END_DATE` ([`cli_defaults.py`](../../src/mobile/cli_defaults.py)); на каждый день — timed-run `build-stg-geo-all-{YYYY-MM-DD}` с путями `data/stg/event_dds`, `data/stg/bs.parquet`, `data/stg/geo_all/{date}.parquet` |
+| Все 4 явно | `--report-date`, `--event-dds-path`, `--stg-bs-path`, `--output-path` (один прогон) |
+
+**Предусловие:** `build-move-event` (или готовый `event_dds`) и `build-stg-bs` за тот же период.
 
 Локальный запуск:
 
 ```bash
-uv run mobile build-stg-geo-all --report-date 2025-01-01
-uv run mobile build-stg-geo-all --report-date 2025-01-01 --event-dds-path data/stg/event_dds
-uv run mobile build-stg-geo-all --report-date 2025-01-01 --stg-bs-path data/stg/bs.parquet
-uv run mobile build-stg-geo-all --report-date 2025-01-01 --output-path data/stg/geo_all/2025-01-01.parquet
+uv run mobile build-move-event
+uv run mobile build-stg-bs
+uv run mobile build-stg-geo-all
+uv run mobile build-stg-geo-all --report-date 2025-01-01 \
+  --event-dds-path data/stg/event_dds \
+  --stg-bs-path data/stg/bs.parquet \
+  --output-path data/stg/geo_all/2025-01-01.parquet
 ```
 
-Логи: `data/logs/mobile.log` (строка `build-stg-geo-all completed`). Метрики: `data/qa/command_timing.jsonl`, `command=build-stg-geo-all`.
+Логи: `data/logs/mobile.log` (строка `build-stg-geo-all completed`). Метрики: `data/qa/command_timing.jsonl`, `command=build-stg-geo-all` или `build-stg-geo-all-{date}`.
 Дополнительно пишутся технические счётчики нормализации:
 `rows_norm_error_event_timestamp`, `rows_norm_error_location_parts`, `rows_norm_error_msisdn`,
 `rows_norm_error_imsi`, `rows_norm_error_imei`, `rows_norm_error_event_count`,
@@ -117,7 +130,7 @@ uv run mobile build-stg-geo-all --report-date 2025-01-01 --output-path data/stg/
 
 ### Шаг 1. Чтение событий `event_dds`
 
-1. Найти parquet-файлы за `report_date` (`discover_event_dds_parquet_paths`).
+1. Найти parquet-файлы за UTC-день (`_discover_event_dds_paths_for_utc_day` в [`geo_all.py`](../../src/mobile/pipelines/stg/geo_all.py)).
 2. Прочитать только нужные поля: `event_timestamp`, `imsi`, `imei`, `msisdn`, `location`, `event`, `event_name`, `event_count`.
 3. Отфильтровать только по формату `event_timestamp=YYYYMMDDhhmmss` (без day-фильтра в локальном времени).
 
@@ -174,5 +187,6 @@ uv run mobile build-stg-geo-all --report-date 2025-01-01 --output-path data/stg/
 | ETL | [`src/mobile/pipelines/stg/geo_all.py`](../../src/mobile/pipelines/stg/geo_all.py) |
 | Пути/лейауты | [`src/mobile/project_paths.py`](../../src/mobile/project_paths.py) |
 | CLI | [`src/mobile/cli.py`](../../src/mobile/cli.py) |
+| DQ | [`documents/dq/stg/dq_stg_geo_all.md`](../dq/stg/dq_stg_geo_all.md) |
 | Источник событий | [`build_stg_event.md`](./build_stg_event.md), [`build_move_event.md`](./build_move_event.md) |
 

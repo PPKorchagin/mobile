@@ -10,31 +10,19 @@ from typing import Any
 
 import pandas as pd
 
-from mobile.project_paths import resolve_project_path, stg_geo_all_output_path
+from mobile.pipelines.stg.geo_all import _OUTPUT_COLUMNS
+from mobile.project_paths import resolve_project_path
 
 logger = logging.getLogger(__name__)
 LOG_TAG = "DQ_STG_GEO_ALL"
 _EVENT_TYPES = frozenset({"cdr", "sms", "gprs", "location"})
+_BS_TYPES = frozenset({"m", "f", "i", "x", "o"})
 
-_EXPECTED_COLUMNS: tuple[str, ...] = (
-    "msisdn",
-    "imsi",
-    "imei",
-    "start_time_utc",
-    "end_time_utc",
-    "utc_offset",
-    "lat",
-    "lon",
-    "bs_type",
-    "cgi",
-    "event_count",
-    "source_event_type",
-    "oktmo_code_1",
-    "oktmo_code_2",
-)
+_EXPECTED_COLUMNS: tuple[str, ...] = tuple(_OUTPUT_COLUMNS)
 
 
-def run_dq(*, report_date: date, stg_geo_all_path: str | Path | None = None) -> dict[str, Any]:
+def run_dq(*, report_date: date, stg_geo_all_path: str | Path) -> dict[str, Any]:
+    """DQ ``stg_geo_all``; ``report_date`` и ``stg_geo_all_path`` обязательны (пути задаёт CLI)."""
     source_path = _resolve_source_path(report_date=report_date, stg_geo_all_path=stg_geo_all_path)
     checks = 0
     warnings = 0
@@ -179,6 +167,15 @@ def run_dq(*, report_date: date, stg_geo_all_path: str | Path | None = None) -> 
             {"invalid_utc_offset_rows": invalid},
         )
 
+    if "bs_type" in data.columns:
+        bs_type = data["bs_type"].astype("string").str.strip().str.lower()
+        invalid = int((bs_type.notna() & (bs_type != "") & ~bs_type.isin(_BS_TYPES)).sum())
+        emit(
+            "bs_type_vocab",
+            "warning" if invalid > 0 else "ok",
+            {"invalid_bs_type_rows": invalid, "allowed_values": sorted(_BS_TYPES)},
+        )
+
     if {"msisdn", "start_time_utc", "source_event_type", "cgi"}.issubset(data.columns):
         dup = int(data.duplicated(subset=["msisdn", "start_time_utc", "source_event_type", "cgi"], keep=False).sum())
         emit(
@@ -199,9 +196,7 @@ def run_dq(*, report_date: date, stg_geo_all_path: str | Path | None = None) -> 
     }
 
 
-def _resolve_source_path(*, report_date: date, stg_geo_all_path: str | Path | None) -> Path:
-    if stg_geo_all_path is None:
-        return stg_geo_all_output_path(report_date)
+def _resolve_source_path(*, report_date: date, stg_geo_all_path: str | Path) -> Path:
     resolved = resolve_project_path(stg_geo_all_path)
     if resolved.is_dir():
         return resolved / f"{report_date.isoformat()}.parquet"

@@ -26,6 +26,8 @@ from mobile.project_paths import (
     DEFAULT_STG_TAC_OUTPUT_PATH,
     DEFAULT_STG_TIME_ZONES_OUTPUT_PATH,
     stg_geo_all_output_path,
+    stg_msisdn_imei_output_path,
+    stg_msisdn_imsi_output_path,
 )
 
 _DQ_META_KEYS = frozenset({"tag", "check", "log_ts", "log_level", "status", "mart", "metrics"})
@@ -3203,5 +3205,260 @@ def render_stg_event_dq_by_source(latest: pd.DataFrame) -> plt.Figure:
         label = _STG_EVENT_SOURCE_LABELS.get(source_id, source_id)
         _plot_stg_event_counts_pie(mix, title=f"{label}: event mix", ax=ax)
     fig.suptitle("Микс событий по ЦОД (DQ-лог)", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def _stg_binding_report_month(latest: pd.DataFrame | None) -> date:
+    if latest is not None:
+        for check in ("dataset_basic", "dataset_presence"):
+            metrics = _metrics_for_check(latest, check)
+            raw = metrics.get("report_date")
+            if raw:
+                return date.fromisoformat(str(raw))
+    for resolver in (stg_msisdn_imei_output_path, stg_msisdn_imsi_output_path):
+        path = resolver(DEFAULT_SRC_END_DATE)
+        parent = path.parent
+        if parent.is_dir():
+            files = sorted(parent.glob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if files:
+                try:
+                    return date.fromisoformat(files[0].stem)
+                except ValueError:
+                    pass
+    return DEFAULT_SRC_END_DATE.replace(day=1)
+
+
+def _binding_gate_counts_frame(
+    latest: pd.DataFrame,
+    specs: tuple[tuple[str, str, str], ...],
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for check, key, label in specs:
+        metrics = _metrics_for_check(latest, check)
+        if key not in metrics:
+            continue
+        hit = latest[latest["check"] == check]
+        status = str(hit.iloc[-1]["status"]) if not hit.empty else "missing"
+        rows.append({"metric": label, "count": int(metrics[key]), "status": status})
+    return pd.DataFrame(rows)
+
+
+_STG_MSISDN_IMEI_GATE_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("temporal_order", "invalid_order_count", "invalid time order"),
+    ("msisdn_format", "invalid_msisdn_rows", "invalid msisdn"),
+    ("imei_format", "invalid_imei_rows", "invalid imei"),
+    ("duplicate_rows", "duplicate_rows", "duplicate rows"),
+    ("interval_overlap_same_pair", "overlapping_interval_rows", "overlapping intervals"),
+    ("interval_mergeable_gap", "mergeable_adjacent_segments", "mergeable segments"),
+)
+
+_STG_MSISDN_IMSI_GATE_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("temporal_order", "invalid_order_count", "invalid time order"),
+    ("msisdn_format", "invalid_msisdn_rows", "invalid msisdn"),
+    ("imsi_format", "invalid_imsi_rows", "invalid imsi"),
+    ("operator_id_valid", "invalid_operator_id_rows", "invalid operator_id"),
+    ("operator_id_imsi_alignment", "misaligned_rows", "operator_id ≠ IMSI MNC"),
+    ("operator_id_non_ru_imsi", "non_ru_rows_with_operator_id", "non-RU with operator_id"),
+    ("duplicate_rows", "duplicate_rows", "duplicate rows"),
+    ("interval_overlap_same_triple", "overlapping_interval_rows", "overlapping intervals"),
+    ("interval_mergeable_gap", "mergeable_adjacent_segments", "mergeable segments"),
+)
+
+
+def render_stg_binding_dq_gates(
+    latest: pd.DataFrame,
+    gates: pd.DataFrame,
+    *,
+    title: str,
+) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=(10, 5))
+    if gates.empty:
+        ax.set_title(f"{title} — нет данных")
+        ax.axis("off")
+        return fig
+    colors = [
+        "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+        for s in gates["status"]
+    ]
+    work = gates.sort_values("count", ascending=True)
+    ax.barh(work["metric"], work["count"], color=colors, alpha=0.88)
+    ax.set_xlabel("count")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def _render_stg_binding_dq_overview(
+    latest: pd.DataFrame,
+    *,
+    title: str,
+    gate_specs: tuple[tuple[str, str, str], ...],
+    extra_metric: str | None = None,
+) -> plt.Figure:
+    basic = _metrics_for_check(latest, "dataset_basic")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    plot_check_status(latest, ax=axes[0, 0])
+    plot_summary_metrics(latest, ax=axes[0, 1])
+    plot_null_ratios(null_ratio_frame(latest), ax=axes[1, 0])
+    gates = _binding_gate_counts_frame(latest, gate_specs)
+    if gates.empty:
+        axes[1, 1].set_title("Gate counts — нет данных")
+        axes[1, 1].axis("off")
+    else:
+        colors = [
+            "#d62728" if s == "failed" else "#ff7f0e" if s == "warning" else "#2ca02c"
+            for s in gates["status"]
+        ]
+        work = gates.sort_values("count", ascending=True)
+        axes[1, 1].barh(work["metric"], work["count"], color=colors, alpha=0.88)
+        axes[1, 1].set_xlabel("count")
+        axes[1, 1].set_title("Gate-проверки (DQ)")
+    rows = int(basic.get("row_count") or 0)
+    msisdn = int(basic.get("distinct_msisdn") or 0)
+    suffix = ""
+    if extra_metric and extra_metric in basic:
+        suffix = f", {extra_metric}={int(basic[extra_metric]):,}"
+    month = basic.get("report_date", "")
+    fig.suptitle(
+        f"{title} — month={month}, rows={rows:,}, msisdn={msisdn:,}{suffix}",
+        fontsize=12,
+        y=1.02,
+    )
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_msisdn_imei_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    return _render_stg_binding_dq_overview(
+        latest,
+        title="DQ STG MSISDN IMEI",
+        gate_specs=_STG_MSISDN_IMEI_GATE_SPECS,
+    )
+
+
+def render_stg_msisdn_imsi_operator_dq_overview(latest: pd.DataFrame) -> plt.Figure:
+    return _render_stg_binding_dq_overview(
+        latest,
+        title="DQ STG MSISDN IMSI",
+        gate_specs=_STG_MSISDN_IMSI_GATE_SPECS,
+        extra_metric="distinct_operator_id",
+    )
+
+
+def _print_per_msisdn_interval_stats(per_msisdn: pd.Series) -> None:
+    if per_msisdn.empty:
+        print("интервалов на msisdn: нет данных (пустой набор)")
+        return
+    print(
+        f"интервалов на msisdn: min={int(per_msisdn.min())}, "
+        f"median={float(per_msisdn.median()):.1f}, max={int(per_msisdn.max())}"
+    )
+
+
+def display_stg_msisdn_imei_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, stg_msisdn_imei_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet)
+    try:
+        rel = parquet.relative_to(root)
+    except ValueError:
+        rel = parquet
+    print(f"stg_msisdn_imei ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    if df.empty:
+        print("distinct msisdn: 0, distinct imei: 0")
+        _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
+        return
+    print(f"distinct msisdn: {df['msisdn'].nunique():,}, distinct imei: {df['imei'].nunique():,}")
+    per_msisdn = df.groupby("msisdn", sort=False).size()
+    _print_per_msisdn_interval_stats(per_msisdn)
+    display(per_msisdn.value_counts().head(10).to_frame("msisdn_count"))
+
+
+def display_stg_msisdn_imsi_parquet_summary(root: Path, report_month: date) -> None:
+    parquet = _resolve_parquet(root, stg_msisdn_imsi_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet)
+    try:
+        rel = parquet.relative_to(root)
+    except ValueError:
+        rel = parquet
+    print(f"stg_msisdn_imsi ({report_month.isoformat()}): {len(df):,} rows | файл: {rel}")
+    if df.empty:
+        print("distinct msisdn: 0, imsi: 0, operator_id: 0")
+        _print_per_msisdn_interval_stats(pd.Series(dtype="int64"))
+        return
+    print(
+        f"distinct msisdn: {df['msisdn'].nunique():,}, imsi: {df['imsi'].nunique():,}, "
+        f"operator_id: {df['operator_id'].nunique():,}"
+    )
+    display(df["operator_id"].value_counts().head(12).to_frame("interval_rows"))
+    per_msisdn = df.groupby("msisdn", sort=False).size()
+    _print_per_msisdn_interval_stats(per_msisdn)
+
+
+def render_stg_msisdn_imei_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, stg_msisdn_imei_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet, columns=["msisdn", "imei"])
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    if df.empty:
+        for ax in axes:
+            ax.set_title("нет данных (пустой parquet)")
+            ax.axis("off")
+        fig.suptitle(f"stg_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.tight_layout()
+        return fig
+    per_msisdn = df.groupby("msisdn", sort=False).size()
+    tac = df["imei"].astype("string").str.replace(r"\D+", "", regex=True).str.slice(0, 8)
+    tac_vc = tac.value_counts().head(12)
+    bins = [1, 2, 3, 5, 10, 20, 50, max(int(per_msisdn.max()), 51)]
+    axes[0].hist(per_msisdn, bins=sorted(set(bins)), color="#1f77b4", alpha=0.85, edgecolor="white")
+    axes[0].set_xlabel("интервалов на msisdn")
+    axes[0].set_ylabel("msisdn")
+    axes[0].set_title("Распределение числа интервалов на MSISDN")
+    if tac_vc.empty:
+        axes[1].set_title("IMEI TAC — нет данных")
+        axes[1].axis("off")
+    else:
+        axes[1].barh(tac_vc.index.astype(str), tac_vc.values, color="#ff7f0e", alpha=0.88)
+        axes[1].set_xlabel("interval rows")
+        axes[1].set_title("Top IMEI TAC (первые 8 цифр)")
+    fig.suptitle(f"stg_msisdn_imei — {report_month.isoformat()}", fontsize=12, y=1.02)
+    fig.tight_layout()
+    return fig
+
+
+def render_stg_msisdn_imsi_parquet_profile(root: Path, report_month: date) -> plt.Figure:
+    parquet = _resolve_parquet(root, stg_msisdn_imsi_output_path(report_month))
+    if not parquet.exists():
+        raise FileNotFoundError(f"Нет parquet: {parquet}")
+    df = pd.read_parquet(parquet, columns=["msisdn", "operator_id", "imsi"])
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    if df.empty:
+        for ax in axes:
+            ax.set_title("нет данных (пустой parquet)")
+            ax.axis("off")
+        fig.suptitle(f"stg_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
+        fig.tight_layout()
+        return fig
+    per_msisdn = df.groupby("msisdn", sort=False).size()
+    op_vc = df["operator_id"].value_counts().head(12)
+    bins = [1, 2, 3, 5, 10, 20, 50, max(int(per_msisdn.max()), 51)]
+    axes[0].hist(per_msisdn, bins=sorted(set(bins)), color="#2ca02c", alpha=0.85, edgecolor="white")
+    axes[0].set_xlabel("интервалов на msisdn")
+    axes[0].set_ylabel("msisdn")
+    axes[0].set_title("Распределение числа интервалов на MSISDN")
+    if op_vc.empty:
+        axes[1].set_title("operator_id — нет данных")
+        axes[1].axis("off")
+    else:
+        axes[1].barh(op_vc.index.astype(str), op_vc.values, color="#9467bd", alpha=0.88)
+        axes[1].set_xlabel("interval rows")
+        axes[1].set_title("Top operator_id")
+    fig.suptitle(f"stg_msisdn_imsi — {report_month.isoformat()}", fontsize=12, y=1.02)
     fig.tight_layout()
     return fig

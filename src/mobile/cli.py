@@ -30,6 +30,9 @@ from mobile.notebook_runner import (
     run_nb_stg_event,
     run_nb_src_person,
     run_nb_stg_bs,
+    run_nb_stg_geo_all,
+    run_nb_stg_msisdn_imei,
+    run_nb_stg_msisdn_imsi_operator,
     run_nb_stg_oksm,
     run_nb_stg_oktmo,
     run_nb_stg_tac,
@@ -46,13 +49,13 @@ from mobile.pipelines.stg import geo_intervals as stg_geo_intervals
 from mobile.pipelines.stg import person as stg_person
 from mobile.pipelines.stg import move_event as stg_move_event
 from mobile.pipelines.stg import bs as stg_bs
-from mobile.pipelines.stg import binding_intervals as stg_binding_intervals
-from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.stg import msisdn_imei as stg_msisdn_imei
-from mobile.pipelines.stg import msisdn_operator as stg_msisdn_operator
+from mobile.pipelines.stg import msisdn_imsi as stg_msisdn_imsi
 from mobile.pipelines.dq.stg import event as dq_stg_event
 from mobile.pipelines.dq.stg import geo_intervals as dq_stg_geo_intervals
 from mobile.pipelines.dq.stg import geo_all as dq_stg_geo_all
+from mobile.pipelines.dq.stg import msisdn_imei as dq_stg_msisdn_imei
+from mobile.pipelines.dq.stg import msisdn_imsi_operator as dq_stg_msisdn_imsi_operator
 from mobile.pipelines.dq.stg import person as dq_stg_person
 from mobile.pipelines.dq.stg import bs as dq_stg_bs, oksm as dq_oksm, oktmo as dq_oktmo, tac as dq_tac, time_zones as dq_time_zones
 from mobile.pipelines.stg import oktmo, oksm, tac, time_zones
@@ -80,11 +83,14 @@ from mobile.project_paths import (
     mobile_datacenter_root,
     mobile_mart_paths,
     resolve_oktmo_layout,
+    report_month_start,
     resolve_project_path,
     stg_bs_output_path,
     stg_event_dds_output_path,
     stg_event_output_path,
     stg_geo_all_output_path,
+    stg_msisdn_imei_output_path,
+    stg_msisdn_imsi_output_path,
 )
 
 _BUILD_STG_EVENT_DC_WORKERS = 2
@@ -109,6 +115,9 @@ _NB_COMMANDS: dict[str, Callable[[], None]] = {
     "nb-stg-tac": run_nb_stg_tac,
     "nb-stg-oksm": run_nb_stg_oksm,
     "nb-stg-bs": run_nb_stg_bs,
+    "nb-stg-geo-all": run_nb_stg_geo_all,
+    "nb-stg-msisdn-imei": run_nb_stg_msisdn_imei,
+    "nb-stg-msisdn-imsi-operator": run_nb_stg_msisdn_imsi_operator,
     "nb-src-bs": run_nb_src_bs,
     "nb-src-person": run_nb_src_person,
     "nb-src-excl": run_nb_src_excl,
@@ -138,16 +147,15 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-stg-geo-all",
     "build-stg-geo-intervals",
     "build-stg-person",
-    "build-stg-msisdn-operator",
-    "build-stg-msisdn-imsi-month",
-    "build-stg-msisdn-imei-month",
+    "build-stg-msisdn-imei",
+    "dq-stg-msisdn-imei",
+    "build-stg-msisdn-imsi-operator",
+    "dq-stg-msisdn-imsi-operator",
     "build-move-event",
     "dq-stg-event",
     "dq-stg-geo-all",
     "dq-stg-geo-intervals",
     "dq-stg-person",
-    "build-stg-msisdn-imsi",
-    "build-stg-msisdn-imei",
     "build-stg-bs",
     "dq-stg-bs",
     *tuple(_NB_COMMANDS),
@@ -366,43 +374,6 @@ def _run_build_stg_event_dc_subprocesses(
                 datacenter,
                 day.isoformat(),
             )
-
-
-def run_build_stg_binding(
-    command: str,
-    *,
-    report_date: date | None,
-    stg_geo_all_path: str | None,
-    output_path: str | None,
-    runner: Callable[..., dict],
-) -> None:
-    """build-stg-msisdn-imsi / build-stg-msisdn-imei: один день или цикл DEFAULT_SRC_START_DATE..END."""
-    geo_all = Path(stg_geo_all_path) if stg_geo_all_path else None
-    out = Path(output_path) if output_path else None
-
-    if report_date is not None:
-        run_timed_command(
-            command,
-            lambda: runner(report_date=report_date, stg_geo_all_path=geo_all, output_path=out),
-        )
-        return
-
-    lo = DEFAULT_SRC_START_DATE
-    hi = DEFAULT_SRC_END_DATE
-    days = _calendar_days_inclusive(lo, hi)
-    logger.info(
-        "Starting %s: days=%s (%s .. %s)",
-        command,
-        len(days),
-        lo.isoformat(),
-        hi.isoformat(),
-    )
-    for day in days:
-        run_timed_command(
-            f"{command}-{day.isoformat()}",
-            lambda d=day: runner(report_date=d, stg_geo_all_path=geo_all, output_path=out),
-        )
-    logger.info("%s completed successfully", command)
 
 
 def run_dq_stg_oktmo(*, oktmo_path: str | None) -> None:
@@ -649,38 +620,90 @@ def run_build_stg_geo_intervals(
     )
 
 
-def run_build_stg_msisdn_operator(*, report_date: date | None, src_person_path: str | None, output_path: str | None) -> None:
-    if report_date is None:
-        raise SystemExit("build-stg-msisdn-operator: --report-date is required")
-    if report_date.day != 1:
-        raise SystemExit(f"build-stg-msisdn-operator: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
-    run_timed_command(
-        "build-stg-msisdn-operator",
-        lambda: stg_msisdn_operator.run_build(
-            report_date=report_date,
-            src_person_path=Path(src_person_path) if src_person_path else None,
-            output_path=Path(output_path) if output_path else None,
-        ),
+def _run_build_stg_geo_binding(
+    command: str,
+    *,
+    report_date: date | None,
+    stg_geo_all_path: str | None,
+    output_path: str | None,
+    runner: Callable[..., dict],
+    default_output: Callable[[date], Path],
+) -> None:
+    """build-stg-msisdn-imei / build-stg-msisdn-imsi-operator: явный прогон (3 параметра) или цикл по дням."""
+    explicit = any((report_date, stg_geo_all_path, output_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_geo_all_path is None:
+            missing.append("--stg-geo-all-path")
+        if output_path is None:
+            missing.append("--output-path")
+        if missing:
+            raise SystemExit(
+                f"{command}: explicit run requires all parameters; missing: {', '.join(missing)}"
+            )
+        run_timed_command(
+            f"{command}-{report_date.isoformat()}",
+            lambda: runner(
+                report_date=report_date,
+                stg_geo_all_path=Path(stg_geo_all_path),
+                output_path=Path(output_path),
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    logger.info("Starting %s: days=%s (%s .. %s)", command, len(days), lo.isoformat(), hi.isoformat())
+    for day in days:
+        geo = stg_geo_all_output_path(day)
+        if not geo.exists():
+            continue
+        out = default_output(day)
+        run_timed_command(
+            f"{command}-{day.isoformat()}",
+            lambda d=day, g=geo, o=out: runner(
+                report_date=d,
+                stg_geo_all_path=g,
+                output_path=o,
+            ),
+        )
+    logger.info("%s completed successfully", command)
+
+
+def run_build_stg_msisdn_imei(
+    *,
+    report_date: date | None,
+    stg_geo_all_path: str | None,
+    output_path: str | None,
+) -> None:
+    _run_build_stg_geo_binding(
+        "build-stg-msisdn-imei",
+        report_date=report_date,
+        stg_geo_all_path=stg_geo_all_path,
+        output_path=output_path,
+        runner=stg_msisdn_imei.run_build,
+        default_output=stg_msisdn_imei_output_path,
     )
 
 
-def run_build_stg_msisdn_imsi_month(*, report_date: date | None, output_path: str | None) -> None:
-    """Устаревшее имя: пересборка месячного ``stg_msisdn_imsi`` из всех ``stg_geo_all`` за месяц."""
-    if report_date is None:
-        raise SystemExit("build-stg-msisdn-imsi-month: --report-date is required")
-    if report_date.day != 1:
-        raise SystemExit(f"build-stg-msisdn-imsi-month: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
-    if output_path is not None:
-        logger.warning("build-stg-msisdn-imsi-month: --output-path ignored; use build-stg-msisdn-imsi --report-date <day>")
-    run_timed_command(
-        "build-stg-msisdn-imsi-month",
-        lambda: stg_binding_intervals.refresh_month_bindings_from_geo(report_date),
+def run_build_stg_msisdn_imsi_operator(
+    *,
+    report_date: date | None,
+    stg_geo_all_path: str | None,
+    output_path: str | None,
+) -> None:
+    _run_build_stg_geo_binding(
+        "build-stg-msisdn-imsi-operator",
+        report_date=report_date,
+        stg_geo_all_path=stg_geo_all_path,
+        output_path=output_path,
+        runner=stg_msisdn_imsi.run_build,
+        default_output=stg_msisdn_imsi_output_path,
     )
-
-
-def run_build_stg_msisdn_imei_month(*, report_date: date | None, output_path: str | None) -> None:
-    """Устаревшее имя: то же, что ``build-stg-msisdn-imsi-month`` (обновляет оба binding)."""
-    run_build_stg_msisdn_imsi_month(report_date=report_date, output_path=output_path)
 
 
 def run_build_stg_person(
@@ -871,14 +894,159 @@ def run_dq_stg_geo_all(
     report_date: date | None,
     stg_geo_all_path: str | None,
 ) -> None:
-    """DQ ``stg_geo_all`` за день (read-only проверки)."""
-    if report_date is None:
-        raise SystemExit("dq-stg-geo-all: --report-date is required")
-    path = Path(stg_geo_all_path) if stg_geo_all_path else None
-    run_timed_command(
-        "dq-stg-geo-all",
-        lambda: dq_stg_geo_all.run_dq(report_date=report_date, stg_geo_all_path=path),
+    """DQ ``stg_geo_all``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* по дням."""
+    explicit = any((report_date, stg_geo_all_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_geo_all_path is None:
+            missing.append("--stg-geo-all-path")
+        if missing:
+            raise SystemExit(
+                "dq-stg-geo-all: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        path = resolve_project_path(stg_geo_all_path)
+        run_timed_command(
+            f"dq-stg-geo-all-{report_date.isoformat()}",
+            lambda: dq_stg_geo_all.run_dq(report_date=report_date, stg_geo_all_path=path),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    logger.info(
+        "Starting dq-stg-geo-all: days=%s (%s .. %s) stg_geo_all_root=%s",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+        DEFAULT_STG_GEO_ALL_OUTPUT_ROOT,
     )
+    for day in days:
+        out = stg_geo_all_output_path(day)
+        run_timed_command(
+            f"dq-stg-geo-all-{day.isoformat()}",
+            lambda d=day, p=out: dq_stg_geo_all.run_dq(report_date=d, stg_geo_all_path=p),
+        )
+    logger.info("dq-stg-geo-all completed successfully")
+
+
+def run_dq_stg_msisdn_imei(
+    *,
+    report_date: date | None,
+    stg_msisdn_imei_path: str | None,
+) -> None:
+    """DQ ``stg_msisdn_imei``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
+    explicit = any((report_date, stg_msisdn_imei_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_msisdn_imei_path is None:
+            missing.append("--stg-msisdn-imei-path")
+        if missing:
+            raise SystemExit(
+                "dq-stg-msisdn-imei: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        path = resolve_project_path(stg_msisdn_imei_path)
+        month = report_month_start(report_date)
+        run_timed_command(
+            f"dq-stg-msisdn-imei-{month.isoformat()}",
+            lambda rd=report_date, p=path: dq_stg_msisdn_imei.run_dq(
+                report_date=rd,
+                stg_msisdn_imei_path=p,
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    seen_months: set[date] = set()
+    logger.info(
+        "Starting dq-stg-msisdn-imei: days=%s (%s .. %s) layout=%s",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+        STG_MSISDN_IMEI_LAYOUT_TEMPLATE,
+    )
+    for day in days:
+        month = report_month_start(day)
+        if month in seen_months:
+            continue
+        out = stg_msisdn_imei_output_path(day)
+        if not out.exists():
+            continue
+        seen_months.add(month)
+        run_timed_command(
+            f"dq-stg-msisdn-imei-{month.isoformat()}",
+            lambda m=month, p=out: dq_stg_msisdn_imei.run_dq(report_date=m, stg_msisdn_imei_path=p),
+        )
+    logger.info("dq-stg-msisdn-imei completed successfully")
+
+
+def run_dq_stg_msisdn_imsi_operator(
+    *,
+    report_date: date | None,
+    stg_msisdn_imsi_path: str | None,
+) -> None:
+    """DQ ``stg_msisdn_imsi``: явный прогон (2 параметра) или цикл DEFAULT_SRC_* (по месяцам)."""
+    explicit = any((report_date, stg_msisdn_imsi_path))
+
+    if explicit:
+        missing: list[str] = []
+        if report_date is None:
+            missing.append("--report-date")
+        if stg_msisdn_imsi_path is None:
+            missing.append("--stg-msisdn-imsi-path")
+        if missing:
+            raise SystemExit(
+                "dq-stg-msisdn-imsi-operator: explicit run requires all parameters; "
+                f"missing: {', '.join(missing)}"
+            )
+        path = resolve_project_path(stg_msisdn_imsi_path)
+        month = report_month_start(report_date)
+        run_timed_command(
+            f"dq-stg-msisdn-imsi-operator-{month.isoformat()}",
+            lambda rd=report_date, p=path: dq_stg_msisdn_imsi_operator.run_dq(
+                report_date=rd,
+                stg_msisdn_imsi_path=p,
+            ),
+        )
+        return
+
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    days = _calendar_days_inclusive(lo, hi)
+    seen_months: set[date] = set()
+    logger.info(
+        "Starting dq-stg-msisdn-imsi-operator: days=%s (%s .. %s) layout=%s",
+        len(days),
+        lo.isoformat(),
+        hi.isoformat(),
+        STG_MSISDN_IMSI_LAYOUT_TEMPLATE,
+    )
+    for day in days:
+        month = report_month_start(day)
+        if month in seen_months:
+            continue
+        out = stg_msisdn_imsi_output_path(day)
+        if not out.exists():
+            continue
+        seen_months.add(month)
+        run_timed_command(
+            f"dq-stg-msisdn-imsi-operator-{month.isoformat()}",
+            lambda m=month, p=out: dq_stg_msisdn_imsi_operator.run_dq(
+                report_date=m,
+                stg_msisdn_imsi_path=p,
+            ),
+        )
+    logger.info("dq-stg-msisdn-imsi-operator completed successfully")
 
 
 def run_dq_stg_geo_intervals(
@@ -1221,7 +1389,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_day,
         default=None,
         metavar="YYYY-MM-DD",
-        help="dq-src-mobile / build-stg-event: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); dq-stg-event / build-move-event / build-stg-msisdn-* / build-stg-geo-all / build-stg-geo-intervals / build-stg-person / dq-stg-person / dq-stg-geo-all / dq-stg-geo-intervals — день или YYYY-MM-01 для person",
+        help=(
+            "dq-src-mobile / build-stg-event: отчётная дата (с --dc или 4 путями — один прогон; без флага — DEFAULT_SRC_* × все ЦОД); "
+            "dq-stg-event / build-move-event / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-all / "
+            "build-stg-geo-intervals / dq-stg-geo-all / dq-stg-geo-intervals — календарный день; "
+            "dq-stg-msisdn-imei / dq-stg-msisdn-imsi-operator — любой день месяца (→ YYYY-MM-01); "
+            "build-stg-person / dq-stg-person — YYYY-MM-01"
+        ),
     )
     parser.add_argument(
         "--src-bs-path",
@@ -1302,7 +1476,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-geo-all-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet или каталог (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
+        help=f"build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / dq-stg-geo-all: входной stg_geo_all parquet (по умолчанию {DEFAULT_STG_GEO_ALL_OUTPUT_ROOT})",
     )
     parser.add_argument(
         "--stg-geo-intervals-path",
@@ -1314,13 +1488,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stg-msisdn-imsi-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-intervals / build-stg-person: входной stg_msisdn_imsi parquet (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})",
+        help=(
+            f"build-stg-msisdn-imsi-operator / dq-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: "
+            f"stg_msisdn_imsi parquet или каталог (по умолчанию {STG_MSISDN_IMSI_LAYOUT_TEMPLATE})"
+        ),
     )
     parser.add_argument(
         "--stg-msisdn-imei-path",
         default=None,
         metavar="PATH",
-        help=f"build-stg-geo-intervals / build-stg-person: входной stg_msisdn_imei parquet (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})",
+        help=(
+            f"build-stg-msisdn-imei / dq-stg-msisdn-imei / build-stg-geo-intervals / build-stg-person: "
+            f"stg_msisdn_imei parquet или каталог (по умолчанию {STG_MSISDN_IMEI_LAYOUT_TEMPLATE})"
+        ),
     )
     parser.add_argument(
         "--mobile-root",
@@ -1402,7 +1582,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "build-stg-event / build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm / build-stg-msisdn-imsi / build-stg-msisdn-imei / build-stg-bs / build-stg-geo-all / build-stg-geo-intervals / build-stg-person: выходной parquet "
+            "build-stg-event / build-stg-oktmo / build-stg-time-zones / build-stg-tac / build-stg-oksm / build-stg-bs / build-stg-geo-all / build-stg-msisdn-imei / build-stg-msisdn-imsi-operator / build-stg-geo-intervals / build-stg-person: выходной parquet "
             f"(по умолчанию {DEFAULT_STG_OKTMO_OUTPUT_PATH}, {DEFAULT_STG_TIME_ZONES_OUTPUT_PATH}, {DEFAULT_STG_TAC_OUTPUT_PATH}, {DEFAULT_STG_OKSM_OUTPUT_PATH}, {STG_MSISDN_IMSI_LAYOUT_TEMPLATE}, {STG_MSISDN_IMEI_LAYOUT_TEMPLATE}, "
             f"{STG_BS_LAYOUT_TEMPLATE}, data/stg/geo_all/{{report_date}}.parquet, {DEFAULT_STG_GEO_INTERVALS_OUTPUT_ROOT}/{{report_date}}.parquet, data/stg/person/{{report_date}}.parquet)"
         ),
@@ -1501,21 +1681,27 @@ def main() -> None:
                 stg_msisdn_imei_path=args.stg_msisdn_imei_path,
                 output_path=args.output_path,
             )
-        elif args.command == "build-stg-msisdn-operator":
-            run_build_stg_msisdn_operator(
+        elif args.command == "build-stg-msisdn-imei":
+            run_build_stg_msisdn_imei(
                 report_date=args.report_date,
-                src_person_path=args.src_person_path,
+                stg_geo_all_path=args.stg_geo_all_path,
                 output_path=args.output_path,
             )
-        elif args.command == "build-stg-msisdn-imsi-month":
-            run_build_stg_msisdn_imsi_month(
+        elif args.command == "dq-stg-msisdn-imei":
+            run_dq_stg_msisdn_imei(
                 report_date=args.report_date,
+                stg_msisdn_imei_path=args.stg_msisdn_imei_path,
+            )
+        elif args.command == "build-stg-msisdn-imsi-operator":
+            run_build_stg_msisdn_imsi_operator(
+                report_date=args.report_date,
+                stg_geo_all_path=args.stg_geo_all_path,
                 output_path=args.output_path,
             )
-        elif args.command == "build-stg-msisdn-imei-month":
-            run_build_stg_msisdn_imei_month(
+        elif args.command == "dq-stg-msisdn-imsi-operator":
+            run_dq_stg_msisdn_imsi_operator(
                 report_date=args.report_date,
-                output_path=args.output_path,
+                stg_msisdn_imsi_path=args.stg_msisdn_imsi_path,
             )
         elif args.command == "build-stg-person":
             run_build_stg_person(
@@ -1549,22 +1735,6 @@ def main() -> None:
                 stg_person_sim_path=args.stg_person_sim_path,
                 stg_oksm_path=args.stg_oksm_path,
                 stg_person_ledger_path=args.stg_person_ledger_path,
-            )
-        elif args.command == "build-stg-msisdn-imsi":
-            run_build_stg_binding(
-                "build-stg-msisdn-imsi",
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-                output_path=args.output_path,
-                runner=stg_msisdn_imsi.run_build,
-            )
-        elif args.command == "build-stg-msisdn-imei":
-            run_build_stg_binding(
-                "build-stg-msisdn-imei",
-                report_date=args.report_date,
-                stg_geo_all_path=args.stg_geo_all_path,
-                output_path=args.output_path,
-                runner=stg_msisdn_imei.run_build,
             )
         elif args.command == "build-stg-bs":
             run_build_stg_bs(

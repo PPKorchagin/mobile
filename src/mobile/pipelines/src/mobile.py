@@ -908,13 +908,52 @@ def _pick_end_bs_idx(
     return int(candidates.sample(1, random_state=rng.randint(0, 2**31 - 1)).index[0])
 
 
+# (country_code, NSN length) — E.164 без «+», для синтетики роуминга / международных MSISDN
+_INTERNATIONAL_MSISDN_PROFILES: tuple[tuple[str, int], ...] = (
+    ("49", 10),  # DE
+    ("1", 10),  # US/CA
+    ("44", 10),  # UK
+    ("33", 9),  # FR
+    ("380", 9),  # UA
+    ("375", 9),  # BY
+    ("374", 8),  # AM
+    ("996", 9),  # KG
+)
+
+# IMSI визитёров (MCC ≠ 250) — доля абонентов в выборке активных за день
+_ROAMING_IMSI_SHARE_PCT = 5
+_INTERNATIONAL_MSISDN_SHARE_PCT = 18
+
+
+def _international_msisdn_e164(operator: str, sid: int) -> str:
+    profiles = _INTERNATIONAL_MSISDN_PROFILES
+    cc, nsn_len = profiles[stable_seed("intl_cc", operator, sid) % len(profiles)]
+    floor = 10 ** (nsn_len - 1)
+    ceiling = 10**nsn_len - 1
+    span = ceiling - floor + 1
+    nsn = floor + (stable_seed("intl_nsn", operator, sid) % span)
+    return f"+{cc}{nsn}"
+
+
 def _msisdn(operator: str, sid: int) -> str:
+    if stable_seed("msisdn_intl", operator, sid) % 100 < _INTERNATIONAL_MSISDN_SHARE_PCT:
+        return _international_msisdn_e164(operator, sid)
     op_code = OPERATORS_ORDER.index(operator) + 1 if operator in OPERATORS_ORDER else 9
     base = 10_000_000 + sid
     return f"+79{op_code}{base:08d}"[:12]
 
 
+def _roaming_imsi(operator: str, sid: int) -> str:
+    mcc_profiles = ("262", "228", "234", "232", "206")
+    mcc = mcc_profiles[stable_seed("roam_mcc", operator, sid) % len(mcc_profiles)]
+    mnc = 1 + (stable_seed("roam_mnc", operator, sid) % 99)
+    msin = (1_000_000_000 + stable_seed("roam_msin", operator, sid)) % 10_000_000_000
+    return f"{mcc}{mnc:02d}{msin:010d}"
+
+
 def _imsi(operator: str, sid: int) -> str:
+    if stable_seed("imsi_roam", operator, sid) % 100 < _ROAMING_IMSI_SHARE_PCT:
+        return _roaming_imsi(operator, sid)
     mnc = OPERATOR_MNC.get(operator, 99)
     return f"250{mnc:02d}{(1_000_000_000 + sid) % 10_000_000_000:010d}"
 
@@ -3364,8 +3403,17 @@ def _generate_cdr_row(
     return row
 
 
-def _cdr_random_msisdn(rng: random.Random) -> str:
+def _random_peer_msisdn(rng: random.Random) -> str:
+    if rng.random() * 100 < _INTERNATIONAL_MSISDN_SHARE_PCT:
+        cc, nsn_len = rng.choice(_INTERNATIONAL_MSISDN_PROFILES)
+        floor = 10 ** (nsn_len - 1)
+        nsn = rng.randint(floor, 10**nsn_len - 1)
+        return f"+{cc}{nsn}"
     return f"+79{rng.randint(10**8, 10**9 - 1)}"
+
+
+def _cdr_random_msisdn(rng: random.Random) -> str:
+    return _random_peer_msisdn(rng)
 
 
 def _cdr_random_started_source(started_dt: datetime, offset_hours: int, rng: random.Random) -> str:
@@ -3870,7 +3918,7 @@ def _generate_sms_row(
 
 
 def _sms_random_msisdn(rng: random.Random) -> str:
-    return f"+79{rng.randint(10**8, 10**9 - 1)}"
+    return _random_peer_msisdn(rng)
 
 
 def _sms_apply_aggressive_anomalies(row: dict[str, Any], rng: random.Random) -> None:
@@ -4376,7 +4424,7 @@ def _generate_gprs_row(
 
 
 def _gprs_random_msisdn(rng: random.Random) -> str:
-    return f"+79{rng.randint(10**8, 10**9 - 1)}"
+    return _random_peer_msisdn(rng)
 
 
 def _gprs_random_started_source(started_dt: datetime, offset_hours: int, rng: random.Random) -> str:

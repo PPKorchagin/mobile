@@ -51,7 +51,6 @@ STG_GEO_INTERVALS_LAYOUT_TEMPLATE = "data/stg/geo_intervals/{report_date}.parque
 STG_PERSON_LAYOUT_TEMPLATE = "data/stg/person/{report_date}.parquet"
 STG_PERSON_SIM_LAYOUT_TEMPLATE = "data/stg/person_sim/{report_date}.parquet"
 STG_PERSON_ID_LEDGER_LAYOUT_TEMPLATE = "data/stg/person_id_ledger/{report_date}.parquet"
-STG_MSISDN_OPERATOR_LAYOUT_TEMPLATE = "data/stg/msisdn_operator/{report_date}.parquet"
 STG_BS_LAYOUT_TEMPLATE = "data/stg/bs.parquet"
 DEFAULT_STG_EVENT_ROOT = PROJECT_ROOT / "data" / "stg" / "event"
 DEFAULT_STG_EVENT_DDS_ROOT = PROJECT_ROOT / "data" / "stg" / "event_dds"
@@ -63,7 +62,6 @@ DEFAULT_STG_MSISDN_IMEI_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_imei.json"
 DEFAULT_STG_PERSON_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person.json"
 DEFAULT_STG_PERSON_SIM_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person_sim.json"
 DEFAULT_STG_PERSON_ID_LEDGER_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "person_id_ledger.json"
-DEFAULT_STG_MSISDN_OPERATOR_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "msisdn_operator.json"
 DEFAULT_SRC_BS_SCHEMA_PATH = _SCHEMA_ROOT / "src" / "bs.json"
 DEFAULT_STG_BS_SCHEMA_PATH = _SCHEMA_ROOT / "stg" / "bs.json"
 DEFAULT_STG_BS_OUTPUT_PATH = PROJECT_ROOT / "data" / "stg" / "bs.parquet"
@@ -270,6 +268,12 @@ DEFAULT_NB_STG_EVENT_NOTEBOOK_PATH = _NB / "9_stg_event.ipynb"
 DEFAULT_NB_STG_EVENT_EXECUTED_PATH = _DATA_NOTEBOOKS / "9_stg_event.executed.ipynb"
 DEFAULT_NB_STG_BS_NOTEBOOK_PATH = _NB / "10_stg_bs.ipynb"
 DEFAULT_NB_STG_BS_EXECUTED_PATH = _DATA_NOTEBOOKS / "10_stg_bs.executed.ipynb"
+DEFAULT_NB_STG_GEO_ALL_NOTEBOOK_PATH = _NB / "11_stg_geo_all.ipynb"
+DEFAULT_NB_STG_GEO_ALL_EXECUTED_PATH = _DATA_NOTEBOOKS / "11_stg_geo_all.executed.ipynb"
+DEFAULT_NB_STG_MSISDN_IMEI_NOTEBOOK_PATH = _NB / "12_stg_msisdn_imei.ipynb"
+DEFAULT_NB_STG_MSISDN_IMEI_EXECUTED_PATH = _DATA_NOTEBOOKS / "12_stg_msisdn_imei.executed.ipynb"
+DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_NOTEBOOK_PATH = _NB / "13_stg_msisdn_imsi_operator.ipynb"
+DEFAULT_NB_STG_MSISDN_IMSI_OPERATOR_EXECUTED_PATH = _DATA_NOTEBOOKS / "13_stg_msisdn_imsi_operator.executed.ipynb"
 DEFAULT_NOTEBOOK_KERNEL_NAME = "mobile"
 DEFAULT_NOTEBOOK_RESOURCES_PATH = PROJECT_ROOT
 
@@ -342,8 +346,5 @@ def stg_person_sim_output_path(day: date) -> Path:
 def stg_person_id_ledger_output_path(day: date) -> Path:
     return PROJECT_ROOT / STG_PERSON_ID_LEDGER_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
 
-
-def stg_msisdn_operator_output_path(day: date) -> Path:
-    return PROJECT_ROOT / STG_MSISDN_OPERATOR_LAYOUT_TEMPLATE.format(report_date=day.isoformat())
 
 

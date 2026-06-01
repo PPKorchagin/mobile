@@ -90,7 +90,7 @@ def read_src_person_month(
 ) -> tuple[pd.DataFrame, list[date]]:
     """Чтение ``src_person`` за месяц.
 
-    ``all_snapshots`` — все срезы (для ``stg_msisdn_operator``).
+    ``all_snapshots`` — все срезы (для MNP в ``stg_msisdn_imsi``).
     ``latest_snapshot`` — только последний ``load_day`` с ``_SUCCESS`` (для ``stg_person``).
     """
     if src_person_path is not None:

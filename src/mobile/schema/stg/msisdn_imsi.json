@@ -1,6 +1,6 @@
 {
     "table": "stg_msisdn_imsi",
-    "description": "Месячные интервалы MSISDN–IMSI (файл YYYY-MM-01), пополняются ежедневно из stg_geo_all",
+    "description": "Месячные интервалы MSISDN–IMSI + operator_id (файл YYYY-MM-01), ежедневный инкремент из stg_geo_all (наблюдения)",
     "fields": [
         {
             "name": "msisdn",
@@ -13,14 +13,19 @@
             "comment": "IMSI, 14–15 цифр (MCC+MNC+MSIN)"
         },
         {
+            "name": "operator_id",
+            "type": "long",
+            "comment": "MNC (цифры 4–5) при MCC 250; для иностранных IMSI — null"
+        },
+        {
             "name": "valid_from",
             "type": "timestamp",
-            "comment": "Первое событие интервала (локальное время event_timestamp)"
+            "comment": "Начало интервала наблюдения"
         },
         {
             "name": "valid_to",
             "type": "timestamp",
-            "comment": "Последнее событие интервала (локальное время)"
+            "comment": "Конец интервала наблюдения"
         }
     ]
 }
