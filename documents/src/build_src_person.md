@@ -88,7 +88,7 @@ uv run mobile build-src-person --target-per-operator 5000
 
 ### Поля витрины
 
-Контракт — [`person.json`](../../src/mobile/schema/src/person.json) → `fields` (**99** полей). Порядок колонок в Parquet — как в JSON.
+Контракт — [`person.json`](../../src/mobile/schema/src/person.json) → `fields` (**99** полей), имена как в `shema_table.pdf` §1.1. Порядок колонок в Parquet — как в JSON (в т.ч. `operator_Id`, `cdma_Imei_a` — регистр как в спецификации).
 
 Ключевые идентификаторы: `isdn`, `imsi`, `imei`, `operator_Id`, `actually_from`, `actually_to`, `abonent_status`, `client_type`, `abonent_last_location`, адреса и документы ФЛ/ЮЛ — см. JSON.
 

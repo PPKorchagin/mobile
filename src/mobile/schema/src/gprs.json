@@ -175,7 +175,7 @@
         {
             "name": "RecEntOwnerRegion",
             "type": "string",
-            "comment": "Регион устройства, записавшего вызов, или регион OwnMccMnc"
+            "comment": "Регион устройства, записавшего вызов, или регион OwnerMCCMNC"
         },
         {
             "name": "dateTimeOriginal",

@@ -84,16 +84,19 @@ uv run mobile build-src-bs
 
 ### Поля витрины
 
-Контракт — [`bs.json`](../../src/mobile/schema/src/bs.json) → `fields` (**36** колонок). Ключевые группы:
+Контракт — [`bs.json`](../../src/mobile/schema/src/bs.json) → `fields` (**36** колонок), имена как в `shema_table.pdf` §1.3. Ключевые группы:
 
-| Группа | Примеры полей |
-|--------|----------------|
-| Идентификация сети | `mcc`, `mnc`, `lac`, `cell`, `id` |
+| Группа | Поля |
+|--------|------|
+| Идентификация | `id`, `mcc`, `mnc`, `lac`, `cell` |
 | Время | `date_on`, `date_off` |
-| Координаты / регион | `lat`, `lon`, `subject`, `border` |
-| Радио | `generation`, `azimut`, `width`, `indoor`, `external`, `msc_num`, `bsc_num`, `bsc_rc`, `bsc_cell_num`, `lac_16`, `cell_16`, `sector_num`, `bs_class`, `bs_type`, `power`, `ta`, `capacity`, `software_version`, `address`, `comment` |
+| Координаты | `coord_x`, `coord_y` |
+| Классификация | `bs_type`, `generation`, `address`, `subject`, `location`, `description`, `controllernum` |
+| Частоты | `frequency_out`, `frequency_in`, `frequency` |
+| Радио / сектор | `rad_class`, `bcch`, `azimuth`, `height`, `tilt`, `el_tilt`, `mech_tilt`, `raster`, `thickness`, `power`, `amplification`, `polarization`, `rac` |
+| Прочее | `border`, `avtocod`, `bsic`, `bsid` |
 
-Полный перечень имён и типов — только в JSON.
+Полный перечень имён и типов — в JSON; downstream [`build-fct-bs`](../fct/build_fct_bs.md) переименует `cell` → `cell_id`, `coord_*` → `lon`/`lat` и др.
 
 ### Ожидаемый объём (дефолтный CLI)
 

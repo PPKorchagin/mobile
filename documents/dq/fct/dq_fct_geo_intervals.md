@@ -50,7 +50,7 @@
 |-----------|----------|
 | `LOG_TAG` | `DQ_FCT_GEO_INTERVALS` |
 | `_BS_TYPES` | `m`, `f`, `i`, `x`, `o` |
-| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`stg/geo_intervals.py`](../../../src/mobile/pipelines/fct/geo_intervals.py) |
+| `_EXPECTED_COLUMNS` | `_OUTPUT_COLUMNS` из ETL [`fct/geo_intervals.py`](../../../src/mobile/pipelines/fct/geo_intervals.py) |
 
 **Предусловие:** `uv run mobile build-fct-geo-intervals` за ту же `report_date` (и binding-витрины за месяц этого дня).
 

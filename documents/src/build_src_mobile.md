@@ -2,7 +2,7 @@
 
 **Витрины:** CDR, SMS, GPRS, location (ОСС) · **Команда:** `build-src-mobile` · **Режим:** суточные Parquet по оператору и типу события.
 
-Референс: [`pipelines/src/mobile.py`](../../src/mobile/pipelines/src/mobile.py). Схемы: [`cdr.json`](../../src/mobile/schema/src/cdr.json), [`sms.json`](../../src/mobile/schema/src/sms.json), [`gprs.json`](../../src/mobile/schema/src/gprs.json), [`location.json`](../../src/mobile/schema/src/location.json).
+Референс: [`pipelines/src/mobile.py`](../../src/mobile/pipelines/src/mobile.py). Схемы (имена полей = `shema_table.pdf` §1.2.1–1.2.4): [`cdr.json`](../../src/mobile/schema/src/cdr.json), [`sms.json`](../../src/mobile/schema/src/sms.json), [`gprs.json`](../../src/mobile/schema/src/gprs.json), [`location.json`](../../src/mobile/schema/src/location.json).
 
 ---
 

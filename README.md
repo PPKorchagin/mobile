@@ -83,7 +83,7 @@ uv run mobile update-readme-stats
 
 ## Data lineage
 
-Сводка **по витринам** (куда пишем parquet, откуда поля). Детальные алгоритмы — в `documents/**/build_*.md`; контракты полей — [`src/mobile/schema/`](src/mobile/schema/). Порядок prod — [`documents/pipelines/prod_run_order.md`](documents/pipelines/prod_run_order.md).
+Сводка **по витринам** (куда пишем parquet, откуда поля). Имена полей **src** (Person, ОСС CDR/SMS/GPRS/location, БС) — по [`geo/internal_docs/shema_table.pdf`](../geo/internal_docs/shema_table.pdf) (приложение 1); в репозитории — [`src/mobile/schema/`](src/mobile/schema/). Производные слои (`dds_*`, `stg_*`, `fct_*`, `dim_*`) — внутренние контракты ETL. Детальные алгоритмы — в `documents/**/build_*.md`. Порядок prod — [`documents/pipelines/prod_run_order.md`](documents/pipelines/prod_run_order.md).
 
 ```mermaid
 flowchart TB
