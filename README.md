@@ -15,6 +15,7 @@
 | `build-prod-stage1` | Прод **stage 1** (ежедневно): `dq-src-mobile` → `build-dds-event` (× ЦОД) → `build-dds-move-event`. На проде перенос (`build-dds-move-event`) — **вручную** поставщиком, см. prod_run_order. | **`--report-date`** (обязателен); опционально `--dc`, пути mobile-витрин |
 | `build-prod-stage2` | Прод **stage 2** (ежедневно): dim ОКТМО/time zones, `dq-src-bs` → `fct_bs`, `dq-dds-event`, `stg_geo_all`, binding IMEI/IMSI, `fct_geo_intervals` (16 шагов). После stage 1. | **`--report-date`** (обязателен); опционально пути справочников и витрин (как у одиночных команд) |
 | `build-prod-person` | Прод **person** (1-го числа месяца): TAC, ОКСМ, `dq-src-excl`, `dq-src-person`, `build-fct-person`, `dq-fct-person` за **прошлый** месяц (8 шагов). | `--report-date` = `YYYY-MM-01` (опционально; без флага — предыдущий месяц) |
+| `update-readme-stats` | Пересчёт раздела **Статистика** в README по текущему дереву `src/mobile/`, `documents/`, `data/` | — |
 
 ```bash
 uv run mobile run-src
@@ -23,6 +24,7 @@ uv run mobile build-prod-stage1 --report-date 2025-01-15
 uv run mobile build-prod-stage2 --report-date 2025-01-15
 uv run mobile build-prod-person
 uv run mobile build-prod-person --report-date 2025-01-01
+uv run mobile update-readme-stats
 ```
 
 ## Список команд и параметров
@@ -72,38 +74,148 @@ uv run mobile build-prod-person --report-date 2025-01-01
 | 41            | build-fct-geo-intervals | Сборка дневной витрины fct_geo_intervals (интервалы пребывания из stg_geo_all) | 7 параметров (`--report-date`, `--stg-geo-all-path`, `--fct-bs-path`, `--time-zones-path`, `--fct-msisdn-imsi-path`, `--fct-msisdn-imei-path`, `--output-path`); без флагов — DEFAULT_SRC_* по дням | [Документ](documents/fct/build_fct_geo_intervals.md) |
 | 42            | dq-fct-geo-intervals | Проверка качества дневной витрины fct_geo_intervals | 2 параметра (`--report-date`, `--fct-geo-intervals-path`); без флагов — DEFAULT_SRC_* по дням | [Документ](documents/dq/fct/dq_fct_geo_intervals.md) |
 | 43            | nb-fct-geo-intervals | Визуализация метрик DQ витрины fct_geo_intervals | —                                                                                       | [Ноутбук](src/mobile/pipelines/nb/14_fct_geo_intervals.ipynb) |
-| 44            | build-fct-person | Сборка месячной витрины fct_person (профиль физлиц, кластеризация, binding MSISDN↔IMSI/IMEI) | 10 параметров (`--report-date` = YYYY-MM-01, `--src-person-path`, `--fct-msisdn-imsi-path`, `--fct-msisdn-imei-path`, `--src-imsi-path`, `--src-imei-path`, `--src-msisdn-path`, `--dim-tac-path`, `--dim-oksm-path`, `--output-path`); `--report-date` обязателен; внутри — синхронизация месячных binding из `stg_geo_all` | [Документ](documents/fct/build_fct_person.md) |
+| 44            | build-fct-person | Сборка месячной витрины fct_person (профиль физлиц, кластеризация, binding MSISDN↔IMSI/IMEI) | 10 параметров (`--report-date` = YYYY-MM-01, …); без `--report-date` — по каждому месяцу в `DEFAULT_SRC_*` (как в `run-all`); внутри — синхронизация месячных binding из `stg_geo_all` | [Документ](documents/fct/build_fct_person.md) |
 | 45            | dq-fct-person | Проверка качества месячной витрины fct_person | 2 параметра (`--report-date`, `--fct-person-path`); без флагов — DEFAULT_SRC_* по месяцам с существующим parquet | [Документ](documents/dq/fct/dq_fct_person.md) |
 | 46            | nb-fct-person | Визуализация метрик DQ витрины fct_person | — | [Ноутбук](src/mobile/pipelines/nb/15_fct_person.ipynb) |
 | 47            | nb-perf-metrics | Сводка wall-time команд из `data/qa/command_timing.jsonl` | — | [Ноутбук](src/mobile/pipelines/nb/perf_metrics.ipynb) |
 
 ---
 
+## Data lineage
+
+Сводка **по витринам** (куда пишем parquet, откуда поля). Детальные алгоритмы — в `documents/**/build_*.md`; контракты полей — [`src/mobile/schema/`](src/mobile/schema/). Порядок prod — [`documents/pipelines/prod_run_order.md`](documents/pipelines/prod_run_order.md).
+
+```mermaid
+flowchart TB
+  subgraph dim [dim]
+    O[dim_oktmo]
+    TZ[dim_time_zones]
+    T[dim_tac]
+    OK[dim_oksm]
+  end
+  subgraph src [src]
+    BS[src_bs]
+    M[cdr / sms / gprs / location]
+    P[src_person]
+    X[src_excl]
+  end
+  subgraph dds [dds]
+    E[dds_event]
+    ED[event_dds]
+  end
+  subgraph stg [stg]
+    G[stg_geo_all]
+  end
+  subgraph fct [fct]
+    FB[fct_bs]
+    BI[fct_msisdn_imei]
+    BM[fct_msisdn_imsi]
+    GI[fct_geo_intervals]
+    FP[fct_person]
+  end
+  O --> FB
+  TZ --> FB
+  BS --> FB
+  M --> E --> ED --> G
+  FB --> G
+  G --> BI
+  G --> BM
+  G --> GI
+  BI --> GI
+  BM --> GI
+  TZ --> GI
+  FB --> GI
+  P --> FP
+  T --> FP
+  OK --> FP
+  BI --> FP
+  BM --> FP
+  G -.-> FP
+  X -.-> FP
+```
+
+### `dim_*` — справочники
+
+| Витрина | Путь | Источник | Поля (выход) | Маппинг |
+| ------- | ---- | -------- | ------------ | ------- |
+| `dim_oktmo` | `data/dim/oktmo.parquet` | `src/mobile/raw_data/oktmo_v001.csv` | `WKT`, `level`, `parent_code`, `code`, `name` | CSV 1:1 |
+| `dim_time_zones` | `data/dim/time_zones.parquet` | `raw_data/time_zones.csv` | `code`, `name`, `timezone`, `geometry` | CSV 1:1 |
+| `dim_tac` | `data/dim/tac.parquet` | `raw_data/tacdb_v001.csv` | `tac`, `manufacturer`, `model_name`, `marketing_name`, `equipment_type`, `radio_technology`, `sim_form_factor`, `allocation_date`, `reporting_body`, `chipset`, `comment`, `is_m2m` | 11 колонок CSV 1:1; `is_m2m` ← `equipment_type` (M2M/IoT) |
+| `dim_oksm` | `data/dim/oksm.parquet` | `raw_data/oksm_v001.csv` | `numeric_code`, `name_short`, `name_full`, `alpha2`, `alpha3`, `autokey` | колонки CSV → одноимённые поля |
+
+Схемы: [`dim/oktmo.json`](src/mobile/schema/dim/oktmo.json), [`time_zones.json`](src/mobile/schema/dim/time_zones.json), [`tac.json`](src/mobile/schema/dim/tac.json), [`oksm.json`](src/mobile/schema/dim/oksm.json).
+
+### `src_*` — синтетические и внешние источники
+
+| Витрина | Путь | Источник | Ключевые поля | Куда идут |
+| ------- | ---- | -------- | ------------- | --------- |
+| `src_bs` | `data/src/bs.parquet` | синтез [`build-src-bs`](documents/src/build_src_bs.md) | `mcc`, `mnc`, `lac`, `cell`, `date_on`, `date_off`, `coord_x`, `coord_y`, `generation`, `bs_type`, … ([`src/bs.json`](src/mobile/schema/src/bs.json)) | → `fct_bs` |
+| `src_person` | `data/src/person/load_day=*/person.parquet` | синтез / поставка | профиль: `isdn`, `imsi`, `imei`, `iccid`, `actually_from`/`to`, ФИО, документы, … ([`src/person.json`](src/mobile/schema/src/person.json), 99 полей) | → `fct_person` |
+| `src_imsi` / `src_imei` / `src_msisdn` | `data/src/excl/src_*.parquet` | синтез | `value` | фильтр в `fct_person` |
+| `cdr` | `data/src/mobile/{dc}/operator/cdr/.../10001/{YYYY}/{MM}/{DD}/` | синтез mobile | `Started`, `IMSI`, `IMEI`, `CallingNumber`, `OwnerMCCMNC`, `BSStartLac`, `BSStartCell`, … | → `dds_event` |
+| `sms` | `.../10002/...` | синтез | `Started`, `Calling`, `IMSI`, `MCC`, `MNC`, `Lac`, `Cell`, … | → `dds_event` |
+| `gprs` | `.../10003/...` | синтез | `Started`, `CallingNumber`, `IMSI`, `OwnerMCCMNC`, `BSStartLac`, `BSStartCell`, … | → `dds_event` |
+| `location` | `.../10004/...` | синтез | `Started`, `Served`, `IMSI`, `MCC`, `MNC`, `Lac`, `Cell`, … | → `dds_event` |
+
+### `dds_*` — события
+
+| Витрина | Путь | Входы | Поля | Маппинг (сводка) |
+| ------- | ---- | ----- | ---- | ---------------- |
+| `dds_event` | `data/dds/event/{YYYY}/{MM}/{DD}/{dc}/events.parquet` | 4 mobile-витрины × ЦОД | `event_timestamp`, `imsi`, `imei`, `msisdn`, `location{mcc,mnc,lac,cell}`, `event`, `event_name`, `event_count` | `Started`→`event_timestamp`; `IMSI`/`IMEI`; MSISDN из `CallingNumber`/`Calling`/`Served`; CGI из MCC/MNC/LAC/Cell; код витрины → `event`/`event_name`; 5m-схлопывание → `event_count` |
+| `event_dds` | `data/dds/event_dds/{YYYY-MM-DD}/{dc}.parquet` | `dds_event` | те же 8 полей | копия 1:1 (prod — поставщик) |
+
+Схема: [`dds/event.json`](src/mobile/schema/dds/event.json). Спеки: [`build_dds_event.md`](documents/dds/build_dds_event.md), [`build_dds_move_event.md`](documents/dds/build_dds_move_event.md).
+
+### `stg_*` — промежуточный геослой
+
+| Витрина | Путь | Входы | Поля | Маппинг (сводка) |
+| ------- | ---- | ----- | ---- | ---------------- |
+| `stg_geo_all` | `data/stg/geo_all/{YYYY-MM-DD}.parquet` | `event_dds`, `fct_bs` | `msisdn`, `imsi`, `imei`, `start_time_utc`, `end_time_utc`, `utc_offset`, `lat`, `lon`, `bs_type`, `cgi`, `event_count`, `source_event_type`, `oktmo_code_1`, `oktmo_code_2` | IDs из `event_dds`; `cgi` из `location`; join `fct_bs` по `cgi`+интервал → координаты, `utc_offset`, ОКТМО; UTC-срез дня; 5m-агрегация |
+
+Схема: [`stg/geo_all.json`](src/mobile/schema/stg/geo_all.json). Спека: [`build_stg_geo_all.md`](documents/stg/build_stg_geo_all.md).
+
+### `fct_*` — витрины-факты
+
+| Витрина | Путь | Входы | Поля | Маппинг (сводка) |
+| ------- | ---- | ----- | ---- | ---------------- |
+| `fct_bs` | `data/fct/bs.parquet` | `src_bs`, `dim_oktmo`, `dim_time_zones` | `mcc`, `mnc`, `lac`, `cell_id`, `telecomstandard`, `frequency`, `lon`, `lat`, `bs_type`, `sector_*`, `h3`, `timezone`, `mapinfo_wkt*`, `sector_wkt*`, `oktmo_code_1/2`, `date_on`, `date_off` (28) | `cell`→`cell_id`; generation→`telecomstandard`; coords→`lon`/`lat`; pip → `timezone`, ОКТМО; Voronoi/сектор; SCD Type 2 |
+| `fct_msisdn_imei` | `data/fct/msisdn_imei/{YYYY-MM-01}.parquet` | `stg_geo_all` (по дням месяца) | `msisdn`, `imei`, `valid_from`, `valid_to` | сегменты при смене IMEI, clip к дню, merge |
+| `fct_msisdn_imsi` | `data/fct/msisdn_imsi/{YYYY-MM-01}.parquet` | `stg_geo_all` | `msisdn`, `imsi`, `operator_id`, `valid_from`, `valid_to` | сегменты при смене IMSI; `operator_id` из `imsi[3:5]` при MCC=250 |
+| `fct_geo_intervals` | `data/fct/geo_intervals/{YYYY-MM-DD}.parquet` | `stg_geo_all`, `fct_bs`, `dim_time_zones`, `fct_msisdn_imsi`, `fct_msisdn_imei` | `msisdn`, `imsi`, `imei`, `start_time_utc`, `end_time_utc`, `cgi_list`, `sub_lat`, `sub_lon`, `bs_type`, `timezone`, `oktmo_code_1`, `oktmo_code_2`, `time_key` | интервалы 5m/30m; fill `imsi`/`imei` из binding; weighted centroid; `time_key`=report_date |
+| `fct_person` | `data/fct/person/{YYYY-MM-01}.parquet` | `src_person`, `fct_msisdn_*`, `dim_tac`, `dim_oksm`, `src_excl`, prior `fct_person`, опц. `stg_geo_all` | `report_date`, `person_id`, `person_cluster_key`, `person_confidence`, `sim_count`, `msisdn`, `imsi`, `imei`, `gender`, `age`, `citizenship`, `operator_id`, `actually_from`, `actually_to` | union-find (bio/iccid/ID/binding); `person_id` стабилен; primary SIM; `citizenship`←`dim_oksm` |
+
+Схемы: [`fct/bs.json`](src/mobile/schema/fct/bs.json), [`msisdn_imei.json`](src/mobile/schema/fct/msisdn_imei.json), [`msisdn_imsi.json`](src/mobile/schema/fct/msisdn_imsi.json), [`geo_intervals.json`](src/mobile/schema/fct/geo_intervals.json), [`person.json`](src/mobile/schema/fct/person.json).
+
+---
+
 ## Статистика
 
-Оценка по дереву `src/mobile/`, `documents/` и `README.md` (без `data/`, `__pycache__`, `.git`). Числа округлены; после локальных прогонов меняются артефакты в `data/`.
+
+<!-- readme-stats:begin -->
+
+Оценка по дереву `src/mobile/`, `documents/` и `README.md` (без `data/`, `__pycache__`, `.git`). Числа округлены; после локальных прогонов меняются артефакты в `data/`. Обновить: `uv run mobile update-readme-stats`.
 
 ### Код
 
 | Метрика | Значение |
 | -------- | -------- |
-| Python-модули (`src/mobile`) | **57** файлов |
-| Строки Python (всего) | **~25 600** (~22 700 непустых) |
-| Функции / классы (AST) | **~866** / **15** |
+| Python-модули (`src/mobile`) | **58** файлов |
+| Строки Python (всего) | **~26 600** (~23 500 непустых) |
+| Функции / классы (AST) | **891** / **15** |
 | ETL `pipelines/{dim,dds,fct,stg}` | dim 4 · dds 2 · fct 6 · stg 1, ~5 100 строк |
-| Общее `pipelines/common` | 7 модулей, ~470 строк (DQ-логи, gates, WKT, CSV, схемы, binding-интервалы) |
-| Синтез `pipelines/src` | 4 модуля, ~7 500 строк (крупнейший — `mobile.py`, ~5 000 строк) |
+| Общее `pipelines/common` | 7 модулей, 471 строк (DQ-логи, gates, WKT, CSV, схемы, binding-интервалы) |
+| Синтез `pipelines/src` | 4 модуля, ~7 500 строк (крупнейший — `mobile.py`, 5 000 строк) |
 | DQ `pipelines/dq/{dim,dds,fct,stg,src}` | 15 модулей, ~5 600 строк |
 | Ноутбуки `pipelines/nb/common.py` | ~3 900 строк (DQ-дашборды, folium) |
-| CLI, пути, timing | `cli.py`, `project_paths.py`, … — ~3 000 строк |
+| CLI, пути, timing | `cli.py`, `project_paths.py`, … — ~4 000 строк |
 | JSON-схемы витрин | **20** файлов в `schema/` |
 
 ### Документация
 
 | Метрика | Значение |
 | -------- | -------- |
-| Markdown-спеки | **31** файл в `documents/` + **README** |
-| Строки документации | **~5 900** (~4 100 непустых) |
+| Markdown-спеки | **32** файл в `documents/` + **README** |
+| Строки документации | **~6 000** (~4 100 непустых) |
 | `documents/{dim,dds,fct,stg}` — build | 4 / 2 / 5 / 1 |
 | `documents/dq/{dim,dds,fct,stg}` — dq | 4 / 1 / 5 / 1 |
 | `documents/src` — build / dq | 4 / 4 |
@@ -113,7 +225,7 @@ uv run mobile build-prod-person --report-date 2025-01-01
 
 | Метрика | Значение |
 | -------- | -------- |
-| Зарегистрированных команд | **52** (`47` по таблице + `run-all` + `run-src` + `build-prod-stage1` + `build-prod-stage2` + `build-prod-person`) |
+| Зарегистрированных команд | **53** (`47` по таблице + `run-all` + `run-src` + `build-prod-stage1` + `build-prod-stage2` + `build-prod-person` + `update-readme-stats`) |
 | Шагов в `run-all` | **47** (+ до 3× `build-fct-person` по месяцам → до **49** subprocess) |
 | Шагов в `run-src` | **5** (только build: ОКТМО + 4 src-витрины) |
 | Календарное окно синтеза | `DEFAULT_SRC_*`: **2024-12-25 … 2025-02-05** |
@@ -123,8 +235,10 @@ uv run mobile build-prod-person --report-date 2025-01-01
 
 | Метрика | Значение |
 | -------- | -------- |
-| Parquet в `data/` | порядка **1 700+** файлов (зависит от полноты `run-all` / `run-src`) |
-| Executed notebooks | **15+** в `data/notebooks/` |
+| Parquet в `data/` | **1 738** файлов (зависит от полноты `run-all` / `run-src`) |
+| Executed notebooks | **16+** в `data/notebooks/` |
 | Метрики времени | `data/qa/command_timing.jsonl` |
 | Логи | `data/logs/mobile.log` |
+
+<!-- readme-stats:end -->
 

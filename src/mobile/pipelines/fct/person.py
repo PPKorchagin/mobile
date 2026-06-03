@@ -435,6 +435,7 @@ def run_build(
         )
         imei_binding = _filter_binding_excl(
             _read_binding_parquet(imei_month_path, kind="imei"),
+            kind="imei",
             excl_sets=excl_sets,
         )
     operator_binding = imsi_binding

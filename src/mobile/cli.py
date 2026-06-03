@@ -6,6 +6,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import time
 from calendar import monthrange
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -268,6 +269,7 @@ CLI_COMMANDS: tuple[str, ...] = (
     "build-prod-stage1",
     "build-prod-stage2",
     "build-prod-person",
+    "update-readme-stats",
 )
 
 
@@ -827,8 +829,12 @@ def _run_build_dds_event_dc_subprocesses(
         if not running:
             break
 
-        done, _ = subprocess.wait(running.keys(), timeout=0.25)
-        for proc in done:
+        finished = [proc for proc in list(running) if proc.poll() is not None]
+        if not finished:
+            time.sleep(0.25)
+            continue
+
+        for proc in finished:
             day = running.pop(proc)
             rc = proc.wait()
             if rc != 0:
@@ -1267,6 +1273,44 @@ def run_build_fct_msisdn_imsi_operator(
     )
 
 
+def _run_build_fct_person_month(
+    report_date: date,
+    *,
+    src_person_path: str | None,
+    fct_msisdn_imsi_path: str | None,
+    fct_msisdn_imei_path: str | None,
+    src_excl_imsi_path: str | None,
+    src_excl_imei_path: str | None,
+    src_excl_msisdn_path: str | None,
+    dim_tac_path: str | None,
+    dim_oksm_path: str | None,
+    output_path: str | None,
+) -> None:
+    if report_date.day != 1:
+        raise SystemExit(f"build-fct-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
+    src = Path(src_person_path) if src_person_path else None
+    imsi = Path(fct_msisdn_imsi_path) if fct_msisdn_imsi_path else None
+    imei = Path(fct_msisdn_imei_path) if fct_msisdn_imei_path else None
+    tac = Path(dim_tac_path) if dim_tac_path else None
+    oksm = Path(dim_oksm_path) if dim_oksm_path else None
+    out = Path(output_path) if output_path else None
+    run_timed_command(
+        f"build-fct-person-{report_date.isoformat()}",
+        lambda rd=report_date: fct_person.run_build(
+            report_date=rd,
+            src_person_path=src,
+            fct_msisdn_imsi_path=imsi,
+            fct_msisdn_imei_path=imei,
+            src_excl_imsi_path=src_excl_imsi_path,
+            src_excl_imei_path=src_excl_imei_path,
+            src_excl_msisdn_path=src_excl_msisdn_path,
+            dim_tac_path=tac,
+            dim_oksm_path=oksm,
+            output_path=out,
+        ),
+    )
+
+
 def run_build_fct_person(
     *,
     report_date: date | None,
@@ -1280,32 +1324,45 @@ def run_build_fct_person(
     dim_oksm_path: str | None,
     output_path: str | None,
 ) -> None:
-    """build-fct-person: месячный срез person для физлиц из src_person (``--report-date`` = YYYY-MM-01)."""
-    if report_date is None:
-        raise SystemExit("build-fct-person: --report-date is required")
-    if report_date.day != 1:
-        raise SystemExit(f"build-fct-person: --report-date must be YYYY-MM-01, got {report_date.isoformat()}")
-    src = Path(src_person_path) if src_person_path else None
-    imsi = Path(fct_msisdn_imsi_path) if fct_msisdn_imsi_path else None
-    imei = Path(fct_msisdn_imei_path) if fct_msisdn_imei_path else None
-    tac = Path(dim_tac_path) if dim_tac_path else None
-    oksm = Path(dim_oksm_path) if dim_oksm_path else None
-    out = Path(output_path) if output_path else None
-    run_timed_command(
-        "build-fct-person",
-        lambda: fct_person.run_build(
-            report_date=report_date,
-            src_person_path=src,
-            fct_msisdn_imsi_path=imsi,
-            fct_msisdn_imei_path=imei,
+    """build-fct-person: один месяц (``--report-date``) или все месяцы в окне DEFAULT_SRC_*."""
+    if report_date is not None:
+        _run_build_fct_person_month(
+            report_date,
+            src_person_path=src_person_path,
+            fct_msisdn_imsi_path=fct_msisdn_imsi_path,
+            fct_msisdn_imei_path=fct_msisdn_imei_path,
             src_excl_imsi_path=src_excl_imsi_path,
             src_excl_imei_path=src_excl_imei_path,
             src_excl_msisdn_path=src_excl_msisdn_path,
-            dim_tac_path=tac,
-            dim_oksm_path=oksm,
-            output_path=out,
-        ),
+            dim_tac_path=dim_tac_path,
+            dim_oksm_path=dim_oksm_path,
+            output_path=output_path,
+        )
+        return
+
+    months = _distinct_report_months_in_src_window()
+    lo = DEFAULT_SRC_START_DATE
+    hi = DEFAULT_SRC_END_DATE
+    logger.info(
+        "Starting build-fct-person: months=%s (%s .. %s)",
+        len(months),
+        lo.isoformat(),
+        hi.isoformat(),
     )
+    for month in months:
+        _run_build_fct_person_month(
+            month,
+            src_person_path=src_person_path,
+            fct_msisdn_imsi_path=fct_msisdn_imsi_path,
+            fct_msisdn_imei_path=fct_msisdn_imei_path,
+            src_excl_imsi_path=src_excl_imsi_path,
+            src_excl_imei_path=src_excl_imei_path,
+            src_excl_msisdn_path=src_excl_msisdn_path,
+            dim_tac_path=dim_tac_path,
+            dim_oksm_path=dim_oksm_path,
+            output_path=output_path,
+        )
+    logger.info("build-fct-person completed successfully")
 
 
 def run_build_dds_move_event(*, report_date: date | None) -> None:
@@ -2034,7 +2091,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "dq-dds-event / build-dds-move-event / build-fct-msisdn-imei / build-fct-msisdn-imsi-operator / build-stg-geo-all / "
             "build-fct-geo-intervals / dq-stg-geo-all / dq-fct-geo-intervals — календарный день; "
             "dq-fct-msisdn-imei / dq-fct-msisdn-imsi-operator — любой день месяца (→ YYYY-MM-01); "
-            "build-fct-person / dq-fct-person — YYYY-MM-01"
+            "build-fct-person / dq-fct-person — YYYY-MM-01 (без флага build-fct-person — все месяцы DEFAULT_SRC_*)"
         ),
     )
     parser.add_argument(
@@ -2502,6 +2559,24 @@ def run_build_prod_stage2(
     )
 
 
+def run_update_readme_stats() -> None:
+    """Пересчитать и записать раздел «Статистика» в README.md."""
+    from mobile.readme_stats import collect_readme_stats, update_readme_stats
+
+    def _body() -> None:
+        path = update_readme_stats()
+        stats = collect_readme_stats()
+        logger.info(
+            "update-readme-stats: wrote %s (py_files=%s, cli_commands=%s, parquet=%s)",
+            path,
+            stats["py_files"],
+            stats["cli_n"],
+            stats["parquet_n"],
+        )
+
+    run_timed_command("update-readme-stats", _body)
+
+
 def run_build_prod_person(
     *,
     report_month: date,
@@ -2607,6 +2682,8 @@ def main() -> None:
                 fct_person_path=args.fct_person_path,
                 output_path=args.output_path,
             )
+        elif args.command == "update-readme-stats":
+            run_update_readme_stats()
         else:
             _execute_parsed_args(args)
 

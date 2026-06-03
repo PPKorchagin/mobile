@@ -209,7 +209,7 @@ def upsert_imsi_daily_into_month_parquet(
     existing = pd.DataFrame(columns=_FIELD_NAMES)
     if month_path.exists():
         existing = pd.read_parquet(month_path, columns=_FIELD_NAMES)
-        existing = _drop_intervals_overlapping_day(existing, day_start=day_start, day_end=day_end)
+        existing = drop_intervals_overlapping_day(existing, day_start=day_start, day_end=day_end)
     combined = pd.concat([existing, day_part], ignore_index=True)
     merged = _merge_imsi_intervals(combined)
     if not day_part.empty and merged.empty:
